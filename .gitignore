@@ -59,6 +59,14 @@ sample_output/
 # so they are safe to keep. If you add an example, invent it; never paste one
 # out of a live client folder.
 
+# 4c. The launcher and its icon. Named individually and placed AFTER the blanket
+# rules above, because later rules win — "*.png" further up would otherwise hide
+# the icon, and a client's scanned statement is also a .png, which is exactly
+# why that blanket rule stays. Anything added here must be named in full: never
+# re-open a whole extension.
+!*.command
+!FQ Toolkit.png
+
 # 5. working state, caches, outputs
 .fq_cache/
 .fq_root
