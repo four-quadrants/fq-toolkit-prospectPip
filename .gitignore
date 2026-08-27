@@ -52,13 +52,12 @@ sample_output/
 *Internal Audit.md
 *Client Email.md
 
-# These four are genuine documentation, but they illustrate the naming
-# convention with real client first names and real account tails. Excluded until
-# the examples are replaced with invented ones, then they can come in.
-NAMING.md
-SCORECARD.md
-HANDOFF.md
-RedactorTest_ANSWER_KEY.md
+# NAMING.md, SCORECARD.md, HANDOFF.md and RedactorTest_ANSWER_KEY.md used to be
+# excluded here: they illustrate the naming convention, and every example was a
+# real client's first name and a real account tail. The examples now use an
+# invented household (Hollingsworth — Grant, Nadia, Elise) with invented tails,
+# so they are safe to keep. If you add an example, invent it; never paste one
+# out of a live client folder.
 
 # 5. working state, caches, outputs
 .fq_cache/

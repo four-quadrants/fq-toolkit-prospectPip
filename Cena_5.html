@@ -812,7 +812,7 @@ function bearsSsnContext(text){
 // The "before" test requires a DIGIT ahead of the separator, so we catch a number
 // sheared out of a longer figure (1,234 / 12.34) without catching a number that
 // merely follows the end of a sentence — ". " used to trip this, which discarded
-// exactly the "…Dependents. 412 55 8830" layout this fix exists for.
+// exactly the "…Dependents. 123 45 6789" layout this fix exists for.
 function looksLikeFigures(text, start, end){
   var before=text.slice(Math.max(0,start-2), start);
   return /\d[.,]$/.test(before)        // inside a longer figure: 1,234 or 12.34
@@ -1150,11 +1150,11 @@ function cenaSelfTest(){
   var FORM = 'Oklahoma Form 511 Resident Individual Income Tax Return. Schedule 511-1 Dependents. ';
 
   // --- the regression this fix exists for -------------------------------
-  t('dashed SSN still caught',            ssnHits('SSN 412-55-8830'), 1);
-  t('boxed SSN, single spaces',           ssnHits(FORM+'Social Security Number of Dependent 412 55 8830'), 1);
+  t('dashed SSN still caught',            ssnHits('SSN 123-45-6789'), 1);
+  t('boxed SSN, single spaces',           ssnHits(FORM+'Social Security Number of Dependent 123 45 6789'), 1);
   t('boxed SSN, wide field gaps',         ssnHits(FORM+'412   55   8830'), 1);
   t('dependent caption far from value',
-    labeledDigits(FORM+'Social Security Number of Dependent'+Array(120).join(' ')+'412 55 8830', SSN_LABEL, 9, 9, 300).length, 1);
+    labeledDigits(FORM+'Social Security Number of Dependent'+Array(120).join(' ')+'123 45 6789', SSN_LABEL, 9, 9, 300).length, 1);
 
   // --- guards: these must NOT fire --------------------------------------
   t('wage columns on a non-form page',    ssnHits('Total for Income 123  45  6789'), 0);
@@ -1163,9 +1163,9 @@ function cenaSelfTest(){
   t('invalid area 000 rejected',          ssnHits(FORM+'000 83 9643'), 0);
   t('invalid area 666 rejected',          ssnHits(FORM+'666 83 9643'), 0);
   t('group 00 rejected',                  ssnHits(FORM+'465 00 9643'), 0);
-  t('ZIP+4 not read as SSN',              ssnLikeRuns('Tulsa OK 74074-1234').length, 0);
+  t('ZIP+4 not read as SSN',              ssnLikeRuns('Springfield IL 12345-6789').length, 0);
   t('nineDigitRuns still refuses spaces', nineDigitRuns('123 45 6789').length, 0);
-  t('boxed runs need form context',       ssnBoxedRuns('Deposits 412 55 8830').length, 0);
+  t('boxed runs need form context',       ssnBoxedRuns('Deposits 123 45 6789').length, 0);
 
   // --- card numbers: BIN prefix, not Luhn alone -------------------------
   function ccHits(s){ return DETECTORS.creditCard(s).length; }
@@ -1187,17 +1187,17 @@ function cenaSelfTest(){
     (acctOf('Account ending in 6840')||{}).classification, 'last4');
 
   // --- ZIP+4 and money must not read as identifiers ---------------------
-  t('ZIP+4 is not a 9-digit ID',          nineDigitRuns('Stillwater OK 74074-1234').length, 0);
-  t('label-anchored: ZIP+4 rejected',     labeledSsn("Employee's social security number  Stillwater OK 74074-1234").length, 0);
+  t('ZIP+4 is not a 9-digit ID',          nineDigitRuns('Springfield IL 12345-6789').length, 0);
+  t('label-anchored: ZIP+4 rejected',     labeledSsn("Employee's social security number  Springfield IL 12345-6789").length, 0);
   t('label-anchored: wage caption skipped', labeledSsn('4 Social security wages 12345.67 89').length, 0);
-  t('label-anchored: real SSN found',     labeledSsn("Employee's soc. sec. no. 412-55-8830").length, 1);
-  t('label-anchored: boxed SSN found',    labeledSsn('Social Security Number of Dependent    412 55 8830').length, 1);
+  t('label-anchored: real SSN found',     labeledSsn("Employee's soc. sec. no. 123-45-6789").length, 1);
+  t('label-anchored: boxed SSN found',    labeledSsn('Social Security Number of Dependent    123 45 6789').length, 1);
 
   // --- a complete SSN must not swallow the number beside it -------------
-  // On a W-2, box (a) sits next to Wages: "412-55-8830 51610.40". The fragment
+  // On a W-2, box (a) sits next to Wages: "123-45-6789 52000.40". The fragment
   // tail used to consume " 5" and paint a box over the wages figure.
   t('complete SSN consumes no trailing digit',
-    ssnLikeRuns('soc. sec. no. 412-55-8830 51610.40').map(function(r){ return r.end-r.start; }).join(','), '11');
+    ssnLikeRuns('soc. sec. no. 123-45-6789 52000.40').map(function(r){ return r.end-r.start; }).join(','), '11');
   t('sheared SSN still gets its tail',
     ssnLikeRuns('soc. sec. no. 412-55-88 3').length, 1);
 
