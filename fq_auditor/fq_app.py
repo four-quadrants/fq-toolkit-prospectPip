@@ -508,7 +508,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
           moved and the originals stay exactly as the client sent them.</span></div>
         <div class="row" style="margin-top:12px">
           <button class="primary" id="goreview">Open the review</button>
-          <button class="primary" id="filethem">File them now</button>
+          <button class="primary" id="filethem">Build File Tree</button>
           <button class="ghost" id="openfolder">Show the files in Finder</button>
         </div>
       </div>
@@ -558,6 +558,11 @@ function lbRefresh(){
       if(d.error){ el.textContent=d.error; b.disabled=true; return; }
       b.disabled = !d.to_fetch;
       var lines=[];
+      // Name the client from the manifest, not from the folder name. Folders get
+      // renamed and mistyped; this is what LaunchBay actually calls the project,
+      // so it is the check that you are about to download the right person's
+      // documents into the right place.
+      if(d.project) lines.push(d.project);
       lines.push(d.to_fetch ? (d.to_fetch+' new document(s) waiting to download.')
                             : 'Nothing new — every document on the list is already here.');
       lines.push('The list was refreshed '+d.age+'.');
