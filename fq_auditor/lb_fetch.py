@@ -95,14 +95,23 @@ def download(url, dest, timeout=120):
 
 def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
     client_folder = os.path.abspath(os.path.expanduser(client_folder))
+    # Be forgiving about which folder we were handed. The manifest lives in the
+    # CLIENT folder, but the app's folder picker points at the documents folder
+    # inside it, and an operator choosing by hand may pick either. Given
+    # Original_sourcedocs, step up rather than fail with "no manifest" while the
+    # manifest sits one level away.
+    if not manifest_path and not os.path.exists(os.path.join(client_folder, MANIFEST)):
+        parent = os.path.dirname(client_folder)
+        if os.path.exists(os.path.join(parent, MANIFEST)):
+            client_folder = parent
     manifest_path = manifest_path or os.path.join(client_folder, MANIFEST)
     intake = os.path.join(client_folder, INTAKE)
     state_path = os.path.join(client_folder, FETCHED)
 
     man = load_json(manifest_path, None)
     if not man:
-        print("No manifest at %s.\n"
-              "Ask Claude to write one for this client first." % manifest_path)
+        print("No document list for this client yet (looked for %s).\n"
+              "Ask Austin to run the LaunchBay refresh for them." % MANIFEST)
         return 1
 
     files = man.get('files') or []
@@ -118,7 +127,23 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
         if fid and fid in state:
             skipped_seen += 1
             continue
+        # The id log is the fast path, but it is a file and files get lost — a
+        # folder is copied to the server, the state is reset, a second operator
+        # runs this. Falling through to a download would then write
+        # "Insurance_Plan_Mix consolidated (2).xlsx" beside the original, and
+        # the auditor would dutifully classify and file both. So check the disk
+        # too: same name, same size means we already have it.
+        here = os.path.join(intake, safe_name(f.get('name')))
+        if os.path.exists(here) and (not f.get('bytes')
+                                     or abs(os.path.getsize(here) - int(f['bytes'])) < 2048):
+            state[fid] = {'name': os.path.basename(here),
+                          'bytes': os.path.getsize(here),
+                          'fetched': 'found already on disk'}
+            skipped_seen += 1
+            continue
         todo.append(f)
+
+    save_json(state_path, state)   # persist anything recognised on disk above
 
     if not quiet:
         print("Project : %s" % (man.get('project') or '?'))

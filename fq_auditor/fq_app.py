@@ -165,6 +165,21 @@ class Job:
         threading.Thread(target=self._run, args=(cmd,), daemon=True).start()
         return True
 
+    def start_cmd(self, cmd, folder):
+        """Run any of the toolkit's scripts, streaming its output to the page.
+
+        Used by the Get documents tab. Shares the same log the audit uses, so
+        the page only ever has one thing to poll.
+        """
+        if self.running:
+            return False
+        self.lines = []
+        self.running = True
+        self.returncode = None
+        self.folder = folder
+        threading.Thread(target=self._run, args=(cmd,), daemon=True).start()
+        return True
+
     def _run(self, cmd):
         try:
             p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE,
@@ -193,6 +208,51 @@ JOB = Job()
 
 
 # ---------------------------------------------------------------- helpers
+
+STALE_DAYS = 3
+
+
+def lb_status(folder):
+    """How fresh is the document list, and how much is waiting?
+
+    The operator running this has no LaunchBay access and no Claude. Everything
+    they can know about what the client has sent comes from the manifest a
+    scheduled refresh drops into the client folder. If that refresh stops
+    running, the list quietly freezes — and a frozen list is indistinguishable
+    from a client who has sent nothing new. So the age is always reported, and
+    anything older than a few days is called out rather than left to be noticed.
+    """
+    import lb_fetch
+    folder = os.path.abspath(folder)
+    # The manifest belongs to the client folder; the documents land one level in.
+    for base in (folder, os.path.dirname(folder)):
+        man_path = os.path.join(base, lb_fetch.MANIFEST)
+        if os.path.exists(man_path):
+            break
+    else:
+        return {'error': "No document list in this folder yet. Ask Austin to run "
+                         "the LaunchBay refresh for this client."}
+
+    man = lb_fetch.load_json(man_path, None) or {}
+    state = lb_fetch.load_json(os.path.join(os.path.dirname(man_path),
+                                            lb_fetch.FETCHED), {})
+    waiting = 0
+    for f in man.get('files') or []:
+        if (f.get('kind') or 'collection') not in lb_fetch.CLIENT_UPLOAD_TYPES:
+            continue
+        if str(f.get('id') or f.get('url') or '') not in state:
+            waiting += 1
+
+    days = (time.time() - os.path.getmtime(man_path)) / 86400.0
+    if days < 1:
+        age = 'today'
+    elif days < 2:
+        age = 'yesterday'
+    else:
+        age = '%d days ago' % int(days)
+    return {'to_fetch': waiting, 'age': age, 'stale': days >= STALE_DAYS,
+            'project': man.get('project') or ''}
+
 
 def guess_inputs(folder):
     """Everything the run needs that we can work out for ourselves."""
@@ -347,22 +407,24 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 <header>
   <h1>FQ Toolkit</h1>
   <nav>
-    <button id="tab-redact" class="on">1 &nbsp;Redact</button>
+    <button id="tab-get" class="on">1 &nbsp;Get documents</button>
     <button id="tab-audit">2 &nbsp;Audit &amp; File</button>
     <button id="tab-review">3 &nbsp;Review</button>
+    <button id="tab-redact">4 &nbsp;Redact</button>
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
 </header>
 
 <main>
-  <div class="pane on" id="pane-redact">
+  <div class="pane" id="pane-redact">
     <iframe id="redactframe" src="/redactor"></iframe>
   </div>
 
-  <div class="pane" id="pane-audit"><div class="wrap">
-    <h2>Audit &amp; File</h2>
-    <p class="sub">Point this at the client's folder. It reads every document, checks them
-       against the checklist, and works out where each one should be filed.</p>
+  <div class="pane on" id="pane-get"><div class="wrap">
+    <h2>Get documents</h2>
+    <p class="sub">Downloads whatever the client has uploaded that isn't here yet.
+       This does not sign in to LaunchBay — it works from the list Austin's daily
+       refresh leaves in the client's folder.</p>
 
     <div class="card" id="rootcard">
       <label>Working folder</label>
@@ -386,6 +448,30 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
         <button class="ghost" id="home">Back to top</button>
         <span style="flex:1"></span>
         <button class="primary" id="pick">Use this folder</button>
+      </div>
+    </div>
+
+    <div class="card hide" id="lbcard">
+      <label>Documents from the client</label>
+      <div id="lbstatus" class="found">Checking…</div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="getdocs">Get documents</button>
+        <button class="ghost" id="skipget">Skip — go to Audit &amp; File</button>
+      </div>
+      <pre class="log hide" id="lblog" style="margin-top:12px"></pre>
+    </div>
+  </div></div>
+
+  <div class="pane" id="pane-audit"><div class="wrap">
+    <h2>Audit &amp; File</h2>
+    <p class="sub">Reads every document, checks them against the checklist, and works
+       out where each one should be filed.</p>
+
+    <div class="card" id="foldercard">
+      <label>Client folder</label>
+      <div id="foldernow" class="found">No folder chosen yet.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="backtoget">Choose a different folder</button>
       </div>
     </div>
 
@@ -438,7 +524,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 var CUR = null, FOLDER = null, since = 0, poll = null;
 
 function show(name){
-  ['redact','audit','review'].forEach(function(n){
+  ['get','redact','audit','review'].forEach(function(n){
     document.getElementById('pane-'+n).classList.toggle('on', n===name);
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
   });
@@ -450,8 +536,58 @@ function show(name){
     f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now();
   }
 }
+document.getElementById('tab-get').onclick=function(){show('get');};
 document.getElementById('tab-redact').onclick=function(){show('redact');};
 document.getElementById('tab-audit').onclick=function(){show('audit');};
+document.getElementById('backtoget').onclick=function(){show('get');};
+document.getElementById('skipget').onclick=function(){show('audit');};
+
+// --- Get documents ----------------------------------------------------
+// Reads the manifest the scheduled refresh left in the client folder. There is
+// no LaunchBay login here: every upload carries a direct download link, so the
+// only thing this needs is the list.
+function lbRefresh(){
+  if(!FOLDER) return;
+  document.getElementById('lbcard').classList.remove('hide');
+  var el=document.getElementById('lbstatus');
+  el.textContent='Checking…';
+  fetch('/api/lbstatus?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var b=document.getElementById('getdocs');
+      if(d.error){ el.textContent=d.error; b.disabled=true; return; }
+      b.disabled = !d.to_fetch;
+      var lines=[];
+      lines.push(d.to_fetch ? (d.to_fetch+' new document(s) waiting to download.')
+                            : 'Nothing new — every document on the list is already here.');
+      lines.push('The list was refreshed '+d.age+'.');
+      // Said plainly, because a stale list looks exactly like a client who has
+      // sent nothing. If the refresh stopped running, this is the only clue.
+      if(d.stale) lines.push('WARNING: that is old. Ask Austin whether the daily '
+                             +'refresh is still running before trusting "nothing new".');
+      el.textContent=lines.join('\n');
+    })
+    .catch(function(){ el.textContent='Could not read the list.'; });
+}
+document.getElementById('getdocs').onclick=function(){
+  var b=document.getElementById('getdocs'); b.disabled=true;
+  var log=document.getElementById('lblog'); log.classList.remove('hide');
+  log.textContent=''; since=0;
+  fetch('/api/lbfetch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER})})
+    .then(function(){ poll=setInterval(lbTick,700); });
+};
+function lbTick(){
+  fetch('/api/log?since='+since).then(function(r){return r.json();}).then(function(d){
+    since=d.total;
+    if(d.lines.length){
+      var el=document.getElementById('lblog');
+      el.textContent += d.lines.join('\n')+'\n';
+      el.scrollTop=el.scrollHeight;
+    }
+    if(!d.running){ clearInterval(poll); lbRefresh(); }
+  });
+}
 document.getElementById('tab-review').onclick=function(){show('review');};
 
 function refreshRoot(){
@@ -507,6 +643,8 @@ document.getElementById('home').onclick=function(){ browse(''); };   // '' snaps
 
 document.getElementById('pick').onclick=function(){
   FOLDER=CUR;
+  document.getElementById('foldernow').textContent=FOLDER;
+  lbRefresh();
   fetch('/api/inspect?folder='+encodeURIComponent(FOLDER)).then(function(r){return r.json();}).then(function(d){
     document.getElementById('ready').classList.remove('hide');
     document.getElementById('client').value=d.client||'';
@@ -633,6 +771,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
 
+        if p == '/api/lbstatus':
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            return self._send(200, json.dumps(lb_status(folder)))
+
         if p == '/api/root':
             return self._send(200, json.dumps({'root': get_root()}))
 
@@ -727,6 +872,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_settings(folder, client, greeting, g['checklist'])
             JOB.start(folder, client, greeting, g['checklist'], g['decisions'],
                       g['redacted'], file_them=(p == '/api/file'))
+            return self._send(200, '{"started":true}')
+
+        if p == '/api/lbfetch':
+            folder = data.get('folder') or ''
+            if not self._guard(folder):
+                return
+            if not os.path.isdir(folder):
+                return self._send(400, '{"error":"not a folder"}')
+            JOB.start_cmd([sys.executable, os.path.join(HERE, 'lb_fetch.py'), folder],
+                          folder)
             return self._send(200, '{"started":true}')
 
         if p == '/api/pickroot':
