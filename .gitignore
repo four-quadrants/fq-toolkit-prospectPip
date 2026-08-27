@@ -1,0 +1,70 @@
+# ALLOWLIST, not a blocklist.
+#
+# This repository sits in a folder that also holds real client documents — tax
+# returns, bank statements, credit reports. A normal .gitignore lists what to
+# exclude and lets everything else through, which means one new file type is all
+# it takes to commit a client's SSN into a permanent history.
+#
+# So: ignore everything, then name the few things that ARE code. Anything not
+# named below is invisible to git no matter where it lands.
+
+# 1. ignore everything
+*
+
+# 2. but still descend into directories, or the un-ignores below can't match
+!*/
+
+# 3. the code and its documentation
+!*.py
+!*.md
+!Cena_5.html
+!.gitignore
+
+# 4. belt and braces: never these, even if a rule above would allow them
+*.pdf
+*.PDF
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.tsv
+*.docx
+*.doc
+*.pptx
+*.qbb
+*.qbw
+*.qbm
+*.png
+*.jpg
+*.jpeg
+*.eml
+*.msg
+*.zip
+*.json
+
+# 4b. Markdown that is CLIENT DATA rather than documentation.
+#
+# The audit writes its reports as .md, and those name a real client's banks and
+# account tails ("Bank statement · Arvest · x6840"). The allowlist above would
+# have committed all of them. A git history is forever, so these stay out.
+audit-results/
+sample_output/
+*Internal Audit.md
+*Client Email.md
+
+# These four are genuine documentation, but they illustrate the naming
+# convention with real client first names and real account tails. Excluded until
+# the examples are replaced with invented ones, then they can come in.
+NAMING.md
+SCORECARD.md
+HANDOFF.md
+RedactorTest_ANSWER_KEY.md
+
+# 5. working state, caches, outputs
+.fq_cache/
+.fq_root
+.fq_settings
+_Audit/
+__pycache__/
+*.pyc
+.DS_Store
