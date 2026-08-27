@@ -36,6 +36,23 @@ def strip_redacted_suffix(name):
     return (stem + ext) if stem else name
 
 
+def _same_file(a, b):
+    """Byte-for-byte identical? Size first, so most comparisons cost nothing."""
+    try:
+        if os.path.getsize(a) != os.path.getsize(b):
+            return False
+        import hashlib
+        def digest(p):
+            h = hashlib.sha256()
+            with open(p, 'rb') as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b''):
+                    h.update(chunk)
+            return h.hexdigest()
+        return digest(a) == digest(b)
+    except OSError:
+        return False
+
+
 class Move:
     """One proposed copy, and whether it is allowed to happen.
 
@@ -92,7 +109,22 @@ def plan_moves(plan, client_folder, src_folder, led=None, review_dir='_Needs Rev
         elif os.path.abspath(src) == os.path.abspath(m.dest):
             m.blocked = 'source and destination are the same file'
         elif os.path.exists(m.dest):
-            m.blocked = 'a file of that name is already there'
+            # A file of that name is already there. If it is byte-for-byte the
+            # SAME document, this was filed on an earlier pass and the ledger
+            # has simply lost track — a folder was copied, a ledger was reset,
+            # another operator ran it. Treat it as done rather than refusing:
+            # 62 alarming "refused" lines for documents already correctly filed
+            # trains people to ignore the refusals that matter.
+            #
+            # A DIFFERENT document under the same name is a real collision and
+            # is still refused, because that is the case where filing would
+            # destroy something.
+            if _same_file(src, m.dest):
+                if led is not None:
+                    _ledger.record_filed(led, sha, dest_rel, dest_name)
+                skipped.append((name, 'already filed — identical copy in place'))
+                continue
+            m.blocked = 'a different document of that name is already there'
         moves.append(m)
 
     return moves, skipped

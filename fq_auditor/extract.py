@@ -112,6 +112,15 @@ def extract_other(path):
                 for row in ws.iter_rows(values_only=True):
                     parts.append(" | ".join('' if v is None else str(v) for v in row))
             return "\n".join(parts)
+        if ext in ('.qbb', '.qbw', '.qbm'):
+            # A QuickBooks backup is a proprietary binary with no extractable
+            # text. It is listed as supported anyway so that it reaches the
+            # classifier, which recognises it by extension — the one document
+            # type where the filename is the only honest evidence there is.
+            # Left out of SUPPORTED, these were skipped silently and the
+            # "QuickBooks backup" checklist item read missing with the file
+            # sitting right there.
+            return ''
         if ext == '.eml':
             import email
             msg = email.message_from_file(open(path, errors='ignore'))
@@ -125,7 +134,8 @@ def extract_other(path):
     return ''
 
 
-SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml')
+SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
+             '.qbb', '.qbw', '.qbm')
 
 
 # Bump whenever the OCR settings change. The cache is keyed by file CONTENTS, so

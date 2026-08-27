@@ -155,13 +155,36 @@ def statement_period(text):
     for p in (r'(?:Statement|Billing|Activity)\s*(?:Period|Date)?\s*[:\-]?\s*'
               + MONTH_RE + r'\w*\.?\s+\d{1,2},?\s*(20\d\d)',
               r'For the (?:month|period) (?:of|ending|ended)\s*' + MONTH_RE + r'\w*\.?,?\s*(20\d\d)',
-              MONTH_RE + r'\s+\d{1,2},?\s*(20\d\d)\s*(?:through|-|to|–)\s*' + MONTH_RE,
-              MONTH_RE + r'\s*(20\d\d)'):
+              MONTH_RE + r'\s+\d{1,2},?\s*(20\d\d)\s*(?:through|-|to|–)\s*' + MONTH_RE):
         m = re.search(p, head, re.I)
         if m:
             mi = MONTHS.get(m.group(1)[:3].lower())
             if mi:
                 return mi, _norm_year(m.group(2)), m.group(0).strip()
+
+    # 5b. A FULL date ("Jul 31, 2026") before a bare one ("Aug 2021").
+    #
+    # Edward Jones prints a five-year performance graph whose x-axis reads
+    # "Aug 2021 | Feb | Aug 2022 | Feb | Aug 2023 ...", and that axis sits
+    # ABOVE the statement's own date on the page. The bare month-and-year
+    # pattern below matched the first axis label and dated every one of those
+    # statements to 2021 — five years out. A bare month and year is as likely to
+    # be a chart axis as a date; a full date with a day in it is not. Taking the
+    # most frequent one also beats taking the first, since the real date is
+    # repeated in headers and footers while an axis label appears once.
+    full = [(MONTHS.get(mo[:3].lower()), _norm_year(yr)) for mo, yr in
+            re.findall(MONTH_RE + r'\s+\d{1,2},\s*(20\d\d)', head, re.I)]
+    full = [f for f in full if f[0]]
+    if full:
+        mode = max(set(full), key=full.count)
+        if full.count(mode) >= 2:
+            return mode[0], mode[1], 'most frequent full date (%s/%s)' % mode
+
+    m = re.search(MONTH_RE + r'\s*(20\d\d)', head, re.I)
+    if m:
+        mi = MONTHS.get(m.group(1)[:3].lower())
+        if mi:
+            return mi, _norm_year(m.group(2)), m.group(0).strip()
 
     # 6. last resort: some banks print only a transaction table. Use the most
     #    common month among the dates in it.
@@ -301,6 +324,18 @@ ISSUERS = [
     ('T. Rowe Price', r'T\.?\s*Rowe\s*Price'),
     ('Coinbase', r'\bCoinbase\b'),
     ('Optum', r'\bOptum\s*(?:Bank|Financial)?\b'),
+    # Reads its own name plainly on the letterhead — it just was not on this
+    # list, so the earliest-wins rule fell through to a bank named in the
+    # transaction table and every HSA statement came back as someone else's.
+    ('HSA Bank', r'\bHSA\s*Bank\b'),
+    # The investment side of an HSA. Its statements carry a disclosure reading
+    # "Custodial services provided by DriveWealth, LLC, Citibank, N.A., RBC..."
+    # — three institutions in one sentence, none of which issued the statement.
+    # DriveWealth's own name appears just before it, so earliest-wins picks the
+    # right one once it is on this list.
+    ('DriveWealth', r'\bDriveWealth\b'),
+    ('Health Equity', r'\bHealth\s*Equity\b'),
+    ('Fidelity HSA', r'\bFidelity\s*HSA\b'),
     ('Ameriprise', r'\bAmeriprise\b'),
     ('Merrill', r'\bMerrill\s*(?:Lynch|Edge)?\b'),
     ('Morgan Stanley', r'Morgan\s*Stanley|\bE\*?TRADE\b'),
@@ -394,6 +429,14 @@ RULES = [
                         r'terms and objectives of our engagement',
                         r'scope of services to be provided',
                         r'this letter is to confirm our understanding')),
+    # A payer-mix export: carriers down one column, patient or plan counts down
+    # the next. Before the generic insurance rules, which look for policy
+    # language — this is a spreadsheet ABOUT insurers, not a policy.
+    _r('insurance_carriers', 'Insurance carrier list / plan mix', 'Practice',
+       lambda h, t: has(h, r'insurance carrier', r'insurance (?:plan )?mix',
+                        r'carrier counts?', r'in-?network carriers?')
+                    and has(h, r'\bcounts?\b', r'%\s*of\s*total', r'\brank\b',
+                            r'plan count')),
     _r('credit_report', 'Credit report', 'Personal',
        lambda h, t: has(h, r'credit report\b', r'\bTransUnion\b', r'\bEquifax\b',
                         r'\bExperian\b', r'\bFICO\b')
