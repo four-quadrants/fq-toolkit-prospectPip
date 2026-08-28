@@ -28,6 +28,7 @@ import queue
 import threading
 import subprocess
 import webbrowser
+import datetime
 import http.server
 import socketserver
 import urllib.parse
@@ -237,6 +238,123 @@ JOB = Job()
 # ---------------------------------------------------------------- helpers
 
 STALE_DAYS = 3
+
+
+
+# --------------------------------------------------------------------------
+# spreadsheets
+# --------------------------------------------------------------------------
+SHEET_MAX_ROWS = 400
+SHEET_MAX_COLS = 30
+
+
+def _col_letter(i):
+    """0 -> A, 26 -> AA. Spreadsheet column names, as the file itself uses."""
+    s = ''
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _header_row(rows, look=8):
+    """Which row holds the column headings, or None.
+
+    Not row zero. Real client workbooks open with a title ("Debt Schedule
+    Template") and often a line of instructions, so treating the first row as
+    the header labelled every column with a fragment of a sentence and made the
+    grid unreadable. The heading row is the first one that looks like a set of
+    short labels: several filled cells, none of them numbers.
+    """
+    for i, row in enumerate(rows[:look]):
+        filled = [c.strip() for c in row if c and c.strip()]
+        if len(filled) < 3:
+            continue
+        if any(re.match(r'^[-+(]?[$]?[\d,]+(\.\d+)?[)%]?$', c) for c in filled):
+            continue
+        if sum(len(c) for c in filled) / max(1, len(filled)) > 40:
+            continue                 # a sentence, not a row of labels
+        return i
+    return None
+
+
+def _cell(v):
+    """One cell, as the client would recognise it.
+
+    Dates come back as datetimes and str() renders them "2022-08-18 00:00:00",
+    which is noise in every column of a debt schedule. Whole floats lose their
+    trailing .0 for the same reason.
+    """
+    if v is None:
+        return ''
+    if isinstance(v, datetime.datetime):
+        return v.strftime('%Y-%m-%d' if (v.hour or v.minute) == 0 else '%Y-%m-%d %H:%M')
+    if isinstance(v, datetime.date):
+        return v.strftime('%Y-%m-%d')
+    if isinstance(v, float) and v == int(v):
+        return '%d' % int(v)
+    return str(v)
+
+
+def read_sheets(path, kind=None):
+    """A workbook as rows and columns, not as a paragraph.
+
+    The text extractor flattens a spreadsheet into a run of words, which is
+    fine for classifying it and useless for reading it: asked whether a debt
+    schedule includes personal debt, you need to see which column says what and
+    which rows sit under which heading. That is a table or it is nothing.
+
+    Values only — formulas are resolved to their last computed result, which is
+    what the client saw when they saved it. Blank leading/trailing columns are
+    trimmed so a sheet that starts at column F does not open as a wall of empty
+    cells.
+    """
+    kind = (kind or os.path.splitext(path)[1]).lower()
+    out = []
+
+    if kind in ('.csv', '.tsv', '.txt'):
+        import csv as _csv
+        delim = '\t' if kind == '.tsv' else ','
+        with open(path, newline='', errors='replace') as fh:
+            rows = [r[:SHEET_MAX_COLS] for _, r in
+                    zip(range(SHEET_MAX_ROWS), _csv.reader(fh, delimiter=delim))]
+        return [{'name': os.path.basename(path), 'rows': rows, 'truncated': False}]
+
+    from openpyxl import load_workbook
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        for ws in wb.worksheets:
+            rows, n = [], 0
+            for row in ws.iter_rows(values_only=True):
+                if n >= SHEET_MAX_ROWS:
+                    break
+                cells = [_cell(v) for v in row[:SHEET_MAX_COLS]]
+                rows.append(cells)
+                n += 1
+            while rows and not any(c.strip() for c in rows[0]):
+                rows.pop(0)
+            while rows and not any(c.strip() for c in rows[-1]):
+                rows.pop()
+            if not rows:
+                continue
+            width = max(len(r) for r in rows)
+            rows = [r + [''] * (width - len(r)) for r in rows]
+
+            # Drop empty columns wherever they are, not just at the edges. This
+            # workbook carries several blank spacer columns in the middle, and
+            # keeping them pushed the real figures off the side of the panel.
+            # The original column letters are kept so what is on screen can
+            # still be matched against the file itself.
+            keep = [i for i in range(width) if any((r[i] or '').strip() for r in rows)]
+            rows = [[r[i] for i in keep] for r in rows]
+            out.append({'name': ws.title, 'rows': rows,
+                        'cols': [_col_letter(i) for i in keep],
+                        'header': _header_row(rows),
+                        'truncated': n >= SHEET_MAX_ROWS})
+    finally:
+        wb.close()
+    return out
 
 
 def render_first_page(path, max_px=1400):
@@ -931,6 +1049,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass                                   # keep the console clean for the operator
 
+    def _locate(self, path, folder):
+        """Find a file whose recorded path came from another machine.
+
+        Documents are keyed by the absolute path seen at audit time. Open the
+        same client folder from a different Mac — or after the share remounts
+        somewhere else — and that path no longer exists, while the file is
+        sitting exactly where it always was.
+        """
+        if os.path.isfile(path) or not folder:
+            return path
+        name = os.path.basename(path)
+        for cand in (os.path.join(folder, 'Original_sourcedocs', name),
+                     os.path.join(folder, name)):
+            if os.path.isfile(cand):
+                return cand
+        return path
+
     def _send(self, code, body, ctype='application/json'):
         if isinstance(body, str):
             body = body.encode('utf-8')
@@ -974,6 +1109,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   'text/html; charset=utf-8')
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
+
+        if p == '/api/sheet':
+            # Spreadsheets, shown as spreadsheets.
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            path = (q.get('path') or [''])[0]
+            folder = (q.get('folder') or [''])[0]
+            path = self._locate(path, folder)
+            if not self._guard(path):
+                return
+            if not os.path.isfile(path):
+                return self._send(404, '{"error":"no such file"}')
+            try:
+                import extract as _extract
+                sheets = read_sheets(path, _extract.resolve_kind(path))
+            except Exception as e:
+                return self._send(200, json.dumps({'error': str(e)}))
+            if not sheets:
+                return self._send(200, json.dumps({'error': 'this workbook has no readable cells'}))
+            return self._send(200, json.dumps({'sheets': sheets}))
 
         if p == '/api/previewtext':
             # For anything with no page to photograph — a spreadsheet, a CSV, a
@@ -1290,13 +1444,19 @@ SAVE_SHIM = r"""
         // which of the two registers was missing.
         var d = (typeof DEC   !== 'undefined') ? DEC   : null;
         var a = (typeof ACCTS !== 'undefined') ? ACCTS : null;
+        // Checklist verdicts ride in the same envelope. Leaving them out of the
+        // payload meant marking an item and pressing Save silently discarded it
+        // — the page showed the change, the file never received it.
+        var it = (typeof ITEMS !== 'undefined') ? ITEMS : null;
         if(d === null && a === null){
           return fail('The page script did not finish loading — reload this tab');
         }
-        payload = {folder: FOLDER, decisions: {files: d || {}, accounts: a || {}}};
+        payload = {folder: FOLDER,
+                   decisions: {files: d || {}, accounts: a || {}, items: it || {}}};
         if(!Object.keys(payload.decisions.files).length &&
-           !Object.keys(payload.decisions.accounts).length){
-          return fail('Nothing chosen yet — pick a destination first');
+           !Object.keys(payload.decisions.accounts).length &&
+           !Object.keys(payload.decisions.items).length){
+          return fail('Nothing chosen yet — pick a destination or mark an item first');
         }
       }catch(e){
         return fail('Could not read the decisions: ' + (e && e.message || e));
@@ -1316,9 +1476,21 @@ SAVE_SHIM = r"""
           // the audit itself, so it already picks these decisions up. Being
           // sent to another tab to repeat work the next button does anyway is
           // what made this feel broken.
-          state = 'saved';
+          // Saved, but not finished. Locking the button after one save forced a
+          // reload to make a second change, which is the opposite of how anyone
+          // reviews: you look at one document, decide, look at the next. The
+          // button confirms, then re-arms itself the moment anything changes.
+          state = 'save';
           fresh.disabled = true;
-          fresh.textContent = 'Decisions saved';
+          fresh.textContent = 'Saved \u2713';
+          var rearm = function(){
+            document.removeEventListener('change', rearm, true);
+            document.removeEventListener('input', rearm, true);
+            fresh.textContent = 'Save decisions';
+            fresh.disabled = false;
+          };
+          document.addEventListener('change', rearm, true);
+          document.addEventListener('input', rearm, true);
           try{
             var st = window.parent.document.getElementById('filestatus');
             if(st) st.textContent = 'Decisions saved. Press Build File Tree to apply them.';

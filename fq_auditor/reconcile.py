@@ -349,3 +349,58 @@ def reconcile(docs, checklist):
 
     unexpected = [d for d in docs if d['file'] not in matched]
     return results, unexpected, facts
+
+
+# --------------------------------------------------------------------------
+# human verdicts
+# --------------------------------------------------------------------------
+# What a reviewer can say about an item, and what it means for the client.
+# "chase" decides whether the item appears in the email: the whole reason for
+# letting someone overrule the auditor is that they have opened the document and
+# know something it does not.
+VERDICTS = {
+    'satisfied':   {'status': 'satisfied',        'chase': False,
+                    'note': 'confirmed by %s'},
+    'practice':    {'status': 'partly satisfied', 'chase': True,
+                    'note': '%s checked: this is the practice side only — '
+                            'the personal one is still outstanding'},
+    'personal':    {'status': 'partly satisfied', 'chase': True,
+                    'note': '%s checked: this is the personal side only — '
+                            'the practice one is still outstanding'},
+    'not_applicable': {'status': 'not_applicable', 'chase': False,
+                    'note': "%s marked this not applicable — the client does not have one"},
+    'missing':     {'status': 'missing',          'chase': True,
+                    'note': '%s checked: what arrived does not answer this'},
+}
+
+
+def apply_item_verdicts(results, verdicts, who='reviewer'):
+    """Overlay a person's decisions on the auditor's.
+
+    The auditor reads documents; it cannot open a debt schedule and judge
+    whether the rows below the practice loans are the doctor's car. When
+    someone has looked and knows, their answer wins — and it has to survive
+    into the client email, or overruling the machine achieves nothing except a
+    nicer-looking screen.
+
+    Idempotent, and safe to call with nothing: an item with no verdict is left
+    exactly as the auditor left it. The original status is kept so the page can
+    show that a human moved it.
+    """
+    if not verdicts:
+        return results
+    for r in results:
+        v = verdicts.get(str(r['item'].get('id')))
+        if not v:
+            continue
+        rule = VERDICTS.get((v or {}).get('verdict'))
+        if not rule:
+            continue
+        r['auto_status'] = r.get('auto_status', r['status'])
+        r['status'] = rule['status']
+        r['human'] = True
+        r['chase'] = rule['chase']
+        note = rule['note'] % who
+        extra = ((v or {}).get('note') or '').strip()
+        r['note'] = (note + ' — ' + extra) if extra else note
+    return results

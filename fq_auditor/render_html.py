@@ -292,6 +292,16 @@ def split_decisions(decisions):
     return decisions, {}
 
 
+def item_decisions(decisions):
+    """The reviewer's verdicts on checklist items, keyed by item id.
+
+    Kept out of split_decisions so its two-value signature stays as it is —
+    several callers unpack it, and widening the tuple would break them
+    silently at the point where filing decisions are read.
+    """
+    return ((decisions or {}).get('items') or {}) if isinstance(decisions, dict) else {}
+
+
 def build_plan(docs, decisions=None, mislabeled=()):
     """Filing plan — destination AND proposed name — with human decisions applied.
 
@@ -684,6 +694,10 @@ def build_clarification(res, plan, client):
 
     missing = [r for r in results if r['status'] == 'missing']
     mismatched = [r for r in results if r['status'] == 'mismatched']
+    # Half-answered is still owed. Listing these only on screen and leaving them
+    # out of the chase list is how a client ends up never being asked for the
+    # personal half of something.
+    partial = [r for r in results if r['status'] == 'partly satisfied']
     review = [p for p in plan if p['review']]
 
     # On a second or later pass, what CHANGED comes first. Restating the whole
@@ -704,6 +718,7 @@ def build_clarification(res, plan, client):
 
     L.append('SUMMARY')
     L.append('  %d checklist item(s) missing' % len(missing))
+    L.append('  %d item(s) only half answered' % len(partial))
     L.append('  %d item(s) arrived but in the wrong scope' % len(mismatched))
     L.append('  %d statement series with missing months' % len(cross['gaps']))
     L.append('  %d document(s) need a filing decision from a human' % len(review))
@@ -711,6 +726,14 @@ def build_clarification(res, plan, client):
     L.append('  %d rename(s) need the period confirmed' % len([p for p in plan if p.get('needs_confirmation')]))
     L.append('  %d filename(s) contradict their contents' % len(cross.get('mislabeled') or []))
     L.append('')
+
+    if partial:
+        L.append('PARTLY PROVIDED — ask the client for the rest')
+        for r in partial:
+            L.append('  - [%s] %s' % (r['item'].get('section'), r['item'].get('label')))
+            if r.get('note'):
+                L.append('      %s' % r['note'])
+        L.append('')
 
     if missing:
         L.append('NOT PROVIDED — ask the client')
@@ -977,6 +1000,33 @@ button.openfile:hover{background:#F4F1EA;color:#1B2A41}
       color:#1B2A41;border-radius:7px;padding:4px 12px;cursor:pointer}
 #pvimg{max-width:90vw;max-height:78vh;object-fit:contain;display:block}
 #pvmsg{padding:26px;color:#6b7280;font-size:14px}
+/* A workbook, shown as a workbook. Sticky header row and first column so the
+   labels stay put while you scroll a wide schedule — the whole reason for
+   showing a grid rather than a paragraph is being able to tell which number
+   sits under which heading. */
+#pvsheet{padding:0 0 6px;max-width:92vw;max-height:78vh;overflow:auto}
+#pvtabs{display:flex;gap:6px;padding:9px 14px 0;flex-wrap:wrap;
+      position:sticky;top:0;background:#fff;z-index:3}
+#pvtabs button{font:inherit;font-size:12px;padding:4px 11px;border-radius:14px;
+      border:1px solid #D8D4CA;background:#fff;color:#5A6270;cursor:pointer}
+#pvtabs button.on{background:var(--fq-navy);border-color:var(--fq-navy);color:#fff;font-weight:600}
+table.grid{border-collapse:separate;border-spacing:0;font-size:12.5px;margin:10px 14px 0;
+      background:#fff;border:1px solid #C9D2DA;width:auto}
+table.grid td{border-right:1px solid #E9EDF1;border-bottom:1px solid #E9EDF1;padding:3px 8px;
+      white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:top}
+table.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+/* Column letters and row numbers, greyed like a spreadsheet's own gutters. */
+table.grid td.addr{background:#EDF1F4;color:#6C7480;font-size:11px;text-align:center;
+      font-weight:600;padding:2px 7px;position:sticky;left:0;z-index:2}
+table.grid tr.addr td{position:sticky;top:0;left:auto;z-index:3}
+table.grid tr.addr td.corner{left:0;z-index:5}
+/* The real heading row, wherever it turned out to be. Client workbooks open
+   with a title and a line of instructions far more often than not. */
+table.grid tr.hdr td{background:#DCE7EF;color:var(--fq-navy);font-weight:600;
+      position:sticky;top:22px;z-index:1}
+table.grid tr.hdr td.addr{z-index:4}
+.pvtrunc{margin:8px 14px 0;font-size:12px;color:#9C4A16;background:#FFF3E0;
+      padding:4px 9px;border-radius:5px;display:inline-block}
 #pvtext{margin:0;padding:18px 20px;max-width:88vw;max-height:78vh;overflow:auto;
       font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2b3442;
       white-space:pre-wrap;word-break:break-word}
@@ -1035,6 +1085,12 @@ button.ckdoc{font-size:11.5px;margin-top:0;background:#fff;border:1px solid #CFD
   text-overflow:ellipsis;white-space:nowrap;font-family:inherit}
 button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckmore{font-size:11.5px;color:#6C7480;align-self:center}
+.ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
+.ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
+.ckpick label{font-size:11px;color:#6C7480;text-transform:uppercase;letter-spacing:.5px}
+.ckhuman{font-size:11px;background:var(--fq-navy);color:#fff;border-radius:10px;
+  padding:1px 8px;margin-left:6px;vertical-align:1px}
 
 /* ---- shell ---------------------------------------------------------- */
 body{background:#FAF8F5}
@@ -1061,7 +1117,22 @@ header button.primary:disabled{opacity:.45;cursor:default}
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:26px;align-items:start}
 .main{min-width:0}
 .rail{position:sticky;top:96px;display:flex;flex-direction:column;gap:14px}
-.railcard{background:#fff;border:1px solid #EAE5DC;border-radius:12px;padding:14px 16px}
+.railcard{background:#fff;border:1px solid #EAE5DC;border-radius:12px;padding:14px 16px;
+  overflow:visible}
+/* A count you can interrogate. Hovering names what it is counting, to the left
+   so the panel opens over the page rather than off the edge of the window. */
+.stat[data-tip]{position:relative;cursor:help}
+.stat[data-tip] b{border-bottom:1px dotted #B9C2CC}
+.stat[data-tip]:hover::after{
+  content:attr(data-tip);white-space:pre-wrap;position:absolute;right:calc(100% + 12px);
+  top:-6px;width:290px;background:var(--fq-navy);color:#fff;font-size:12px;line-height:1.45;
+  padding:9px 11px;border-radius:8px;z-index:60;box-shadow:0 6px 18px rgba(20,30,45,.25);
+  pointer-events:none}
+@media(max-width:1100px){
+  /* The rail sits inline on a narrow window, so a tooltip to its left would
+     hang off the page. Drop it underneath instead. */
+  .stat[data-tip]:hover::after{right:auto;left:0;top:calc(100% + 6px)}
+}
 .railcard h3{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.7px;
   color:#8A94A0;font-weight:600}
 .stat{display:flex;align-items:baseline;gap:9px;padding:6px 0;border-top:1px solid #F4F1EB}
@@ -1100,6 +1171,7 @@ JS = r"""
 var __c = window.__CARRIED__ || {};
 var DEC   = (__c.files || (__c.accounts ? {} : __c)) || {};
 var ACCTS = __c.accounts || {};
+var ITEMS = __c.items || {};
 
 function settled(row){
   var d = DEC[row.dataset.sha];
@@ -1122,7 +1194,8 @@ function setUndecided(){
   var bar = document.getElementById('prog');
   if(bar) bar.style.width = total ? (100 * done / total) + '%' : '0';
   var btn = document.getElementById('dlDec');
-  if(btn) btn.disabled = Object.keys(DEC).length === 0 && Object.keys(ACCTS).length === 0;
+  if(btn) btn.disabled = Object.keys(DEC).length === 0 && Object.keys(ACCTS).length === 0
+                         && Object.keys(ITEMS).length === 0;
 }
 
 function record(sha, dest, note, row){
@@ -1176,6 +1249,77 @@ function wire(){
   document.getElementById('pvclose').addEventListener('click', hide);
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') hide(); });
 
+
+  function textFallback(body, b){
+    fetch('/api/previewtext?path=' + encodeURIComponent(b.dataset.path)
+          + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var pre = document.createElement('pre');
+        pre.id = 'pvtext';
+        pre.textContent = d.text || d.error || 'Nothing to show.';
+        body.innerHTML=''; body.appendChild(pre);
+      })
+      .catch(function(){ body.innerHTML='<div id="pvmsg">Nothing to show for this file.</div>'; });
+  }
+
+  var NUMRE = /^[-+(]?[$]?[\d,]+(\.\d+)?[)%]?$/;
+  function showSheets(body, sheets){
+    body.innerHTML = '';
+    var tabs = document.createElement('div'); tabs.id='pvtabs';
+    var host = document.createElement('div'); host.id='pvsheet';
+    if(sheets.length > 1) body.appendChild(tabs);
+    body.appendChild(host);
+
+    function draw(i){
+      var sh = sheets[i];
+      host.innerHTML = '';
+      var t = document.createElement('table'); t.className='grid';
+
+      // Column letters across the top, row numbers down the side — the same
+      // reference the file uses. Without them a reviewer comparing the panel
+      // against the real workbook has nothing to line the two up by.
+      var head = document.createElement('tr'); head.className='addr';
+      head.appendChild(cell('td', '', 'corner'));
+      (sh.cols || []).forEach(function(L){ head.appendChild(cell('td', L, 'addr')); });
+      t.appendChild(head);
+
+      sh.rows.forEach(function(row, ri){
+        var tr = document.createElement('tr');
+        if(ri === sh.header) tr.className = 'hdr';
+        tr.appendChild(cell('td', String(ri+1), 'addr'));
+        row.forEach(function(c){
+          var td = cell('td', c, (c && NUMRE.test(c.trim())) ? 'num' : '');
+          if(c && c.length > 22) td.title = c;
+          tr.appendChild(td);
+        });
+        t.appendChild(tr);
+      });
+      host.appendChild(t);
+      if(sh.truncated){
+        var w = document.createElement('div'); w.className='pvtrunc';
+        w.textContent = 'Showing the first ' + sh.rows.length + ' rows — open the file for the rest.';
+        host.appendChild(w);
+      }
+      Array.prototype.forEach.call(tabs.children, function(btn, j){
+        btn.classList.toggle('on', j===i);
+      });
+    }
+    function cell(tag, text, cls){
+      var e = document.createElement(tag);
+      e.textContent = text;
+      if(cls) e.className = cls;
+      return e;
+    }
+    sheets.forEach(function(sh, i){
+      var btn = document.createElement('button');
+      btn.textContent = sh.name;
+      btn.addEventListener('click', function(){ draw(i); });
+      tabs.appendChild(btn);
+    });
+    draw(0);
+  }
+
   document.querySelectorAll('button.openfile').forEach(function(b){
     b.addEventListener('click', function(){
       current = b.dataset.path;
@@ -1190,21 +1334,46 @@ function wire(){
       // text the auditor already read out of it. That text is also exactly what
       // the classifier judged the document on, so it explains the verdict.
       img.onerror = function(){
-        fetch('/api/previewtext?path=' + encodeURIComponent(b.dataset.path)
-              + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            var pre = document.createElement('pre');
-            pre.id = 'pvtext';
-            pre.textContent = d.text || d.error || 'Nothing to show.';
-            body.innerHTML=''; body.appendChild(pre);
-          })
-          .catch(function(){ body.innerHTML='<div id="pvmsg">Nothing to show for this file.</div>'; });
+        // A spreadsheet gets a grid, not a paragraph. Tried first, and only
+        // falling through to the flat text if the workbook cannot be read —
+        // a .xls saved by an old version, say, which openpyxl will not open.
+        var low = (b.dataset.path||'').toLowerCase();
+        if(/\.(xlsx|xlsm|xltx|csv|tsv)$/.test(low)){
+          fetch('/api/sheet?path=' + encodeURIComponent(b.dataset.path)
+                + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+              if(!d.sheets || !d.sheets.length) throw new Error(d.error||'no sheets');
+              showSheets(body, d.sheets);
+            })
+            .catch(function(){ textFallback(body, b); });
+          return;
+        }
+        textFallback(body, b);
       };
       img.src = '/api/preview?path=' + encodeURIComponent(b.dataset.path)
               + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||'')
               + '&t=' + Date.now();
     });
+  });
+
+  // Checklist verdicts. Stored the moment they change, like every other
+  // decision on this page, so nothing is lost by scrolling away; they still
+  // only take effect when Save is pressed.
+  function recordItem(id){
+    var sel  = document.querySelector('select.ckv[data-item="'+CSS.escape(id)+'"]');
+    var note = document.querySelector('input.cknote[data-item="'+CSS.escape(id)+'"]');
+    var v = sel ? sel.value : '';
+    var n = note ? note.value.trim() : '';
+    if(!v && !n) delete ITEMS[id];
+    else ITEMS[id] = {verdict: v, note: n};
+    setUndecided();
+  }
+  document.querySelectorAll('select.ckv').forEach(function(sel){
+    sel.addEventListener('change', function(){ recordItem(sel.dataset.item); });
+  });
+  document.querySelectorAll('input.cknote').forEach(function(inp){
+    inp.addEventListener('input', function(){ recordItem(inp.dataset.item); });
   });
 
   document.querySelectorAll('button.bulk').forEach(function(b){
@@ -1259,7 +1428,7 @@ function save(name, text, type){
 function wireButtons(){
   var d = document.getElementById('dlDec');
   if(d) d.addEventListener('click', function(){
-    save('decisions.json', JSON.stringify({files:DEC, accounts:ACCTS}, null, 1), 'application/json');
+    save('decisions.json', JSON.stringify({files:DEC, accounts:ACCTS, items:ITEMS}, null, 1), 'application/json');
   });
   // Downloaded as HTML, not .txt or .md — those open in a plain editor on a Mac
   // and look terrible. This opens formatted in any browser and prints to PDF.
@@ -1404,7 +1573,7 @@ CK_ORDER = {'missing': 0, 'mismatched': 1, 'partly satisfied': 2,
             'satisfied': 3, 'not_applicable': 4}
 
 
-def render_checklist_summary(a, results, client):
+def render_checklist_summary(a, results, client, verdicts=None):
     """The checklist, at the top, as something you can take in at a glance.
 
     This is the question the reviewer actually arrived with — did the client send
@@ -1418,6 +1587,9 @@ def render_checklist_summary(a, results, client):
     """
     if not results:
         return
+    for r in results:
+        v = (verdicts or {}).get(str(r['item'].get('id'))) or {}
+        r['_verdict'], r['_vnote'] = v.get('verdict') or '', v.get('note') or ''
     rows = sorted(results, key=lambda r: (CK_ORDER.get(r['status'], 9),
                                           (r['item'].get('label') or '').lower()))
     n_out = sum(1 for r in results
@@ -1438,7 +1610,10 @@ def render_checklist_summary(a, results, client):
         cls, mark = CK_MARK.get(r['status'], ('part', '?'))
         a('<div class="ck %s">' % cls)
         a('<div class="ckmark">%s</div><div class="ckbody">' % mark)
-        a('<div class="cklab">%s</div>' % _e(r['item'].get('label') or r['item'].get('id')))
+        lab = _e(r['item'].get('label') or r['item'].get('id'))
+        if r.get('human'):
+            lab += '<span class="ckhuman">your call</span>'
+        a('<div class="cklab">%s</div>' % lab)
         if r.get('note') and r['status'] != 'satisfied':
             a('<div class="cknote">%s</div>' % _e(r['note']))
         # Cap the chips. One tax-return item on a real client matched fifteen
@@ -1457,8 +1632,42 @@ def render_checklist_summary(a, results, client):
             if len(docs) > 4:
                 a('<span class="ckmore">+%d more</span>' % (len(docs) - 4))
             a('</div>')
+        # The reviewer's own verdict. The auditor reads text; it cannot open a
+        # debt schedule and tell whether the rows under the practice loans are
+        # the doctor's car. Whoever can, says so here, and it carries into the
+        # client email rather than stopping at the screen.
+        cur = (r.get('_verdict') or '')
+        opts = [('', 'Auditor\u2019s call'), ('satisfied', 'Satisfied \u2014 all here'),
+                ('practice', 'Practice side only'), ('personal', 'Personal side only'),
+                ('not_applicable', 'Not applicable'), ('missing', 'Still missing')]
+        a('<div class="ckpick"><label>Your call</label>')
+        a('<select class="ckv" data-item="%s">' % _e(str(r['item'].get('id'))))
+        for val, txt in opts:
+            a('<option value="%s"%s>%s</option>'
+              % (_e(val), ' selected' if val == cur else '', _e(txt)))
+        a('</select>')
+        a('<input class="cknote" data-item="%s" placeholder="note (optional)" value="%s">'
+          % (_e(str(r['item'].get('id'))), _e(r.get('_vnote') or '')))
+        a('</div>')
         a('</div></div>')
     a('</div></div>')
+
+
+
+def _tip(names, cap=7):
+    """A hover list for a count, so a number is never just a number.
+
+    "1 needs a decision" is a fact you cannot act on without hunting for which
+    one. Capped, because a client with thirty missing items would produce a
+    tooltip taller than the window.
+    """
+    names = [n for n in (names or []) if n]
+    if not names:
+        return 'nothing in this group'
+    out = names[:cap]
+    if len(names) > cap:
+        out.append('\u2026and %d more' % (len(names) - cap))
+    return '\n'.join('\u2022 ' + str(n)[:78] for n in out)
 
 
 def build_html(res, client, checklist_source, path, decisions=None, cache_dir=None,
@@ -1467,6 +1676,12 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     cross, leaks = res['cross'], res['leaks']
     unexpected = res.get('unexpected', [])
     decisions = decisions or {}
+
+    # A person's verdict lands before anything is counted, written or emailed.
+    # Applied here rather than in the page markup so the chase list, the tiles
+    # and the client email all see the same answer.
+    import reconcile as _rec
+    _rec.apply_item_verdicts(results, item_decisions(decisions), who='you')
 
     plan = build_plan(docs, decisions, res.get('mislabeled') or ())
     review = [p for p in plan if p['review']]
@@ -1551,7 +1766,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # — they just no longer need restating on every client.
 
 
-    render_checklist_summary(a, results, client)
+    render_checklist_summary(a, results, client, item_decisions(decisions))
 
     collided = [p for p in plan if p.get('collision')]
 
@@ -1783,30 +1998,42 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # first thing the eye landed on.
     a('<aside class="rail">')
     a('<div class="railcard"><h3>Where this client stands</h3>')
-    for label, n, cls in [
-        ('need a decision', len(review), 'warn'),
-        ('satisfied', counts.get('satisfied', 0), 'ok'),
-        ('mismatched', counts.get('mismatched', 0), ''),
-        ('missing', counts.get('missing', 0), 'warn'),
-        ('partly satisfied', counts.get('partly satisfied', 0), 'warn'),
-        ('not applicable', counts.get('not_applicable', 0), ''),
-        ('series gaps', len(cross['gaps']), ''),
-        ('unexpected', len(unexpected), ''),
-        ('files with PII', len(leaks), ''),
+    def _by(status):
+        return [r['item'].get('label') or r['item'].get('id')
+                for r in results if r['status'] == status]
+
+    for label, n, cls, names in [
+        ('need a decision', len(review), 'warn', [p['file'] for p in review]),
+        ('satisfied', counts.get('satisfied', 0), 'ok', _by('satisfied')),
+        ('mismatched', counts.get('mismatched', 0), '', _by('mismatched')),
+        ('missing', counts.get('missing', 0), 'warn', _by('missing')),
+        ('partly satisfied', counts.get('partly satisfied', 0), 'warn',
+         _by('partly satisfied')),
+        ('not applicable', counts.get('not_applicable', 0), '', _by('not_applicable')),
+        ('series gaps', len(cross['gaps']), '',
+         [g.get('label') for g in cross['gaps']]),
+        ('unexpected', len(unexpected), '',
+         [u.get('file') if isinstance(u, dict) else u for u in unexpected]),
+        ('files with PII', len(leaks), '',
+         [l.get('file') if isinstance(l, dict) else l for l in leaks]),
     ]:
-        a('<div class="stat %s"><b>%d</b><span>%s</span></div>' % (cls, n, label))
+        a('<div class="stat %s" data-tip="%s"><b>%d</b><span>%s</span></div>'
+          % (cls, _e(_tip(names)), n, label))
     a('</div>')
     a('<div class="railcard tips"><h3>What to do</h3>'
-      '<ol><li>Work down <b>Decide these</b>.</li>'
-      '<li>Press <b>Save decisions</b>.</li>'
-      '<li>Run the audit again — your choices are picked up.</li></ol></div>')
+      '<ol><li>Work down <b>Decide these</b>, and mark anything on the checklist '
+      'the auditor got wrong.</li>'
+      '<li>Press <b>Save decisions</b> — you can save as often as you like.</li>'
+      '<li>Press <b>Build File Tree</b>. It re-runs the audit itself, so your '
+      'choices are picked up.</li></ol></div>')
     a('</aside>')
     a('</div>')                                    # .grid
 
     a('</div><footer>Generated locally by the FQ intake auditor. '
       'No network access; this page cannot transmit anything.</footer>')
     _f, _a = split_decisions(decisions)
-    a('<script>window.__CARRIED__=%s;</script>' % json.dumps({'files': _f, 'accounts': _a}))
+    a('<script>window.__CARRIED__=%s;</script>'
+      % json.dumps({'files': _f, 'accounts': _a, 'items': item_decisions(decisions)}))
     a('<script>%s</script></body></html>' % JS)
 
     with open(path, 'w', encoding='utf-8') as fh:
