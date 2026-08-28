@@ -357,6 +357,12 @@ def read_sheets(path, kind=None):
     return out
 
 
+# Sentinel: the file is a readable PDF that we cannot decrypt. Distinct from
+# None ("nothing to render here"), because the two need different words on
+# screen — one is a missing password, the other is a spreadsheet.
+LOCKED = object()
+
+
 def render_first_page(path, max_px=1400):
     """PNG bytes of page one, or of the image itself. None if not viewable."""
     import io as _io
@@ -377,7 +383,16 @@ def render_first_page(path, max_px=1400):
 
     if kind == '.pdf':
         import pymupdf
-        doc = pymupdf.open(path)
+        # Through extract.open_pdf, never pymupdf.open directly. This was the
+        # fifth call site to reach for the raw opener and the second to be
+        # caught doing it: a document the client sent us the password for
+        # rendered as "nothing to show", because only the extraction path knew
+        # how to unlock it. LOCKED is returned rather than None so the caller
+        # can say which of the two problems this is.
+        import extract as _x
+        doc = _x.open_pdf(path)
+        if doc is None:
+            return LOCKED
         try:
             if not len(doc):
                 return None
@@ -1206,7 +1221,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 png = render_first_page(path)
             except Exception as e:
                 return self._send(500, json.dumps({'error': str(e)}))
+            if png is LOCKED:
+                return self._send(423, json.dumps({'error':
+                    'This PDF is encrypted and none of the passwords the client sent '
+                    'will open it. Ask them for the password, then re-run the audit.',
+                    'locked': True, 'final': True}))
             if png is None:
+                # Name the file type rather than shrugging. A QuickBooks backup
+                # has nothing to render and never will; "nothing to show"
+                # reads like a fault in the tool.
+                _k = os.path.splitext(path)[1].lower()
+                if _k in ('.qbb', '.qbw', '.qbm'):
+                    return self._send(415, json.dumps({'error':
+                        'QuickBooks backup file. There is no page to show — it has to be '
+                        'restored in QuickBooks. The audit has already read what it can '
+                        'from the file name and size.', 'final': True}))
                 return self._send(415, '{"error":"nothing to show for this file type"}')
             self.send_response(200)
             self.send_header('Content-Type', 'image/png')

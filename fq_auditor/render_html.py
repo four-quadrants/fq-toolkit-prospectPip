@@ -1010,21 +1010,21 @@ button.openfile:hover{background:#F4F1EA;color:#1B2A41}
 #pvtabs button{font:inherit;font-size:12px;padding:4px 11px;border-radius:14px;
       border:1px solid #D8D4CA;background:#fff;color:#5A6270;cursor:pointer}
 #pvtabs button.on{background:var(--fq-navy);border-color:var(--fq-navy);color:#fff;font-weight:600}
-table.grid{border-collapse:separate;border-spacing:0;font-size:12.5px;margin:10px 14px 0;
+table.xlsheet{border-collapse:separate;border-spacing:0;font-size:12.5px;margin:10px 14px 0;
       background:#fff;border:1px solid #C9D2DA;width:auto}
-table.grid td{border-right:1px solid #E9EDF1;border-bottom:1px solid #E9EDF1;padding:3px 8px;
+table.xlsheet td{border-right:1px solid #E9EDF1;border-bottom:1px solid #E9EDF1;padding:3px 8px;
       white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:top}
-table.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.xlsheet td.num{text-align:right;font-variant-numeric:tabular-nums}
 /* Column letters and row numbers, greyed like a spreadsheet's own gutters. */
-table.grid td.addr{background:#EDF1F4;color:#6C7480;font-size:11px;text-align:center;
+table.xlsheet td.addr{background:#EDF1F4;color:#6C7480;font-size:11px;text-align:center;
       font-weight:600;padding:2px 7px;position:sticky;left:0;z-index:2}
-table.grid tr.addr td{position:sticky;top:0;left:auto;z-index:3}
-table.grid tr.addr td.corner{left:0;z-index:5}
+table.xlsheet tr.addr td{position:sticky;top:0;left:auto;z-index:3}
+table.xlsheet tr.addr td.corner{left:0;z-index:5}
 /* The real heading row, wherever it turned out to be. Client workbooks open
    with a title and a line of instructions far more often than not. */
-table.grid tr.hdr td{background:#DCE7EF;color:var(--fq-navy);font-weight:600;
+table.xlsheet tr.hdr td{background:#DCE7EF;color:var(--fq-navy);font-weight:600;
       position:sticky;top:22px;z-index:1}
-table.grid tr.hdr td.addr{z-index:4}
+table.xlsheet tr.hdr td.addr{z-index:4}
 .pvtrunc{margin:8px 14px 0;font-size:12px;color:#9C4A16;background:#FFF3E0;
       padding:4px 9px;border-radius:5px;display:inline-block}
 #pvtext{margin:0;padding:18px 20px;max-width:88vw;max-height:78vh;overflow:auto;
@@ -1251,6 +1251,17 @@ function wire(){
 
 
   function textFallback(body, b){
+    fetch('/api/preview?path=' + encodeURIComponent(b.dataset.path)
+          + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
+      .then(function(r){ return (r.status === 423 || r.status === 415) ? r.json() : null; })
+      .then(function(d){
+        if(d && d.final){ body.innerHTML = '<div id="pvmsg">' + d.error + '</div>'; return; }
+        plainText(body, b);
+      })
+      .catch(function(){ plainText(body, b); });
+  }
+
+  function plainText(body, b){
     fetch('/api/previewtext?path=' + encodeURIComponent(b.dataset.path)
           + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
       .then(function(r){ return r.json(); })
@@ -1274,7 +1285,7 @@ function wire(){
     function draw(i){
       var sh = sheets[i];
       host.innerHTML = '';
-      var t = document.createElement('table'); t.className='grid';
+      var t = document.createElement('table'); t.className='xlsheet';
 
       // Column letters across the top, row numbers down the side — the same
       // reference the file uses. Without them a reviewer comparing the panel
@@ -1341,8 +1352,17 @@ function wire(){
         if(/\.(xlsx|xlsm|xltx|csv|tsv)$/.test(low)){
           fetch('/api/sheet?path=' + encodeURIComponent(b.dataset.path)
                 + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
-            .then(function(r){ return r.json(); })
+            .then(function(r){
+              if(r.status === 404){
+                body.innerHTML = '<div id="pvmsg">This copy of the app is older than '
+                  + 'the page and has no spreadsheet viewer. Quit it and start it '
+                  + 'again, then reopen this preview.</div>';
+                return null;
+              }
+              return r.json();
+            })
             .then(function(d){
+              if(d === null) return;
               if(!d.sheets || !d.sheets.length) throw new Error(d.error||'no sheets');
               showSheets(body, d.sheets);
             })

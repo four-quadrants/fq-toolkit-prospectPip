@@ -816,7 +816,9 @@ def render_internal_md(res, client, checklist_source):
     W(f"_{datetime.date.today().isoformat()} · {len(docs)} documents · "
       f"{sum(d['n_pages'] for d in docs)} pages "
       f"({sum(d['n_ocr_pages'] for d in docs)} OCR'd) · checklist: {checklist_source}_\n")
-    W(f"**{counts.get('satisfied', 0)} satisfied · {counts.get('mismatched', 0)} mismatched · "
+    W(f"**{counts.get('satisfied', 0)} satisfied · "
+      f"{counts.get('partly satisfied', 0)} partly satisfied · "
+      f"{counts.get('mismatched', 0)} mismatched · "
       f"{counts.get('missing', 0)} missing · {len(res['unexpected'])} unexpected · "
       f"{len(cross['gaps'])} series with gaps · {len(leaks)} files with residual PII**\n")
 
@@ -1145,7 +1147,9 @@ def main():
     counts = {}
     for r in res['results']:
         counts[r['status']] = counts.get(r['status'], 0) + 1
-    print(f"\n{counts.get('satisfied', 0)} satisfied · {counts.get('mismatched', 0)} mismatched"
+    print(f"\n{counts.get('satisfied', 0)} satisfied"
+          f" · {counts.get('partly satisfied', 0)} partly satisfied"
+          f" · {counts.get('mismatched', 0)} mismatched"
           f" · {counts.get('missing', 0)} missing · {len(res['unexpected'])} unexpected"
           f" · {len(res['cross']['gaps'])} series gaps")
     # Spell out which set was scanned. "60 files with PII" reads like a leak
