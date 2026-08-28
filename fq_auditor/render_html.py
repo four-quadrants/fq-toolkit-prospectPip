@@ -25,7 +25,7 @@ The page is entirely self-contained — no CDN, no fonts, nothing fetched. Its C
 forbids network access outright, because the internal section contains client PII.
 """
 
-import os, re, json, html, datetime
+import os, re, io, json, html, base64, datetime
 
 # ---------------------------------------------------------------- filing plan
 
@@ -211,6 +211,24 @@ def _snippet(cache_dir, sha, n=PREVIEW_SNIPPET):
         return None
 
 
+def under_documents(dest):
+    """Bring a saved decision into the Documents/ tree.
+
+    Decisions are keyed by content hash and outlive the code. Ones chosen before
+    filing moved under Documents/ say "Business/Debt", and were still being
+    honoured literally — so a document the operator had explicitly placed ended
+    up as the one thing outside the tree, which looks exactly like a bug in the
+    filing rather than an old choice being respected.
+    """
+    d = (dest or '').strip().strip('/')
+    if not d or d.startswith(DOCS_DIR + '/') or d == DOCS_DIR:
+        return d
+    first = d.split('/')[0]
+    if first in set(SIDE_DIR.values()) | {'_Needs Review'}:
+        return DOCS_DIR + '/' + d
+    return d
+
+
 def plan_destination(doc):
     """Where this document should go, and whether a human must decide.
 
@@ -300,7 +318,7 @@ def build_plan(docs, decisions=None, mislabeled=()):
                                    (': ' + acct['note'] if acct.get('note') else ''))
         if decided and decided.get('dest'):
             rows.append({
-                'sha': sha, 'file': d.get('file'), 'dest': decided['dest'],
+                'sha': sha, 'file': d.get('file'), 'dest': under_documents(decided['dest']),
                 'why': 'your decision' + (' — ' + decided['note'] if decided.get('note') else ''),
                 'review': False, 'decided': True,
                 'doc_type': d.get('doc_type'), 'side': d.get('owner_side'),
@@ -815,19 +833,70 @@ def write_clarification_docx(memo, client, path):
 
 # ------------------------------------------------------------------ rendering
 
+
+# --------------------------------------------------------------------------
+# brand
+# --------------------------------------------------------------------------
+# The real Four Quadrants mark, vendored into the repo rather than read off the
+# Analysis share. The share is not always mounted — on the coworker's machine it
+# may never be — and a header whose logo silently vanishes looks like a broken
+# page. Inlined as a data URI because the page has to survive being saved to
+# disk and emailed, where a relative <img src> points at nothing, and because
+# the page's own CSP allows data: images but no network of any kind.
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         'assets', 'fq_logo.png')
+LOGO_H = 34                      # rendered height in the header, in px
+_LOGO_CACHE = {}
+
+
+def logo_data_uri(height=LOGO_H):
+    """The mark as a small data: URI, or None if it cannot be produced.
+
+    Downscaled first. The source art is 4819px wide — inlining it whole would
+    add roughly 280KB of base64 to every review page for something displayed at
+    34px tall.
+    """
+    if height in _LOGO_CACHE:
+        return _LOGO_CACHE[height]
+    uri = None
+    try:
+        from PIL import Image
+        im = Image.open(LOGO_PATH).convert('RGBA')
+        w = max(1, int(im.width * (height * 2.0) / im.height))     # 2x for retina
+        im = im.resize((w, height * 2), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, format='PNG', optimize=True)
+        uri = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')
+    except Exception:
+        uri = None               # a missing logo must never break the audit
+    _LOGO_CACHE[height] = uri
+    return uri
+
+
 CSS = """
+/* Four Quadrants palette. The orange and slate are sampled straight off the
+   firm's logo artwork rather than eyeballed, so the header art and the chrome
+   around it are the same colours rather than nearly the same. Navy and the two
+   blues are the supporting range. */
+:root{
+  --fq-orange:#F08418;  --fq-orange-dk:#CE6E0D;
+  --fq-slate:#607884;   --fq-slate-lt:#909CA8;
+  --fq-navy:#16324F;    --fq-navy-lt:#22456A;
+  --fq-baby:#A9CFE5;    --fq-baby-pale:#EAF3F9;
+  --fq-ink:#1B2A41;     --fq-line:#E4E0D8;
+}
 *{box-sizing:border-box}
 body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
      color:#1B2A41;background:#F7F6F3}
-header{background:#1B2A41;color:#fff;padding:20px 30px;position:sticky;top:0;z-index:20}
+header{background:var(--fq-navy);color:#fff;padding:20px 30px;position:sticky;top:0;z-index:20}
 header h1{margin:0;font-size:20px}
 header .sub{opacity:.72;font-size:13px;margin-top:3px}
 .bar{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
 button{font:inherit;font-size:13px;padding:7px 13px;border-radius:7px;border:1px solid #3A4A62;
        background:#2A3A52;color:#fff;cursor:pointer}
 button:hover{background:#35486380}
-button.primary{background:#E8792B;border-color:#E8792B}
-button.primary:hover{background:#c9631a}
+button.primary{background:var(--fq-orange);border-color:var(--fq-orange)}
+button.primary:hover{background:var(--fq-orange-dk)}
 button:disabled{opacity:.45;cursor:default}
 #undecided{font-size:13px;opacity:.85}
 .wrap{max-width:1240px;margin:0 auto;padding:0 30px 80px}
@@ -836,7 +905,7 @@ button:disabled{opacity:.45;cursor:default}
 .tile b{display:block;font-size:24px;line-height:1.1}
 .tile span{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#6C7480}
 .tile.warn b{color:#C0392B} .tile.ok b{color:#1E8449}
-h2{font-size:16px;margin:32px 0 4px;padding-bottom:7px;border-bottom:2px solid #E8792B}
+h2{font-size:16px;margin:32px 0 4px;padding-bottom:7px;border-bottom:2px solid var(--fq-orange)}
 h2 .n{color:#6C7480;font-weight:400;font-size:13px;margin-left:7px}
 .hint{color:#6C7480;font-size:13px;margin:6px 0 12px}
 table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #E4E0D8;border-radius:9px}
@@ -851,6 +920,9 @@ code{font:12.5px ui-monospace,Menlo,monospace;background:#F2F0EB;padding:1px 5px
 .p-mism{background:#FFF3E0;color:#8A5218} .p-rev{background:#FFE9DC;color:#9C4A16}
 /* Answered, not outstanding — grey so it never reads as a chase. */
 .p-na{background:#ECEFF1;color:#546E7A}
+/* Half-answered. Amber rather than green: something arrived, but the
+   client is still owed a chase for the rest. */
+.p-part{background:#FFF3E0;color:#8A5218;font-weight:600}
 select,input[type=text]{font:inherit;font-size:13px;padding:5px 7px;border:1px solid #D8D4CA;
        border-radius:6px;background:#fff;max-width:100%}
 select{min-width:210px}
@@ -908,7 +980,7 @@ button.openfile:hover{background:#F4F1EA;color:#1B2A41}
 #pvtext{margin:0;padding:18px 20px;max-width:88vw;max-height:78vh;overflow:auto;
       font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2b3442;
       white-space:pre-wrap;word-break:break-word}
-.qnum{flex:0 0 30px;height:30px;border-radius:50%;background:#1B2A41;color:#fff;
+.qnum{flex:0 0 30px;height:30px;border-radius:50%;background:var(--fq-slate);color:#fff;
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
 .qcard.done .qnum{background:#1E8449}
 .qbody{flex:1;min-width:0}
@@ -929,9 +1001,44 @@ details.panel[open]>summary:before{content:'▾'}
 details.panel>summary .n{margin-left:auto;font-weight:400;color:#6C7480;font-size:13px}
 .pbody{padding:4px 18px 18px}
 
+/* ---- logo ----------------------------------------------------------- */
+.hlogo{height:34px;width:auto;display:block;flex-shrink:0}
+.hbrand{display:flex;align-items:center;gap:16px;min-width:0}
+.hrule{width:1px;height:30px;background:rgba(169,207,229,.35);flex-shrink:0}
+
+/* ---- checklist summary ---------------------------------------------- */
+/* The first thing on the page. What the client owes us, whether it turned up,
+   and which document answered it — readable without opening anything. */
+.sum{background:#fff;border:1px solid var(--fq-line);border-left:4px solid var(--fq-slate);
+  border-radius:11px;padding:18px 20px;margin:20px 0 6px}
+.sum h3{margin:0 0 3px;font-size:15.5px;color:var(--fq-navy)}
+.sumsub{color:#6C7480;font-size:12.5px;margin-bottom:14px}
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
+.ck{display:flex;gap:10px;padding:9px 11px;border-radius:9px;background:var(--fq-baby-pale);
+  border:1px solid #DCE9F2;align-items:flex-start}
+.ck.bad{background:#FDECEA;border-color:#F3CFC9}
+.ck.part{background:#FFF6EA;border-color:#F5DCB8}
+.ck.na{background:#F2F4F5;border-color:#E2E6E8}
+.ckmark{flex:0 0 19px;height:19px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:700;color:#fff;margin-top:1px}
+.ck .ckmark{background:#2E8B57}
+.ck.bad .ckmark{background:#C0392B}
+.ck.part .ckmark{background:var(--fq-orange)}
+.ck.na .ckmark{background:var(--fq-slate-lt)}
+.ckbody{min-width:0;flex:1}
+.cklab{font-size:13px;font-weight:600;line-height:1.35;color:var(--fq-ink)}
+.cknote{font-size:12px;color:#9C4A16;margin-top:3px}
+.ck.bad .cknote{color:#A5342A}
+.ckdocs{margin-top:5px;display:flex;flex-wrap:wrap;gap:5px}
+button.ckdoc{font-size:11.5px;margin-top:0;background:#fff;border:1px solid #CFDEE9;color:var(--fq-navy);
+  border-radius:12px;padding:2px 9px;cursor:pointer;max-width:100%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;font-family:inherit}
+button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
+.ckmore{font-size:11.5px;color:#6C7480;align-self:center}
+
 /* ---- shell ---------------------------------------------------------- */
 body{background:#FAF8F5}
-header{background:linear-gradient(180deg,#1B2A41 0%,#22344f 100%);color:#fff;
+header{background:linear-gradient(180deg,var(--fq-navy) 0%,var(--fq-navy-lt) 100%);color:#fff;
   padding:0;position:sticky;top:0;z-index:30;box-shadow:0 1px 0 rgba(0,0,0,.15)}
 .hrow{max-width:1180px;margin:0 auto;padding:16px 26px;display:flex;align-items:center;gap:20px}
 .hleft{min-width:0}
@@ -939,9 +1046,9 @@ header h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.2px}
 header .sub{opacity:.65;font-size:12.5px;margin-top:2px}
 .hright{margin-left:auto;display:flex;align-items:center;gap:9px;flex-shrink:0}
 #undecided{font-size:13px;opacity:.85;margin-right:4px;white-space:nowrap}
-header button{background:#33455f;border:1px solid #40556f;color:#e8eef6;font:inherit;
+header button{background:#2A4C74;border:1px solid #3B628E;color:#e8eef6;font:inherit;
   font-size:13px;padding:8px 14px;border-radius:8px;cursor:pointer}
-header button:hover{background:#3d5271}
+header button:hover{background:#35618F}
 header button.primary{background:#E8792B;border-color:#E8792B;color:#fff;font-weight:600;
   font-size:14px;padding:9px 18px}
 header button.primary:hover{background:#d06a22}
@@ -1196,7 +1303,7 @@ def _e(s):
 
 def _pill(status):
     cls = {'satisfied': 'p-sat', 'missing': 'p-mis', 'mismatched': 'p-mism',
-           'not_applicable': 'p-na'}.get(status, 'p-rev')
+           'not_applicable': 'p-na', 'partly satisfied': 'p-part'}.get(status, 'p-rev')
     return '<span class="pill %s">%s</span>' % (cls, _e(status.replace('_', ' ')))
 
 
@@ -1289,6 +1396,71 @@ def _dest_options(plan, selected=None):
     return ''.join(opts)
 
 
+
+CK_MARK = {'satisfied': ('', '\u2713'), 'not_applicable': ('na', '\u2013'),
+           'partly satisfied': ('part', '\u00bd'), 'missing': ('bad', '!'),
+           'mismatched': ('bad', '!')}
+CK_ORDER = {'missing': 0, 'mismatched': 1, 'partly satisfied': 2,
+            'satisfied': 3, 'not_applicable': 4}
+
+
+def render_checklist_summary(a, results, client):
+    """The checklist, at the top, as something you can take in at a glance.
+
+    This is the question the reviewer actually arrived with — did the client send
+    what we asked for — and until now the only answer was a four-column table
+    folded inside a collapsed "Detail" panel, below the filing plan. The filing
+    plan is the machine's business. This is the person's.
+
+    Outstanding items sort first. Each satisfied item names the documents that
+    answered it, and each name opens that document, so "is this really the right
+    thing?" is one click rather than a hunt through the folder.
+    """
+    if not results:
+        return
+    rows = sorted(results, key=lambda r: (CK_ORDER.get(r['status'], 9),
+                                          (r['item'].get('label') or '').lower()))
+    n_out = sum(1 for r in results
+                if r['status'] in ('missing', 'mismatched', 'partly satisfied'))
+    n_ok = sum(1 for r in results if r['status'] == 'satisfied')
+
+    a('<div class="sum">')
+    a('<h3>What we asked %s for</h3>' % _e(client))
+    if n_out:
+        a('<div class="sumsub">%d of %d items still need something. '
+          'Outstanding ones are listed first. Click a document name to look at it.</div>'
+          % (n_out, len(results)))
+    else:
+        a('<div class="sumsub">All %d items are answered. Click a document name to '
+          'spot-check it.</div>' % n_ok)
+    a('<div class="sumgrid">')
+    for r in rows:
+        cls, mark = CK_MARK.get(r['status'], ('part', '?'))
+        a('<div class="ck %s">' % cls)
+        a('<div class="ckmark">%s</div><div class="ckbody">' % mark)
+        a('<div class="cklab">%s</div>' % _e(r['item'].get('label') or r['item'].get('id')))
+        if r.get('note') and r['status'] != 'satisfied':
+            a('<div class="cknote">%s</div>' % _e(r['note']))
+        # Cap the chips. One tax-return item on a real client matched fifteen
+        # documents, and printing them all buried every other item on the page.
+        docs = r.get('docs') or []
+        if docs:
+            a('<div class="ckdocs">')
+            for d in docs[:4]:
+                if d.get('path'):
+                    a('<button class="ckdoc openfile" data-path="%s" data-name="%s" '
+                      'title="%s">%s</button>'
+                      % (_e(d['path']), _e(d.get('file') or ''),
+                         _e(d.get('file') or ''), _e(d.get('file') or '')))
+                else:
+                    a('<span class="ckdoc">%s</span>' % _e(d.get('file') or ''))
+            if len(docs) > 4:
+                a('<span class="ckmore">+%d more</span>' % (len(docs) - 4))
+            a('</div>')
+        a('</div></div>')
+    a('</div></div>')
+
+
 def build_html(res, client, checklist_source, path, decisions=None, cache_dir=None,
                redacted_dir=None, previews='redacted'):
     docs, results = res['docs'], res['results']
@@ -1319,11 +1491,16 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     a('<style>%s</style></head><body>' % CSS)
 
     a('<header><div class="hrow">')
+    a('<div class="hbrand">')
+    _logo = logo_data_uri()
+    if _logo:
+        a('<img class="hlogo" src="%s" alt="Four Quadrants">' % _logo)
+        a('<div class="hrule"></div>')
     a('<div class="hleft">')
     a('<h1>%s</h1>' % _e(client))
     a('<div class="sub">Intake review &middot; %s &middot; %d documents, %d pages</div>'
       % (stamp, len(docs), n_pages))
-    a('</div>')
+    a('</div></div>')
     a('<div class="hright">')
     a('<span id="undecided"></span>')
     a('<button class="primary" id="dlDec" disabled>Save decisions</button>')
@@ -1367,26 +1544,16 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
           'It contains full identifiers. Treat it exactly like the source documents: '
           'do not forward it, do not upload it. Re-run without '
           '<code>--previews originals</code> to produce a shareable version.</div>')
-    else:
-        a('<div class="banner"><b>Identifiers are kept out of this page.</b> '
-          'Preview images come from the redacted copies, and every digit in the text '
-          'snippets is masked, so no account, routing, SSN or EIN number appears — '
-          'as an image or as searchable text. It does still contain client names, '
-          'addresses and filenames, so it is internal: no network access, and it '
-          'cannot transmit anything.</div>')
+    # The reassurance banner that used to sit here is gone at the operator's
+    # request: it appeared on every page, said the same thing every time, and
+    # pushed the actual work below the fold. The properties it described still
+    # hold — digits are masked in snippets, the saved file has no network access
+    # — they just no longer need restating on every client.
 
 
-    # Collisions are not a filing decision, so they get their own callout rather
-    # than sitting in the queue. Usually it means two copies of one document.
+    render_checklist_summary(a, results, client)
+
     collided = [p for p in plan if p.get('collision')]
-    if collided:
-        a('<div class="collide"><b>Two documents wanted the same name</b>'
-          '<p class="hint" style="margin:6px 0 8px">They have been numbered so nothing '
-          'is overwritten, and they will file normally. Worth opening both — usually '
-          'it means the same document arrived twice.</p><ul style="margin:0">')
-        for p in collided:
-            a('<li><code>%s</code> &rarr; <b>%s</b></li>' % (_e(p['file']), _e(p['new_name'])))
-        a('</ul></div>')
 
     # ---- the only thing that needs a person -------------------------------
     # One job, at the top, as cards rather than a table. A table asks you to read
@@ -1513,11 +1680,22 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # ---- checklist ---------------------------------------------------------
     a('</div></details>')
 
+
+    if collided:
+        a('<div class="collide" style="margin-top:26px"><b>Two documents wanted the same name</b>'
+          '<p class="hint" style="margin:6px 0 8px">Already handled — they have been numbered '
+          'so nothing is overwritten, and they file normally. Worth opening both, though: '
+          'usually it means the same document arrived twice.</p><ul style="margin:0">')
+        for p in collided:
+            a('<li><code>%s</code> &rarr; <b>%s</b></li>' % (_e(p['file']), _e(p['new_name'])))
+        a('</ul></div>')
+
     a('<details class="panel"><summary>Detail'
       '<span class="n">checklist, missing months, duplicates</span></summary><div class="pbody">')
     a('<h2>Checklist<span class="n">%d items</span></h2>' % len(results))
     a('<table><thead><tr><th>Status</th><th>Section</th><th>Item</th><th>Note</th></tr></thead><tbody>')
-    order = {'missing': 0, 'mismatched': 1, 'satisfied': 2, 'not_applicable': 3}
+    order = {'missing': 0, 'partly satisfied': 1, 'mismatched': 2,
+             'satisfied': 3, 'not_applicable': 4}
     for r in sorted(results, key=lambda x: order.get(x['status'], 3)):
         a('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'
           % (_pill(r['status']), _e(r['item'].get('section')),
@@ -1610,6 +1788,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
         ('satisfied', counts.get('satisfied', 0), 'ok'),
         ('mismatched', counts.get('mismatched', 0), ''),
         ('missing', counts.get('missing', 0), 'warn'),
+        ('partly satisfied', counts.get('partly satisfied', 0), 'warn'),
         ('not applicable', counts.get('not_applicable', 0), ''),
         ('series gaps', len(cross['gaps']), ''),
         ('unexpected', len(unexpected), ''),

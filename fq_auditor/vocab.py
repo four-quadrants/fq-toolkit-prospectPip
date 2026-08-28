@@ -148,9 +148,14 @@ CONCEPTS = {
     'line_of_credit': {'any': ['line of credit']},
     'fee_schedule': {'any': ['fee schedule', 'procedure codes fee', 'fee study']},
     'production_report': {
+        # The last three are Dentrix's names for the same thing. Oyler's request
+        # asks for "Analysis Summary (Provider) Reports", which matched nothing,
+        # so that item could never be satisfied no matter what he sent — and he
+        # had sent nine of them.
         'any': ['production and income report', 'production report',
                 'provider productivity', 'day sheet', 'production by provider',
-                'annual production'],
+                'annual production',
+                'analysis summary', 'practice analysis', 'provider report'],
     },
     # Phrased as "Doctor Days Worked" in a request and "Total Dr Days" on a file.
     'dr_days_worked': {'any': ['doctor days worked', 'days worked', 'doctor days']},

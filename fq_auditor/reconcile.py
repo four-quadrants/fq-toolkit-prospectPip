@@ -172,6 +172,75 @@ def _runs(indices):
 
 # --------------------------------------------------------------------------
 
+# Words that follow "for" but are not a person.
+_NOT_A_NAME = {'the', 'all', 'any', 'both', 'each', 'your', 'their', 'you',
+               'tax', 'taxes', 'year', 'years', 'ytd', 'total', 'practice',
+               'personal', 'business', 'entities', 'entity', 'previous', 'most'}
+
+
+def via_portal_pending(item):
+    """Placeholder hook: portal answers are evaluated later in the loop."""
+    return False
+
+
+def people_named(ask):
+    """First names a request asks about: "for Jon & Kelly & Isla" -> 3 names."""
+    out = []
+    for m in re.finditer(r'\bfor\s+((?:[A-Z][a-z]+)(?:\s*(?:&|and)\s*[A-Z][a-z]+)*)', ask or ''):
+        for name in re.split(r'\s*(?:&|and)\s*', m.group(1)):
+            name = name.strip()
+            if name and name.lower() not in _NOT_A_NAME and name not in out:
+                out.append(name)
+    return out
+
+
+def compound_gap(item, found):
+    """What is still missing from an ask that names TWO things.
+
+    A single checklist line often asks for two deliverables — "all practice and
+    personal debt", "paystubs for Kelly & YTD income for Jon", "W-2/1099s for
+    Jon & Kelly & Isla". One document arriving turned the whole line green, so
+    Oyler read as complete while his team was still chasing his personal debt
+    schedule, and Kelly's missing paystubs vanished behind her husband's income.
+
+    A confident all-clear that stops you asking is the worst thing this tool can
+    produce, so a half-answered line is reported as half-answered.
+
+    Returns a description of the gap, or None when nothing is obviously missing.
+    """
+    ask = item.get('client_ask') or item.get('label') or ''
+    if not found:
+        return None
+
+    # "personal and practice" — needs something from each side of the house.
+    if re.search(r'personal\s*(?:and|&)\s*practice|practice\s*(?:and|&)\s*personal',
+                 ask, re.I):
+        sides = {d.get('owner_side') for d in found if d.get('owner_side')}
+        if sides == {'Practice'}:
+            return 'only the practice side has arrived — the personal one is still missing'
+        if sides == {'Personal'}:
+            return 'only the personal side has arrived — the practice one is still missing'
+        # Nothing here says which side it belongs to. Oyler's single debt
+        # spreadsheet came through with no side at all, so a check that only
+        # looked at KNOWN sides let the exact case that prompted this work sail
+        # through green. Silence is not evidence of coverage: say we cannot
+        # tell, and let the reviewer look. Worded as a prompt rather than an
+        # accusation because one spreadsheet genuinely can hold both.
+        if not sides and len(found) == 1:
+            return ('one document arrived for an ask covering both sides — check it '
+                    'holds the personal debts too, or chase the missing half')
+
+    # "for Jon & Kelly & Isla" — needs one per person named.
+    names = people_named(ask)
+    if len(names) >= 2:
+        got = {str(d.get('person') or '').strip() for d in found}
+        got = {g for g in got if g}
+        missing = [n for n in names if not any(n.lower() in g.lower() for g in got)]
+        if missing and len(missing) < len(names):
+            return 'nothing yet for %s' % ' and '.join(missing)
+    return None
+
+
 def reconcile(docs, checklist):
     by_type = defaultdict(list)
     for d in docs:
@@ -240,6 +309,13 @@ def reconcile(docs, checklist):
             r'\bif applicable\b|\bif any\b|\bif you (?:have|own)\b|'
             r'\bif the \w+ has\b|\bif there (?:is|are)\b|^\s*if\b',
             ask, re.I))
+
+        # A line asking for two things is not done when one arrives.
+        if status == 'satisfied' and not via_portal_pending(item):
+            gap = compound_gap(item, found)
+            if gap:
+                status = 'partly satisfied'
+                note = (note + '; ' if note else '') + gap
 
         needs_yes_no = False
         if status == 'missing' and item.get('confirmed_unavailable'):

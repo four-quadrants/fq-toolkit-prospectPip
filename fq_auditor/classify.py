@@ -429,6 +429,17 @@ RULES = [
                         r'terms and objectives of our engagement',
                         r'scope of services to be provided',
                         r'this letter is to confirm our understanding')),
+    # Dentrix practice-analysis reports. Three different layouts, all production
+    # data, and all previously wrong: the production summary read as a fee
+    # schedule (it lists procedure codes with totals, which is what a fee
+    # schedule looks like from a distance), the provider summary read as
+    # unknown, and the practice analysis read as new_patients. Ahead of those
+    # rules because the report titles are unambiguous where the contents are not.
+    _r('production_report', 'Practice analysis (production)', 'Practice',
+       lambda h, t: has(h, r'practice analysis\s*-\s*production summary',
+                        r'analysis summary\s*\(\s*provider\s*\)',
+                        r'\bpractice analysis\b')),
+
     # A payer-mix export: carriers down one column, patient or plan counts down
     # the next. Before the generic insurance rules, which look for policy
     # language — this is a spreadsheet ABOUT insurers, not a policy.
@@ -461,6 +472,15 @@ RULES = [
     # through as noise on a 663-character read. The surrounding boilerplate
     # survives, and "Tax Statement for Forms ... for Tax Year" is only ever a
     # consolidated 1099.
+    # A filed personal return is delivered as a packet whose cover sheet is Form
+    # 8879, the IRS e-file authorisation. Inside are the 1099s that fed it — so
+    # the 1099 rule below fired first and called a 91-page 1040 a 1099. Form 8879
+    # exists only to authorise the e-filing of a personal return, which makes it
+    # a safe thing to lead on.
+    _r('personal_tax_return', 'Personal tax return (e-file packet)', 'Personal',
+       lambda h, t: has(h, r'form\s*8879')
+                    and has(h, r'e-?file signature authorization', r'1545-0074')),
+
     _r('form_1099', '1099 income statement', 'Personal',
        lambda h, t: has(h, r'\b1099\b')
                     or (has(h, r'tax statement for forms')
@@ -535,6 +555,23 @@ RULES = [
        lambda h, t: has(h, r'fee schedule') or count(t, r'\bD[0-9]{4}\b') >= 8),
     _r('new_patients', 'New patient counts', 'Practice',
        lambda h, t: has(h, r'new patient(?:s)? (?:count|report|by month)', r'\bNew Patients\b')),
+
+    # Clients answer these three by typing a handful of numbers into a Word
+    # document — "Total Patients: 2024- 3164 patients". Both were on the filing
+    # map and in the vocabulary, but nothing ever RECOGNISED them, so they came
+    # out unknown and the checklist reported them missing with the file sitting
+    # in the folder. New patients worked only because that rule already existed.
+    #
+    # After new_patients on purpose: "Total New Patients" must not be read as a
+    # total patient count, which is the same distinction the vocabulary makes.
+    _r('total_patients', 'Total patient counts', 'Practice',
+       lambda h, t: has(h, r'total\s+patients?\b', r'patients?\s+seen\b')
+                    and has(h, r'\d')),
+    _r('dr_days_worked', 'Doctor days worked', 'Practice',
+       lambda h, t: has(h, r'(?:doctor|dr\.?)\s+days\s+worked',
+                        r'total\s+(?:doctor|dr\.?)\s+days',
+                        r'days\s+worked\b')
+                    and has(h, r'\bdays?\b')),
 
     # ---- statements -----------------------------------------------------
     _r('cc_statement', 'Credit card statement', None,

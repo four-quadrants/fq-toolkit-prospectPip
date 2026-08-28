@@ -56,7 +56,12 @@ def find_redactor():
 # the folder browser could walk the whole disk, which is more access than a
 # document tool has any business having — and more than an operator should have
 # to trust it not to use.
-ROOT_FILE = os.path.join(HERE, '.fq_root')
+# Overridable so a second machine — or someone testing — cannot clobber the
+# operator's chosen folder. The file lives beside the code, so anyone running
+# this app against the same checkout writes to the same place; a stale path from
+# another machine then makes every action fail with a message about the folder
+# never having been set.
+ROOT_FILE = os.environ.get('FQ_ROOT_FILE') or os.path.join(HERE, '.fq_root')
 
 
 def get_root():
@@ -65,9 +70,31 @@ def get_root():
             p = fh.read().strip()
         if p and os.path.isdir(p):
             return os.path.realpath(p)
+        if p:
+            # Remembered, but not there now. Usually the share is unmounted, or
+            # the path was written by a different machine. Saying "no working
+            # folder set" for this sends people hunting for a setting they
+            # already made.
+            return None
     except OSError:
         pass
     return None
+
+
+def root_problem():
+    """Why there is no usable root, in words the operator can act on."""
+    try:
+        with open(ROOT_FILE) as fh:
+            p = fh.read().strip()
+    except OSError:
+        p = ''
+    if not p:
+        return "No working folder chosen yet — press Choose folder."
+    if not os.path.isdir(p):
+        return ("The working folder is set to %s, which this Mac cannot see. "
+                "If that is a server share, check it is mounted; otherwise press "
+                "Choose folder to pick it again." % p)
+    return "No working folder set."
 
 
 def choose_folder_dialog(prompt="Choose the folder that holds your client folders"):
@@ -352,9 +379,43 @@ def guess_inputs(folder):
             out['redacted'] = os.path.join(d, sorted(hit)[-1])
             break
 
+    # Fall back to LaunchBay's own name for the project rather than the folder
+    # name. The folder is whatever someone typed — "Oyler, Brian - TEST",
+    # "Spaulding, Kelli due 7:20" — and that ends up in the client's email.
+    project = ''
+    try:
+        import lb_fetch as _lb
+        for base in (folder, os.path.dirname(folder.rstrip('/'))):
+            man = os.path.join(base, _lb.MANIFEST)
+            if os.path.exists(man):
+                project = (_lb.load_json(man, {}) or {}).get('project') or ''
+                break
+    except Exception:
+        pass
+
     if not out['client']:
-        out['client'] = os.path.basename(folder.rstrip('/'))
+        out['client'] = project or os.path.basename(folder.rstrip('/'))
+    if not out['greeting']:
+        out['greeting'] = greeting_from(project)
     return out
+
+
+def greeting_from(project):
+    """"Dr. Brian Oyler" -> "Dr. Oyler". Empty if there is nothing to go on.
+
+    How a client is addressed is the first line they read, so getting it from
+    LaunchBay beats getting it from a folder name — and beats leaving the
+    operator to type it, which is where "Dear Oyler, Brian - TEST" comes from.
+    """
+    name = (project or '').strip()
+    if not name:
+        return ''
+    parts = name.split()
+    title = parts[0] if parts and parts[0].rstrip('.').lower() in ('dr', 'mr', 'mrs', 'ms') else ''
+    last = parts[-1] if parts else ''
+    if not last:
+        return ''
+    return ('%s %s' % (title, last)).strip() if title else last
 
 
 def save_settings(folder, client, greeting, checklist):
@@ -404,25 +465,54 @@ def audit_outputs(folder):
 
 # ---------------------------------------------------------------- the page
 
+def page_html():
+    """The app shell with the firm's mark dropped in.
+
+    Substituted at serve time rather than baked into the template so that a
+    missing or unreadable logo file degrades to a plain wordmark instead of
+    leaving a literal {{LOGO}} on screen.
+    """
+    try:
+        import render_html
+        uri = render_html.logo_data_uri(30)
+    except Exception:
+        uri = None
+    tag = ('<img class="logo" src="%s" alt="Four Quadrants"><div class="rule"></div>'
+           % uri) if uri else ''
+    return PAGE.replace('{{LOGO}}', tag)
+
+
 PAGE = r"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FQ Toolkit</title>
 <style>
+:root{
+  --fq-orange:#F08418; --fq-orange-dk:#CE6E0D; --fq-slate:#607884;
+  --fq-navy:#16324F;   --fq-navy-lt:#22456A;   --fq-baby:#A9CFE5;
+  --fq-baby-pale:#EAF3F9;
+}
 *{box-sizing:border-box}
 body{margin:0;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
      background:#F7F6F3;color:#1B2A41;height:100vh;display:flex;flex-direction:column}
-header{background:#1B2A41;color:#fff;padding:0 20px;display:flex;align-items:center;gap:22px;
-       flex:0 0 54px}
+header{background:linear-gradient(180deg,var(--fq-navy) 0%,var(--fq-navy-lt) 100%);
+       color:#fff;padding:0 20px;display:flex;align-items:center;gap:18px;flex:0 0 58px}
+header img.logo{height:30px;width:auto;display:block;flex-shrink:0}
+header .rule{width:1px;height:26px;background:rgba(169,207,229,.35);flex-shrink:0}
 header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
 nav{display:flex;gap:4px;margin-left:8px}
 nav button{background:transparent;border:0;color:#cbd5e1;font:inherit;font-size:14px;
      padding:8px 15px;border-radius:8px;cursor:pointer}
-nav button:hover{background:#2A3A52;color:#fff}
-nav button.on{background:#E8792B;color:#fff;font-weight:600}
+nav button:hover{background:#2A4C74;color:#fff}
+nav button.on{background:var(--fq-orange);color:#fff;font-weight:600}
 .tag{margin-left:auto;font-size:12px;opacity:.75}
 main{flex:1;overflow:hidden;position:relative}
 .pane{position:absolute;inset:0;overflow:auto;display:none}
 .pane.on{display:block}
+/* The review pane is the one pane with furniture below the frame, so it lays
+   itself out as a column: frame takes the room, bar keeps its place at the
+   bottom instead of scrolling away. */
+#pane-review.on{display:flex;flex-direction:column;overflow:hidden}
+#pane-review iframe{flex:1 1 auto;height:auto;min-height:0}
 iframe{width:100%;height:100%;border:0;background:#fff}
 .wrap{max-width:900px;margin:0 auto;padding:26px 24px 60px}
 h2{font-size:17px;margin:0 0 4px}
@@ -452,14 +542,19 @@ button.ghost{background:#fff;border:1px solid #D8D4CA;font:inherit;font-size:13p
 pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.5px/1.6 ui-monospace,Menlo,monospace;
       white-space:pre-wrap;max-height:320px;overflow:auto;margin:0}
 .step{display:flex;gap:11px;align-items:flex-start;margin:9px 0;font-size:14px}
-.step b{background:#1B2A41;color:#fff;width:21px;height:21px;border-radius:50%;
+.step b{background:var(--fq-slate);color:#fff;width:21px;height:21px;border-radius:50%;
       display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 21px}
-#filebar{display:flex;gap:14px;align-items:center;padding:12px 18px;
-      border-bottom:1px solid #E3E7EC;background:#fff;flex-wrap:wrap}
+/* The filing bar used to sit above the review, which put the irreversible
+   button in the path of someone still reading. It now sits under the review,
+   right-aligned — you reach it by finishing. */
+#filebar{display:flex;gap:14px;align-items:center;justify-content:flex-end;
+      padding:12px 18px;border-top:1px solid #E3E7EC;background:#fff;flex-wrap:wrap}
+#filebar .sub{margin:0;text-align:right;order:-1}
 .hide{display:none}
 </style></head><body>
 
 <header>
+  {{LOGO}}
   <h1>FQ Toolkit</h1>
   <nav>
     <button id="tab-get" class="on">1 &nbsp;Download Files</button>
@@ -511,7 +606,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <div id="lbstatus" class="found">Checking…</div>
       <div class="row" style="margin-top:12px">
         <button class="primary" id="getdocs">Download from LaunchBay</button>
-        <button class="ghost" id="skipget">Skip — go to Audit &amp; File</button>
+        <button class="ghost" id="skipget">Audit</button>
       </div>
       <pre class="log hide" id="lblog" style="margin-top:12px"></pre>
     </div>
@@ -534,11 +629,11 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <div class="row" style="gap:18px">
         <div style="flex:1;min-width:200px">
           <label>Client name</label>
-          <input type="text" id="client" placeholder="Bassett">
+          <input type="text" id="client" placeholder="filled in from LaunchBay">
         </div>
         <div style="flex:1;min-width:200px">
           <label>Email greeting</label>
-          <input type="text" id="greeting" placeholder="Dr. and Mrs. Bassett">
+          <input type="text" id="greeting" placeholder="Dr. Lastname">
         </div>
       </div>
       <div id="found"></div>
@@ -563,12 +658,12 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   </div></div>
 
   <div class="pane" id="pane-review">
+    <iframe id="reviewframe" src="about:blank"></iframe>
     <div id="filebar">
-      <button class="primary" id="filethem">Build File Tree</button>
       <span class="sub" id="filestatus" style="margin:0">Copies every document into
         Personal and Business. Originals are never moved.</span>
+      <button class="primary" id="filethem">Build File Tree</button>
     </div>
-    <iframe id="reviewframe" src="about:blank"></iframe>
   </div>
 </main>
 
@@ -834,7 +929,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         a path, not just the browser, so the limit holds even if the page is
         modified or a URL is typed by hand."""
         if not get_root():
-            self._send(400, '{"error":"no working folder set"}')
+            self._send(400, json.dumps({'error': root_problem()}))
             return False
         if not inside_root(folder):
             self._send(403, '{"error":"that folder is outside the working folder"}')
@@ -846,7 +941,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         q = self._q()
 
         if p == '/':
-            return self._send(200, PAGE, 'text/html; charset=utf-8')
+            return self._send(200, page_html(), 'text/html; charset=utf-8')
 
         if p == '/redactor':
             rp = find_redactor()
@@ -1194,25 +1289,21 @@ SAVE_SHIM = r"""
           return r.json();
         })
         .then(function(){
-          state = 'run';
-          fresh.disabled = false;
-          fresh.textContent = 'Saved \u2014 run the audit again';
+          // Saving used to hand you a second button that jumped to the Audit
+          // tab and re-ran everything. That step is gone: Build File Tree runs
+          // the audit itself, so it already picks these decisions up. Being
+          // sent to another tab to repeat work the next button does anyway is
+          // what made this feel broken.
+          state = 'saved';
+          fresh.disabled = true;
+          fresh.textContent = 'Decisions saved';
+          try{
+            var st = window.parent.document.getElementById('filestatus');
+            if(st) st.textContent = 'Decisions saved. Press Build File Tree to apply them.';
+          }catch(e){}
         })
         .catch(function(e){ fail(String(e && e.message || e)); });
       return;
-    }
-
-    if(state === 'run'){
-      state = 'running';
-      fresh.disabled = true;
-      fresh.textContent = 'Running\u2026';
-      try{
-        window.parent.showTab('audit');
-        window.parent.runAudit();
-      }catch(e){
-        fresh.disabled = false;
-        fresh.textContent = 'Open the Audit tab and press Run';
-      }
     }
   });
 })();

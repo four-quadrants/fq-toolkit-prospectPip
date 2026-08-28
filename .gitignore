@@ -67,6 +67,13 @@ sample_output/
 !*.command
 !FQ Toolkit.png
 
+# 4d. The firm's logo, vendored so the app is not dependent on the Analysis
+# share being mounted. Named in full for the same reason as the icon above: the
+# blanket *.png rule is what keeps clients' scanned statements out of the repo
+# and must stay shut.
+!fq_auditor/assets/
+!fq_auditor/assets/fq_logo.png
+
 # 5. working state, caches, outputs
 .fq_cache/
 .fq_root

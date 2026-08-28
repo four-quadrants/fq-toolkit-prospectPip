@@ -125,6 +125,58 @@ def answered_by_comment(item_text, comments, wants=None):
     return None
 
 
+PASSWORD_HINT = re.compile(r'\bpass\s?word\b|\bpasscode\b|\bpw\b|\bunlock\b', re.I)
+
+
+def write_password_notes(folder, data, quiet=False):
+    """Put any password a client sent where the person opening the file will see it.
+
+    Clients send encrypted returns and then post the password in a portal
+    comment. That comment ends up inside launchbay_tasks.json — a file nobody
+    opening a zip has any reason to read — so the document is effectively
+    unopenable even though the password arrived. This writes it beside the
+    documents instead.
+
+    Written verbatim rather than parsed. Guessing which digits are "the
+    password" out of a sentence is exactly the kind of cleverness that hands
+    someone a wrong string and no way to tell.
+
+    NOTE: this puts the password in clear text next to the file it unlocks, on
+    whatever share the client folder lives on. That is a deliberate trade — it
+    was requested, and an unopenable document helps nobody — but it does mean
+    the encryption stops protecting anything against someone who can already
+    reach the folder.
+    """
+    hits = []
+    for task in data.get('tasks') or []:
+        for c in task.get('comments') or []:
+            text = (c.get('text') or '').strip()
+            if text and PASSWORD_HINT.search(text):
+                hits.append((c.get('who') or 'client', text))
+    if not hits:
+        return None
+
+    intake = os.path.join(folder, 'Original_sourcedocs')
+    target = intake if os.path.isdir(intake) else folder
+    path = os.path.join(target, '_PASSWORDS.txt')
+
+    lines = ["Passwords the client sent through the LaunchBay portal.",
+             "Copied word for word — nothing here has been interpreted.",
+             "",
+             "Written by the FQ toolkit on %s for: %s"
+             % (__import__('time').strftime('%Y-%m-%d'), data.get('project') or '?'),
+             "=" * 68, ""]
+    for who, text in hits:
+        lines.append("%s wrote:" % who)
+        lines.append("    " + text.replace("\n", "\n    "))
+        lines.append("")
+    with open(path, 'w') as fh:
+        fh.write("\n".join(lines))
+    if not quiet:
+        print("Wrote %s (%d password message(s))" % (path, len(hits)))
+    return path
+
+
 def build(tasks_path, quiet=False):
     with open(tasks_path) as fh:
         data = json.load(fh)
@@ -190,6 +242,9 @@ def main():
     with open(out, 'w') as fh:
         json.dump(items, fh, indent=2)
     print("\nWrote %s" % out)
+
+    with open(tasks_path) as fh:
+        write_password_notes(a.folder, json.load(fh))
 
     if a.show:
         print()

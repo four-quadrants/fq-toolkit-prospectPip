@@ -40,7 +40,13 @@ MANIFEST = 'launchbay_manifest.json'
 INTAKE = 'Original_sourcedocs'
 
 # Only these are things the client uploaded. See module docstring.
-CLIENT_UPLOAD_TYPES = {'collection'}
+#
+# 'upload' was added after Oyler: his practice debt schedule was attached to the
+# PROJECT rather than to a request task, and LaunchBay calls that kind 'upload'.
+# Accepting only 'collection' skipped it — the one document the team was actively
+# chasing him for. 'signature' and 'attachment' stay out: those are forms the
+# firm sent OUT, and filing them back as client documents would be wrong.
+CLIENT_UPLOAD_TYPES = {'collection', 'upload'}
 
 
 def load_json(path, default):

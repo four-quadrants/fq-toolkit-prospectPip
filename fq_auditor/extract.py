@@ -7,7 +7,7 @@ layer is rendered with pymupdf and OCR'd with tesseract.
 Results are cached on disk keyed by content hash, so re-running an audit on the
 same folder is near-instant. Runs fully offline.
 """
-import os, io, json, hashlib, multiprocessing
+import os, io, re, json, hashlib, multiprocessing
 
 import pymupdf
 import pytesseract
@@ -77,9 +77,67 @@ def _page_text(page, dpi=OCR_DPI):
     return _ocr_with_rescue(page, dpi), True
 
 
+PASSWORD_FILE = '_PASSWORDS.txt'
+
+
+def passwords_near(path, limit=40):
+    """Passwords the client sent, read from the notes file beside the documents.
+
+    Clients protect their tax returns and post the password in a portal comment;
+    the pull skill writes those comments verbatim into _PASSWORDS.txt. Without
+    this, an encrypted return reads as an empty document and the checklist calls
+    it missing — which is what happened to a 91-page 1040 that had arrived
+    perfectly intact.
+
+    Every whitespace-separated token in that file is tried. Guessing which word
+    IS the password from a sentence like "481920365 should be the password for
+    the returns" is not worth the risk of guessing wrong; trying them all costs
+    microseconds and cannot be fooled by phrasing.
+    """
+    here = os.path.dirname(os.path.abspath(path))
+    for folder in (here, os.path.dirname(here)):
+        note = os.path.join(folder, PASSWORD_FILE)
+        if not os.path.exists(note):
+            continue
+        try:
+            text = open(note, errors='ignore').read()
+        except OSError:
+            continue
+        seen, out = set(), []
+        for tok in re.findall(r'[^\s]{4,40}', text):
+            tok = tok.strip('.,;:"\'()[]')
+            if tok and tok.lower() not in seen:
+                seen.add(tok.lower())
+                out.append(tok)
+        return out[:limit]
+    return []
+
+
+def open_pdf(path):
+    """Open a PDF, unlocking it if the client sent us the password.
+
+    Every route into a PDF must come through here. Four separate places called
+    pymupdf.open directly; adding password handling to only the obvious one left
+    a 91-page return reading as empty through the parallel path the audit
+    actually uses — the same shape of bug as three places each deciding for
+    themselves what counted as a PDF. Returns None when it cannot be unlocked.
+    """
+    doc = pymupdf.open(path)
+    if not doc.needs_pass:
+        return doc
+    for pw in passwords_near(path):
+        if doc.authenticate(pw):
+            return doc
+    doc.close()
+    return None
+
+
 def extract_pdf(path, dpi=OCR_DPI):
     """Return (full_text, page_texts, n_ocr_pages). Reads all pages."""
-    doc = pymupdf.open(path)
+    doc = open_pdf(path)
+    if doc is None:
+        return ("[password protected: no password for this file in %s]"
+                % PASSWORD_FILE), [], 0
     pages, ocr_count = [], 0
     for page in doc:
         t, was_ocr = _page_text(page, dpi)
@@ -155,7 +213,9 @@ SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
 #                    pages that come back implausibly thin.
 #   v3 (2026-08-28): files whose names have no real extension are now read at
 #                    all, so their empty cache entries must not be reused.
-OCR_VERSION = 4
+#   v5 (2026-08-28): password-protected PDFs are now opened, so their
+#                    empty cache entries must not be reused.
+OCR_VERSION = 6
 
 
 def _cache_paths(cache_dir, digest):
@@ -198,7 +258,9 @@ def _extract_one(args):
 def _ocr_page_task(args):
     """OCR a single page. The unit of parallel work is one PAGE, not one file."""
     path, pageno, dpi = args
-    doc = pymupdf.open(path)
+    doc = open_pdf(path)
+    if doc is None:
+        return path, pageno, ''
     try:
         # Same settings and thin-page retry as the serial path — this is the one
         # that actually runs for most documents, so a fix applied only to
@@ -211,7 +273,9 @@ def _ocr_page_task(args):
 def _survey(path):
     """Cheaply work out which pages have a usable text layer and which need OCR.
     Returns (page_texts, [indices needing OCR])."""
-    doc = pymupdf.open(path)
+    doc = open_pdf(path)
+    if doc is None:
+        return [], []
     texts, todo = [], []
     for i, page in enumerate(doc):
         t = page.get_text() or ''
@@ -241,9 +305,23 @@ OWN_OUTPUT_SUFFIXES = (
 )
 
 
+# Files the toolkit writes INTO the documents folder for the operator to read.
+# They are not client documents and must not be audited, classified or filed —
+# _PASSWORDS.txt in particular would otherwise be copied into the tree and
+# reported as an unexpected document.
+OWN_NOTES = {'_passwords.txt'}
+
+
 def is_own_output(name):
     """Is this a file the auditor itself wrote on an earlier run?"""
     low = (name or '').lower()
+    if low in OWN_NOTES:
+        return True
+    # A zip has already been unpacked into this folder, so auditing the archive
+    # as well would report it as an unrecognised document sitting alongside the
+    # sixteen real ones it contains.
+    if low.endswith('.zip'):
+        return True
     return any(low.endswith(s) for s in OWN_OUTPUT_SUFFIXES)
 
 
@@ -307,6 +385,67 @@ def readable(path):
     return sniff_type(path) is not None
 
 
+ZIP_MARK = ' (from zip) '
+
+
+def expand_zips(folder, quiet=True):
+    """Unpack any zip in the folder so its contents can be audited.
+
+    Clients bundle a year of returns into one archive; the auditor could not see
+    inside, so "last two years of completed tax returns" read as missing while
+    sixteen documents sat in the zip.
+
+    Extracted files land in the SAME folder, flat, named
+
+        Client Returns (3) (from zip) 2024_OYLER_1040.pdf
+
+    Flat because everything downstream — reading, filing, previews — works on a
+    flat folder, and a nested tree would need all of it taught to recurse. The
+    marker keeps the origin visible in the filing plan and the rename log, so
+    nobody wonders where a file came from.
+
+    The zip itself is left alone. Re-running is free: anything already extracted
+    is skipped by name.
+    """
+    import zipfile
+    made = []
+    for name in sorted(os.listdir(folder)):
+        if not name.lower().endswith('.zip'):
+            continue
+        stem = os.path.splitext(name)[0]
+        try:
+            zf = zipfile.ZipFile(os.path.join(folder, name))
+        except Exception as e:
+            if not quiet:
+                print("   could not open %s: %s" % (name, e))
+            continue
+        with zf:
+            for info in zf.infolist():
+                if info.is_dir() or info.file_size == 0:
+                    continue
+                inner = os.path.basename(info.filename)
+                if not inner or inner.startswith('.') or inner.startswith('__MACOSX'):
+                    continue
+                out = os.path.join(folder, stem + ZIP_MARK + inner)
+                if os.path.exists(out):
+                    continue
+                try:
+                    with zf.open(info) as src, open(out + '.part', 'wb') as dst:
+                        while True:
+                            chunk = src.read(1 << 20)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+                    os.replace(out + '.part', out)
+                    made.append(os.path.basename(out))
+                except Exception as e:
+                    if not quiet:
+                        print("   could not extract %s: %s" % (inner, e))
+    if made and not quiet:
+        print("  unpacked %d file(s) from zip archives" % len(made))
+    return made
+
+
 def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=True):
     """Extract text for every supported file in a folder (non-recursive).
 
@@ -319,6 +458,7 @@ def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=T
     """
     cache_dir = cache_dir or os.path.join(folder, '.fq_cache')
     os.makedirs(cache_dir, exist_ok=True)
+    expand_zips(folder, quiet=not progress)
     files = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
              if readable(os.path.join(folder, f))]
     workers = workers or max(1, (os.cpu_count() or 2))
@@ -392,7 +532,9 @@ def add_page_index(path, cache_dir, dpi=OCR_DPI):
     txt_p, meta_p = _cache_paths(cache_dir, digest)
     texts, todo = _survey(path)
     for i in todo:
-        doc = pymupdf.open(path)
+        doc = open_pdf(path)
+        if doc is None:
+            return None
         try:
             texts[i] = _ocr_with_rescue(doc[i], dpi)   # same path as everywhere else
         finally:

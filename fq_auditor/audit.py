@@ -657,7 +657,7 @@ def render_email(results, cross, client, greeting=None):
     filename. `guard_email` below enforces that rather than trusting this code.
     """
     wanted = [r for r in results
-              if r['status'] == 'mismatched'
+              if r['status'] in ('mismatched', 'partly satisfied')
               or (r['status'] == 'missing' and not r['item'].get('optional'))]
 
     # a checklist item we're already asking about shouldn't be repeated as a gap
