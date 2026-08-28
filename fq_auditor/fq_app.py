@@ -550,6 +550,15 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 #filebar{display:flex;gap:14px;align-items:center;justify-content:flex-end;
       padding:12px 18px;border-top:1px solid #E3E7EC;background:#fff;flex-wrap:wrap}
 #filebar .sub{margin:0;text-align:right;order:-1}
+/* The Audit button earns its colour. Green means every document LaunchBay
+   lists is already on disk, so there is nothing left to fetch and moving on
+   costs you nothing. It stays neutral while anything is outstanding — and also
+   when the list is stale, because "nothing new" from a list that stopped
+   refreshing looks identical to a client who has sent nothing, and that is
+   exactly the case where a green light would be a lie. */
+#skipget.ready{background:#1E8449;border-color:#1E8449;color:#fff;font-weight:600}
+#skipget.ready:hover{background:#186B3A}
+#skipget .tick{margin-right:6px}
 .hide{display:none}
 </style></head><body>
 
@@ -693,6 +702,18 @@ document.getElementById('skipget').onclick=function(){show('audit');};
 // Reads the manifest the scheduled refresh left in the client folder. There is
 // no LaunchBay login here: every upload carries a direct download link, so the
 // only thing this needs is the list.
+// Everything is here / something is still missing, said in colour as well as
+// words. The coworker running this does not know the pipeline; the point is
+// that "am I allowed to move on yet" should be answerable at a glance.
+function setReady(ok){
+  var b=document.getElementById('skipget');
+  if(!b) return;
+  b.classList.toggle('ready', !!ok);
+  b.innerHTML = ok ? '<span class="tick">\u2713</span>Audit' : 'Audit';
+  b.title = ok ? 'Every document on the list is already downloaded — go ahead.'
+               : 'Some documents may still be missing. You can still audit what is here.';
+}
+
 function lbRefresh(){
   if(!FOLDER) return;
   document.getElementById('lbcard').classList.remove('hide');
@@ -702,7 +723,7 @@ function lbRefresh(){
     .then(function(r){return r.json();})
     .then(function(d){
       var b=document.getElementById('getdocs');
-      if(d.error){ el.textContent=d.error; b.disabled=true; return; }
+      if(d.error){ el.textContent=d.error; b.disabled=true; setReady(false); return; }
       // Always clickable, even with nothing waiting. Greying it out left the
       // operator no way to re-check or to finish a half-done download, and a
       // dead button reads as a broken one. Pressing it when nothing is new
@@ -722,8 +743,9 @@ function lbRefresh(){
       if(d.stale) lines.push('WARNING: that is old. Ask Austin whether the daily '
                              +'refresh is still running before trusting "nothing new".');
       el.textContent=lines.join('\n');
+      setReady(!d.to_fetch && !d.stale);
     })
-    .catch(function(){ el.textContent='Could not read the list.'; });
+    .catch(function(){ el.textContent='Could not read the list.'; setReady(false); });
 }
 document.getElementById('getdocs').onclick=function(){
   var b=document.getElementById('getdocs'); b.disabled=true;
