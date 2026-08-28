@@ -212,6 +212,38 @@ JOB = Job()
 STALE_DAYS = 3
 
 
+def render_first_page(path, max_px=1400):
+    """PNG bytes of page one, or of the image itself. None if not viewable."""
+    import io as _io
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        import extract as _extract
+        kind = _extract.resolve_kind(path)
+    except Exception:
+        kind = ext
+
+    if kind in ('.png', '.jpg', '.jpeg', '.tif', '.tiff'):
+        from PIL import Image
+        im = Image.open(path)
+        im.thumbnail((max_px, max_px))
+        buf = _io.BytesIO()
+        im.convert('RGB').save(buf, 'PNG')
+        return buf.getvalue()
+
+    if kind == '.pdf':
+        import pymupdf
+        doc = pymupdf.open(path)
+        try:
+            if not len(doc):
+                return None
+            page = doc[0]
+            scale = min(max_px / max(page.rect.width, page.rect.height), 3.0)
+            return page.get_pixmap(matrix=pymupdf.Matrix(scale, scale)).tobytes('png')
+        finally:
+            doc.close()
+    return None
+
+
 def lb_status(folder):
     """How fresh is the document list, and how much is waiting?
 
@@ -826,6 +858,93 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
 
+        if p == '/api/previewtext':
+            # For anything with no page to photograph — a spreadsheet, a CSV, a
+            # QuickBooks backup. The text was already extracted during the audit,
+            # so showing it costs nothing and keeps the operator inside the
+            # review instead of launching Numbers.
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            path = (q.get('path') or [''])[0]
+            folder = (q.get('folder') or [''])[0]
+            if not os.path.isfile(path) and folder:
+                name = os.path.basename(path)
+                for cand in (os.path.join(folder, 'Original_sourcedocs', name),
+                             os.path.join(folder, name)):
+                    if os.path.isfile(cand):
+                        path = cand
+                        break
+            if not self._guard(path):
+                return
+            if not os.path.isfile(path):
+                return self._send(404, '{"error":"no such file"}')
+            try:
+                import extract as _extract
+                text = None
+
+                # The cache lives in the CLIENT folder, not beside the documents.
+                # Looking only next to the file found nothing, so every PDF fell
+                # through to the non-PDF reader — which returns '' for a PDF —
+                # and reported "no readable text" for documents full of text.
+                here = os.path.dirname(path)
+                for cache in (os.path.join(here, '.fq_cache'),
+                              os.path.join(os.path.dirname(here), '.fq_cache'),
+                              os.path.join(folder, '.fq_cache') if folder else ''):
+                    if cache and os.path.isdir(cache):
+                        digest = _extract.file_hash(path)
+                        txt_p, _ = _extract._cache_paths(cache, digest)
+                        if os.path.exists(txt_p):
+                            text = open(txt_p, errors='ignore').read()
+                            break
+
+                if not (text or '').strip():
+                    kind = _extract.resolve_kind(path)
+                    if kind == '.pdf':
+                        text = _extract.extract_pdf(path)[0]
+                    else:
+                        text = _extract.extract_other(path, kind)
+            except Exception as e:
+                return self._send(500, json.dumps({'error': str(e)}))
+            text = (text or '').strip()
+            if not text:
+                text = '(no readable text in this file)'
+            return self._send(200, json.dumps({'text': text[:20000]}))
+
+        if p == '/api/preview':
+            # First page of a document, rendered on demand as a PNG.
+            #
+            # Deliberately NOT embedded in the review page: that file gets saved
+            # and passed around, and a page carrying images of a client's bank
+            # statements is a different kind of object from one carrying a list
+            # of filenames. Served live, it is only ever visible to whoever is
+            # running the app on this machine.
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            path = (q.get('path') or [''])[0]
+            folder = (q.get('folder') or [''])[0]
+            if not os.path.isfile(path) and folder:
+                name = os.path.basename(path)
+                for cand in (os.path.join(folder, 'Original_sourcedocs', name),
+                             os.path.join(folder, name)):
+                    if os.path.isfile(cand):
+                        path = cand
+                        break
+            if not self._guard(path):
+                return
+            if not os.path.isfile(path):
+                return self._send(404, '{"error":"no such file"}')
+            try:
+                png = render_first_page(path)
+            except Exception as e:
+                return self._send(500, json.dumps({'error': str(e)}))
+            if png is None:
+                return self._send(415, '{"error":"nothing to show for this file type"}')
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(png)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(png)
+            return
+
         if p == '/api/lbstatus':
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             folder = (q.get('folder') or [''])[0]
@@ -886,6 +1005,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # exactly that and nothing else; every other origin stays refused.
             html = html.replace("connect-src 'none'", "connect-src 'self'", 1)
 
+            # Same reasoning for images. The saved file allows "img-src data:"
+            # only — right for a page sitting in a client folder, since it means
+            # the page cannot fetch anything. But the document preview is served
+            # from this app rather than embedded, precisely SO it is not baked
+            # into the file, and that rule blocked it: the browser refused the
+            # image and the page fell back to showing text. curl has no CSP,
+            # which is why every test passed while the real thing failed.
+            html = html.replace("img-src data:", "img-src data: 'self'", 1)
+
             head, sep, tail = html.rpartition('</body>')
             html = (head + SAVE_SHIM % json.dumps(folder) + sep + tail) if sep \
                 else (html + SAVE_SHIM % json.dumps(folder))
@@ -928,6 +1056,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
             JOB.start(folder, client, greeting, g['checklist'], g['decisions'],
                       g['redacted'], file_them=(p == '/api/file'))
             return self._send(200, '{"started":true}')
+
+        if p == '/api/openfile':
+            # Opens a client document in Preview/Excel/whatever, for the review
+            # page. Guarded by the same root check as every other path endpoint,
+            # so it can only ever open something inside the chosen folder.
+            path = data.get('path') or ''
+            folder = data.get('folder') or ''
+
+            # The review page stores absolute paths, recorded on whichever
+            # machine ran the audit. Open it from a different Mac — or after the
+            # client folder has moved — and every one of them is wrong. So the
+            # stored path is a hint, not the answer: if it is not there, look for
+            # the same filename inside the folder this page belongs to.
+            if not os.path.isfile(path) and folder:
+                name = os.path.basename(path)
+                for cand in (os.path.join(folder, 'Original_sourcedocs', name),
+                             os.path.join(folder, name),
+                             os.path.join(os.path.dirname(folder.rstrip('/')), name)):
+                    if os.path.isfile(cand):
+                        path = cand
+                        break
+
+            if not self._guard(path):
+                return
+            if not os.path.isfile(path):
+                return self._send(400, json.dumps(
+                    {'error': 'Could not find that file. It may have been moved '
+                              'or renamed since this page was written — re-run '
+                              'the audit.'}))
+            try:
+                subprocess.Popen(['open', path])
+            except Exception as e:
+                return self._send(500, json.dumps({'error': str(e)}))
+            return self._send(200, '{"opened":true}')
 
         if p == '/api/lbfetch':
             folder = data.get('folder') or ''
@@ -977,6 +1139,10 @@ SAVE_SHIM = r"""
 <script>
 (function(){
   var FOLDER = %s;
+  // Published so the Open buttons can tell the server which client folder
+  // this page belongs to, and it can find a file whose recorded absolute
+  // path came from another machine.
+  window.__FQ_FOLDER__ = FOLDER;
   var btn = document.getElementById('dlDec');
   if(!btn) return;
 
@@ -1063,14 +1229,31 @@ class Server(socketserver.ThreadingTCPServer):
 def main():
     # 127.0.0.1 only: the server is not reachable from anywhere but this Mac.
     port = PORT
+    hopped = False
     for attempt in range(20):
         try:
             httpd = Server(('127.0.0.1', port), Handler)
             break
         except OSError:
             port += 1
+            hopped = True
     else:
         print("Couldn't find a free port."); return 1
+
+    # Hopping ports quietly is a trap. An older copy of the app keeps answering
+    # on the usual address, so the browser goes on talking to yesterday's code
+    # while this window insists it restarted — every fix looks like it failed.
+    # Cost us most of an afternoon, so it says so now.
+    if hopped:
+        print("\n" + "!" * 70)
+        print("  Another copy of FQ Toolkit is ALREADY RUNNING on port %d." % PORT)
+        print("  This one had to move to port %d." % port)
+        print("")
+        print("  Your browser will keep using the OLD copy unless you either")
+        print("  use the address below, or stop the old one first:")
+        print("")
+        print("      pkill -f fq_app.py     then start this again")
+        print("!" * 70)
 
     url = 'http://127.0.0.1:%d/' % port
     print("\n  FQ Toolkit is running.")

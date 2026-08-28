@@ -29,8 +29,15 @@ import os, re, json, html, datetime
 
 # ---------------------------------------------------------------- filing plan
 
+# Everything the auditor files sits under one folder, so the client folder keeps
+# its own shape: Original_sourcedocs, _Audit and the analysis work stay visible
+# beside Documents rather than being crowded out by two big trees.
+#
+#   2026/Spaulding, Kelly/Documents/Personal/...
+#   2026/Spaulding, Kelly/Documents/Business/...
+DOCS_DIR = 'Documents'
 SIDE_DIR = {'Personal': 'Personal', 'Practice': 'Business'}
-REVIEW_DIR = '_Needs Review'
+REVIEW_DIR = os.path.join(DOCS_DIR, '_Needs Review')
 
 TYPE_MAP = {
     'bank_statement':        (None,       'Banking'),
@@ -109,7 +116,7 @@ TYPE_MAP = {
 
 # Offered in the destination dropdown. Account-level folders are appended live
 # from whatever the classifier actually read off the statements.
-BASE_DESTS = [
+BASE_DESTS = [DOCS_DIR + '/' + d for d in [
     'Personal/Assets', 'Personal/Banking', 'Personal/Credit Reports', 'Personal/Debt',
     'Personal/Insurance', 'Personal/Investments', 'Personal/Pay Info:W2s', 'Personal/Taxes',
     'Personal/Misc',
@@ -117,7 +124,7 @@ BASE_DESTS = [
     'Business/Financials', 'Business/Insurance', 'Business/Payroll Summaries',
     'Business/Production', 'Business/Production/Monthly Production', 'Business/Taxes',
     'Business/Logistics', 'Business/Misc',
-]
+]]
 
 # Misc was in the original filing-tree sketch in RESUME_HERE.md for both sides.
 # It is offered in the dropdown even though the folders do not exist on disk yet —
@@ -226,7 +233,7 @@ def plan_destination(doc):
     if conf == 'low':
         return (REVIEW_DIR, 'classified with low confidence', True)
 
-    parts = [SIDE_DIR.get(use_side, use_side), sub]
+    parts = [DOCS_DIR, SIDE_DIR.get(use_side, use_side), sub]
     if dtype in ('bank_statement', 'cc_statement', 'brokerage_statement'):
         tail, issuer = doc.get('account_tail'), doc.get('issuer')
         if tail:
@@ -879,6 +886,28 @@ details.prev .snip{font:11.5px/1.5 ui-monospace,Menlo,monospace;color:#5A6270;
 .qcard{display:flex;gap:16px;background:#fff;border:1px solid #E4E0D8;border-radius:12px;
   padding:18px 20px;margin-bottom:14px}
 .qcard.done{border-color:#BEDCC6;background:#FBFEFC}
+#plantable{table-layout:fixed;width:100%}
+#plantable td{word-break:break-word;vertical-align:top}
+#plantable td:nth-child(5){font-size:12px;color:#6b7280}
+button.openfile{margin-top:8px;font-size:13px;padding:5px 11px;border-radius:7px;
+      border:1px solid #C9C3B6;background:#fff;color:#1B2A41;cursor:pointer}
+button.openfile:hover{background:#F4F1EA;color:#1B2A41}
+/* Preview overlay. The image is fetched live from the app and never
+   written into this file, so the page stays safe to save or send. */
+#pvwrap{position:fixed;inset:0;background:rgba(20,24,31,.82);z-index:9999;
+      display:none;align-items:center;justify-content:center;padding:28px}
+#pvwrap.on{display:flex}
+#pvbox{background:#fff;border-radius:12px;max-width:94vw;max-height:94vh;
+      display:flex;flex-direction:column;overflow:hidden}
+#pvhead{display:flex;gap:14px;align-items:center;padding:11px 16px;
+      border-bottom:1px solid #E4E0D8;font-size:14px;font-weight:600;color:#1B2A41}
+#pvhead button{margin-left:auto;border:1px solid #C9C3B6;background:#fff;
+      color:#1B2A41;border-radius:7px;padding:4px 12px;cursor:pointer}
+#pvimg{max-width:90vw;max-height:78vh;object-fit:contain;display:block}
+#pvmsg{padding:26px;color:#6b7280;font-size:14px}
+#pvtext{margin:0;padding:18px 20px;max-width:88vw;max-height:78vh;overflow:auto;
+      font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2b3442;
+      white-space:pre-wrap;word-break:break-word}
 .qnum{flex:0 0 30px;height:30px;border-radius:50%;background:#1B2A41;color:#fff;
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
 .qcard.done .qnum{background:#1E8449}
@@ -1022,6 +1051,55 @@ function wire(){
   });
 
   // Bulk: apply one destination to every undecided row sharing a reason.
+  // Open the original in whatever app the Mac uses for it. Served by the local
+  // app, so this only ever reaches files inside the chosen root.
+  // Preview in place. Opening the document in another app took you out of the
+  // review entirely, which is the wrong shape for "glance at this, then keep
+  // going down the list".
+  var pv = document.createElement('div');
+  pv.id = 'pvwrap';
+  pv.innerHTML = '<div id="pvbox"><div id="pvhead"><span id="pvname"></span>'
+               + '<button id="pvclose">Close</button></div>'
+               + '<div id="pvbody"><div id="pvmsg">Loading…</div></div></div>';
+  document.body.appendChild(pv);
+
+  function hide(){ pv.classList.remove('on');
+                   document.getElementById('pvbody').innerHTML='<div id="pvmsg">Loading…</div>'; }
+  pv.addEventListener('click', function(e){ if(e.target===pv) hide(); });
+  document.getElementById('pvclose').addEventListener('click', hide);
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') hide(); });
+
+  document.querySelectorAll('button.openfile').forEach(function(b){
+    b.addEventListener('click', function(){
+      current = b.dataset.path;
+      document.getElementById('pvname').textContent = b.dataset.name || '';
+      pv.classList.add('on');
+      var body = document.getElementById('pvbody');
+      var img = new Image();
+      img.id = 'pvimg';
+      img.onload  = function(){ body.innerHTML=''; body.appendChild(img); };
+      // A spreadsheet or CSV has no page to photograph. Rather than pushing the
+      // reviewer into Numbers — which loses their place in the list — show the
+      // text the auditor already read out of it. That text is also exactly what
+      // the classifier judged the document on, so it explains the verdict.
+      img.onerror = function(){
+        fetch('/api/previewtext?path=' + encodeURIComponent(b.dataset.path)
+              + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            var pre = document.createElement('pre');
+            pre.id = 'pvtext';
+            pre.textContent = d.text || d.error || 'Nothing to show.';
+            body.innerHTML=''; body.appendChild(pre);
+          })
+          .catch(function(){ body.innerHTML='<div id="pvmsg">Nothing to show for this file.</div>'; });
+      };
+      img.src = '/api/preview?path=' + encodeURIComponent(b.dataset.path)
+              + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||'')
+              + '&t=' + Date.now();
+    });
+  });
+
   document.querySelectorAll('button.bulk').forEach(function(b){
     b.addEventListener('click', function(){
       var reason = b.dataset.reason;
@@ -1364,6 +1442,15 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
             a('<div class="qname">%s</div>' % _e(p['file']))
             a('<div class="qmeta">%s</div>' % _e(' · '.join(str(b) for b in bits) or 'not recognised'))
             a('<div class="qwhy">%s</div>' % _e(p['why']))
+            # Open the real file. A thumbnail is only embedded when a REDACTED
+            # copy exists, so that this page can be shared without carrying a
+            # client's statements inside it. That left a scanned image with no
+            # preview at all — and "decide where this goes" with nothing to look
+            # at is not a decision anyone can make. Opening the original in
+            # Preview costs one click and puts nothing in the file.
+            if p.get('path'):
+                a('<button class="openfile" data-path="%s">Open this file</button>'
+                  % _e(p['path']))
             if thumb or snip:
                 a('<details class="prev"><summary>See the document</summary>')
                 if thumb:
@@ -1401,9 +1488,16 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
             why = '%s<br><span style="color:#8A5218">rename: %s</span>' % (_e(why), _e(p.get('rename_why')))
         else:
             why = _e(why)
+        # Every row can be opened. Previously only a document flagged for a
+        # decision could be looked at, which is backwards: the ones filed
+        # automatically are exactly the ones you want to spot-check.
+        namecell = _e(p['file'])
+        if p.get('path'):
+            namecell += ('<br><button class="openfile" data-path="%s" data-name="%s">'
+                         'Preview</button>' % (_e(p['path']), _e(p['file'])))
         a('<tr class="%s"><td>%s</td><td>%s</td><td>%s</td>'
           '<td><code class="destnow">%s</code></td><td>%s</td></tr>'
-          % (cls, _e(p['file']), newname, _e((p['doc_type'] or '').replace('_', ' ')),
+          % (cls, namecell, newname, _e((p['doc_type'] or '').replace('_', ' ')),
              _e(p['dest']), why))
     a('</tbody></table>')
 

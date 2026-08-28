@@ -568,6 +568,16 @@ RULES = [
        lambda h, t: has(h, r'\bHSA\b', r'health savings')
                     and has(h, r'participant|account id|statement|contributions|custodian')),
 
+    # A screenshot of the insurer's customer portal, which is how clients often
+    # send this rather than the policy document. Kelly's says "Face Amount",
+    # "Base $63,010.00", "Individual Term" and "Annuity Rider" — and never once
+    # says "life insurance", so every rule below missed it and it landed on the
+    # reviewer's desk as an unknown. "Face amount" is life-insurance vocabulary
+    # and almost nothing else uses it.
+    _r('life_insurance', 'Life insurance (portal summary)', 'Personal',
+       lambda h, t: has(h, r'face amount')
+                    and has(h, r'\bpremium\b', r'annuity rider', r'\bterm\b',
+                            r'\bpolicy\b', r'\bbenefits?\b')),
     _r('life_insurance', 'Life insurance policy', 'Personal',
        lambda h, t: (has(h, r'life insurance', r'term life', r'whole life', r'\bAD&D\b',
                          r'dependent life', r'spouse life', r'basic life',
