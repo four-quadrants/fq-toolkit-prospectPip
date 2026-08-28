@@ -953,6 +953,20 @@ def main():
 
     if not os.path.isdir(a.folder):
         sys.exit(f"Not a folder: {a.folder}")
+    # Point at the client folder and we look inside it for the documents.
+    #
+    # The documents live in Original_sourcedocs; the client folder is what a
+    # person naturally picks, and it is also what the filing tree gets built in.
+    # Reading a folder is non-recursive, so choosing the client folder used to
+    # produce "0 of 0 already cached" followed by a confident "5 satisfied · 17
+    # missing" — a completely empty run that looked like a real answer. Silently
+    # wrong is the worst outcome available here.
+    if not a.folder.rstrip('/').lower().endswith('original_sourcedocs'):
+        inner = os.path.join(a.folder, 'Original_sourcedocs')
+        if os.path.isdir(inner):
+            print("Documents are in Original_sourcedocs — reading those.")
+            a.folder = inner
+
     outdir = a.outdir or a.folder
     os.makedirs(outdir, exist_ok=True)
 

@@ -89,9 +89,13 @@ def extract_pdf(path, dpi=OCR_DPI):
     return "\n\n".join(pages), pages, ocr_count
 
 
-def extract_other(path):
-    """Best-effort text for the non-PDF files clients send (docx, xlsx, txt)."""
-    ext = os.path.splitext(path)[1].lower()
+def extract_other(path, ext=None):
+    """Best-effort text for the non-PDF files clients send.
+
+    `ext` may be supplied by the caller when the filename has none and the
+    type was determined from the file's contents instead.
+    """
+    ext = (ext or os.path.splitext(path)[1]).lower()
     try:
         if ext in ('.txt', '.md', '.csv'):
             return open(path, errors='ignore').read()
@@ -112,6 +116,11 @@ def extract_other(path):
                 for row in ws.iter_rows(values_only=True):
                     parts.append(" | ".join('' if v is None else str(v) for v in row))
             return "\n".join(parts)
+        if ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff'):
+            # A photographed or scanned statement. Same OCR the PDF pages get.
+            import pytesseract
+            from PIL import Image
+            return pytesseract.image_to_string(Image.open(path), config=OCR_CFG_DEFAULT)
         if ext in ('.qbb', '.qbw', '.qbm'):
             # A QuickBooks backup is a proprietary binary with no extractable
             # text. It is listed as supported anyway so that it reaches the
@@ -135,7 +144,7 @@ def extract_other(path):
 
 
 SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
-             '.qbb', '.qbw', '.qbm')
+             '.qbb', '.qbw', '.qbm', '.png', '.jpg', '.jpeg', '.tif', '.tiff')
 
 
 # Bump whenever the OCR settings change. The cache is keyed by file CONTENTS, so
@@ -144,7 +153,9 @@ SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
 # rather than deleted, so a bump is reversible.
 #   v2 (2026-08-21): explicit user_defined_dpi, plus a PSM 6 rescue pass for
 #                    pages that come back implausibly thin.
-OCR_VERSION = 2
+#   v3 (2026-08-28): files whose names have no real extension are now read at
+#                    all, so their empty cache entries must not be reused.
+OCR_VERSION = 4
 
 
 def _cache_paths(cache_dir, digest):
@@ -163,11 +174,16 @@ def _extract_one(args):
         meta.update(file=name, path=path, sha256=digest, cached=True)
         return meta, open(txt_p, errors='ignore').read()
 
-    if path.lower().endswith('.pdf'):
+    # Trust the extension only when it is one we know. Client filenames are full
+    # of dots — "1.1.26 - 3.31.26 Huntington Savings" splits to an 'extension' of
+    # '.26 huntington savings', which is not empty, so an `ext or sniff()` test
+    # never sniffed and read eight real bank statements as nothing at all.
+    kind = resolve_kind(path)
+    if kind == '.pdf':
         text, pages, ocr_count = extract_pdf(path, dpi)
         meta = dict(n_pages=len(pages), n_ocr_pages=ocr_count)
     else:
-        text = extract_other(path)
+        text = extract_other(path, kind)
         meta = dict(n_pages=1, n_ocr_pages=0)
 
     os.makedirs(cache_dir, exist_ok=True)
@@ -231,6 +247,66 @@ def is_own_output(name):
     return any(low.endswith(s) for s in OWN_OUTPUT_SUFFIXES)
 
 
+# What the file actually IS, read from its first few bytes.
+#
+# LaunchBay stores plenty of uploads with no extension at all — Kelly Spaulding
+# sent eight Huntington bank statements, an HSA statement and a 401k statement,
+# every one of them named without a suffix. Selecting files by extension skipped
+# all of them, and because the auditor only counts what it read, it then reported
+# "0 unexpected" while eleven real documents sat unopened. Silence like that is
+# worse than an error: the client email that follows asks for nothing.
+_MAGIC = [
+    (b'%PDF', '.pdf'),
+    (b'PK\x03\x04', '.xlsx'),      # any OOXML: xlsx/docx are both zips
+    (b'\x89PNG\r\n\x1a\n', '.png'),
+    (b'\xff\xd8\xff', '.jpg'),
+    (b'II*\x00', '.tif'),
+    (b'MM\x00*', '.tif'),
+    (b'\xd0\xcf\x11\xe0', '.doc'),  # legacy Office
+]
+
+
+def sniff_type(path):
+    """Extension this file deserves, judged by content. None if unreadable."""
+    try:
+        with open(path, 'rb') as fh:
+            head = fh.read(8)
+    except OSError:
+        return None
+    for magic, ext in _MAGIC:
+        if head.startswith(magic):
+            return ext
+    return None
+
+
+def resolve_kind(path):
+    """The extension this file should be treated as.
+
+    Every route into extraction has to ask this the SAME way. Three separate
+    places tested `path.endswith('.pdf')` on their own, so a PDF uploaded with
+    no extension was read correctly by one of them and as an empty string by
+    the other two — which is how eight bank statements came out blank.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext in SUPPORTED:
+        return ext
+    return sniff_type(path) or ext
+
+
+def readable(path):
+    """Should the auditor try to read this file?
+
+    Extension first because it is cheap and usually right; content sniffing for
+    the rest, so a bank statement saved without a suffix is still read.
+    """
+    name = os.path.basename(path)
+    if name.startswith('.') or is_own_output(name):
+        return False
+    if name.lower().endswith(SUPPORTED):
+        return True
+    return sniff_type(path) is not None
+
+
 def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=True):
     """Extract text for every supported file in a folder (non-recursive).
 
@@ -244,8 +320,7 @@ def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=T
     cache_dir = cache_dir or os.path.join(folder, '.fq_cache')
     os.makedirs(cache_dir, exist_ok=True)
     files = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
-             if f.lower().endswith(SUPPORTED) and not f.startswith('.')
-             and not is_own_output(f)]
+             if readable(os.path.join(folder, f))]
     workers = workers or max(1, (os.cpu_count() or 2))
 
     out, pending, tasks = [], {}, []
@@ -261,8 +336,9 @@ def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=T
             out.append(meta)
             continue
 
-        if not path.lower().endswith('.pdf'):
-            text = extract_other(path)
+        kind = resolve_kind(path)
+        if kind != '.pdf':
+            text = extract_other(path, kind)
             with open(txt_p, 'w') as fh:
                 fh.write(text)
             with open(meta_p, 'w') as fh:
@@ -310,7 +386,7 @@ def add_page_index(path, cache_dir, dpi=OCR_DPI):
     Only called for files that actually have PII findings, so nobody pays to
     re-read a whole folder just to learn page numbers.
     """
-    if not path.lower().endswith('.pdf'):
+    if resolve_kind(path) != '.pdf':
         return None
     digest = file_hash(path)
     txt_p, meta_p = _cache_paths(cache_dir, digest)

@@ -267,23 +267,44 @@ def guess_inputs(folder):
                 out[m.group(1).lower()] = m.group(2)
 
     if not out['checklist'] or not os.path.exists(out['checklist']):
-        for d in (folder, parent):
-            try:
-                hit = [f for f in os.listdir(d)
-                       if f.lower().endswith('.pdf') and 'checklist' in f.lower()]
-            except OSError:
-                hit = []
-            if hit:
-                out['checklist'] = os.path.join(d, hit[0])
-                break
+        # The reviewed JSON first, found the same way the audit finds it — by
+        # walking up from the documents folder. This page used to look only for a
+        # PDF named "checklist", so a client whose checklist came from LaunchBay
+        # was told "No checklist found — the standard one will be used" while the
+        # audit went on to use the right one. The reassurance and the warning were
+        # both wrong, which is worse than either.
+        try:
+            from audit import find_reviewed_checklist
+            found = find_reviewed_checklist(folder)
+        except Exception:
+            found = None
+        if found:
+            out['checklist'] = found
+        else:
+            for d in (folder, parent):
+                try:
+                    hit = [f for f in os.listdir(d)
+                           if f.lower().endswith('.pdf') and 'checklist' in f.lower()]
+                except OSError:
+                    hit = []
+                if hit:
+                    out['checklist'] = os.path.join(d, hit[0])
+                    break
 
     # _Audit FIRST. That is where the app writes when you press Save decisions, so
     # it is the newest and the one you meant. A stale decisions.json left in the
-    # folder root or in Downloads from an earlier manual export would otherwise
-    # win and silently ignore what you just chose.
+    # folder root from an earlier manual export would otherwise win and silently
+    # ignore what you just chose.
+    #
+    # ~/Downloads was on this list and had to come off. Decisions are filing
+    # instructions for SPECIFIC documents; a file left in Downloads belongs to
+    # whichever client was worked on last. On the first server run it quietly
+    # applied seven decisions from another client — the log said "carried your
+    # decisions from /Users/.../Downloads/decisions.json" and nothing about that
+    # made it obvious they were someone else's. Only this client's folder counts.
     for c in (os.path.join(folder, '_Audit', 'decisions.json'),
               os.path.join(folder, 'decisions.json'),
-              os.path.expanduser('~/Downloads/decisions.json')):
+              os.path.join(os.path.dirname(folder.rstrip('/')), '_Audit', 'decisions.json')):
         if os.path.exists(c):
             out['decisions'] = c
             break
@@ -401,13 +422,15 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 .step{display:flex;gap:11px;align-items:flex-start;margin:9px 0;font-size:14px}
 .step b{background:#1B2A41;color:#fff;width:21px;height:21px;border-radius:50%;
       display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 21px}
+#filebar{display:flex;gap:14px;align-items:center;padding:12px 18px;
+      border-bottom:1px solid #E3E7EC;background:#fff;flex-wrap:wrap}
 .hide{display:none}
 </style></head><body>
 
 <header>
   <h1>FQ Toolkit</h1>
   <nav>
-    <button id="tab-get" class="on">1 &nbsp;Get documents</button>
+    <button id="tab-get" class="on">1 &nbsp;Download Files</button>
     <button id="tab-audit">2 &nbsp;Audit &amp; File</button>
     <button id="tab-review">3 &nbsp;Review</button>
     <button id="tab-redact">4 &nbsp;Redact</button>
@@ -421,7 +444,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   </div>
 
   <div class="pane on" id="pane-get"><div class="wrap">
-    <h2>Get documents</h2>
+    <h2>Download Files</h2>
     <p class="sub">Downloads whatever the client has uploaded that isn't here yet.
        This does not sign in to LaunchBay — it works from the list Austin's daily
        refresh leaves in the client's folder.</p>
@@ -455,7 +478,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <label>Documents from the client</label>
       <div id="lbstatus" class="found">Checking…</div>
       <div class="row" style="margin-top:12px">
-        <button class="primary" id="getdocs">Get documents</button>
+        <button class="primary" id="getdocs">Download from LaunchBay</button>
         <button class="ghost" id="skipget">Skip — go to Audit &amp; File</button>
       </div>
       <pre class="log hide" id="lblog" style="margin-top:12px"></pre>
@@ -497,18 +520,10 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <label>Progress</label>
       <pre class="log" id="log"></pre>
       <div id="done" class="hide" style="margin-top:14px">
-        <div class="step"><b>1</b><span>Open the <b>Review</b> tab and work down the list of
-          documents that need a filing decision. Each has a preview.</span></div>
-        <div class="step"><b>2</b><span>Choose a destination for each one, then press
-          <b>Save decisions</b> at the top of that page.</span></div>
-        <div class="step"><b>3</b><span>Come back here and run the audit again — your choices
-          are picked up automatically.</span></div>
-        <div class="step"><b>4</b><span>When the plan above reads correctly, file them.
-          Documents are <b>copied</b> into the Personal and Business folders — nothing is
-          moved and the originals stay exactly as the client sent them.</span></div>
-        <div class="row" style="margin-top:12px">
+        <p class="sub" style="margin:0 0 10px">Audit finished. Open the <b>Review</b> tab to
+          look at anything it was unsure about, and to build the file tree.</p>
+        <div class="row">
           <button class="primary" id="goreview">Open the review</button>
-          <button class="primary" id="filethem">Build File Tree</button>
           <button class="ghost" id="openfolder">Show the files in Finder</button>
         </div>
       </div>
@@ -516,6 +531,11 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   </div></div>
 
   <div class="pane" id="pane-review">
+    <div id="filebar">
+      <button class="primary" id="filethem">Build File Tree</button>
+      <span class="sub" id="filestatus" style="margin:0">Copies every document into
+        Personal and Business. Originals are never moved.</span>
+    </div>
     <iframe id="reviewframe" src="about:blank"></iframe>
   </div>
 </main>
@@ -556,7 +576,11 @@ function lbRefresh(){
     .then(function(d){
       var b=document.getElementById('getdocs');
       if(d.error){ el.textContent=d.error; b.disabled=true; return; }
-      b.disabled = !d.to_fetch;
+      // Always clickable, even with nothing waiting. Greying it out left the
+      // operator no way to re-check or to finish a half-done download, and a
+      // dead button reads as a broken one. Pressing it when nothing is new
+      // costs a second and prints 'nothing new', which is a useful answer.
+      b.disabled = false;
       var lines=[];
       // Name the client from the manifest, not from the folder name. Folders get
       // renamed and mistyped; this is what LaunchBay actually calls the project,
@@ -661,7 +685,8 @@ document.getElementById('pick').onclick=function(){
     }
     note(d.n_docs+' documents in '+FOLDER.split('/').pop(), true);
     if(d.checklist) note('Checklist found: '+d.checklist.split('/').pop(), true);
-    else note('No checklist found — the standard one will be used', false);
+    else note('NO CHECKLIST for this client — the audit would grade them against '
+              + "another client's list. Ask Austin to pull them from LaunchBay first.", false);
     if(d.decisions) note('Your saved decisions were found and will be applied', true);
     if(d.redacted) note('Redacted copies found, previews will use them', true);
     window.scrollTo(0, document.body.scrollHeight);
@@ -683,18 +708,44 @@ document.getElementById('run').onclick=runAudit;
 
 // Filing re-runs the whole audit with --file-them, so the copies are made from a
 // plan built seconds ago rather than one that predates the operator's decisions.
+// Lives on the Review tab, where you have just looked at what it plans to do.
+// It reports into its own status line rather than the audit log, because that
+// log is on another tab — hiding the only feedback behind a tab switch made the
+// button look broken.
 function fileThem(){
+  if(!FOLDER){ alert('Choose a client folder on the Get documents tab first.'); return; }
   if(!confirm('Copy these documents into their folders?\n\n'
             + 'Copies only — the originals are not moved or changed.')) return;
   var b=document.getElementById('filethem'); b.disabled=true;
-  document.getElementById('run').disabled=true;
-  document.getElementById('done').classList.add('hide');
-  document.getElementById('log').textContent='';
+  var st=document.getElementById('filestatus');
+  st.textContent='Filing… this re-reads the documents, so it takes a minute.';
   since=0;
   fetch('/api/file',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({folder:FOLDER, client:document.getElementById('client').value,
                          greeting:document.getElementById('greeting').value})})
-    .then(function(){ poll=setInterval(tick,700); });
+    .then(function(){ poll=setInterval(fileTick,700); })
+    .catch(function(e){ st.textContent='Could not start filing: '+e; b.disabled=false; });
+}
+
+function fileTick(){
+  fetch('/api/log?since=0').then(function(r){return r.json();}).then(function(d){
+    var st=document.getElementById('filestatus');
+    // Pull the lines that say what happened out of the run's output, so the
+    // answer is on screen without sending anyone to another tab to read a log.
+    var said=[];
+    d.lines.forEach(function(l){
+      if(/document\(s\) filed|skipped|refused|satisfied ·/.test(l)) said.push(l.trim());
+    });
+    if(said.length) st.textContent=said.join('   ·   ');
+    if(!d.running){
+      clearInterval(poll);
+      document.getElementById('filethem').disabled=false;
+      if(!said.length) st.textContent='Finished, but it reported nothing — check the '
+                                    + 'Audit & File tab for the full output.';
+      var f=document.getElementById('reviewframe');
+      f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now();
+    }
+  });
 }
 document.getElementById('filethem').onclick=fileThem;
 window.runAudit=runAudit; window.showTab=show;   // the review frame calls these
@@ -710,7 +761,6 @@ function tick(){
     if(!d.running){
       clearInterval(poll);
       document.getElementById('run').disabled=false;
-      document.getElementById('filethem').disabled=false;
       document.getElementById('done').classList.remove('hide');
       var f=document.getElementById('reviewframe'); f.src='about:blank';
     }

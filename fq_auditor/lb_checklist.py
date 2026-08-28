@@ -76,7 +76,7 @@ NOISE = {'total', 'your', 'please', 'provide', 'report', 'reports', 'statement',
          'all', 'and', 'for', 'the', 'any'}
 
 
-def answered_by_comment(item_text, comments):
+def answered_by_comment(item_text, comments, wants=None):
     """Did the client answer this item in a portal message?
 
     Checked for EVERY item, not a chosen few — a client might type their
@@ -103,8 +103,25 @@ def answered_by_comment(item_text, comments):
         if not re.search(r'\d', text):
             continue
         hay = vocab._words(vocab.normalise(text))
-        if sum(1 for w in set(words) if vocab.has_word(hay, w)) >= need:
-            return c
+        if sum(1 for w in set(words) if vocab.has_word(hay, w)) < need:
+            continue
+
+        # Word overlap alone is not enough. It credited Kelly's "NEW Patients:
+        # 241..." comment against BOTH "Total New Patients" and "Total Patients",
+        # and credited a comment about insurance mix against her paystubs — so
+        # documents she had never sent were reported as received.
+        #
+        # Documents are matched on CONCEPTS, which already know a total patient
+        # count is not a new patient count. Comments were matched on a bag of
+        # words that knew nothing of the sort. Hold both to the same standard:
+        # the comment must actually be ABOUT one of the things the item asked
+        # for. A comment whose subject cannot be identified is rejected, because
+        # the cost of wrongly marking an item satisfied — the client is never
+        # asked again — is far higher than the cost of asking twice.
+        if wants:
+            if not (set(wants) & set(vocab.concepts_in(text))):
+                continue
+        return c
     return None
 
 
@@ -133,7 +150,7 @@ def build(tasks_path, quiet=False):
             item['stage'] = stage
             item['team_marked_done'] = bool(st.get('done'))
 
-            hit = answered_by_comment(text, comments)
+            hit = answered_by_comment(text, comments, item.get('satisfied_by'))
             if hit:
                 # Recorded as an ADDITIONAL route, never as a substitute. Documents
                 # are still matched first: Spaulding both uploaded her doctor-days
