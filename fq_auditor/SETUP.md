@@ -55,22 +55,41 @@ live under `Brogan/Prospects/2026`.
 
 ---
 
-## Step 3 — Check it worked
+## Step 3 — Install the toolkit
 
-Double-click **`Check This Mac.command`** in the main folder.
+Austin will send you a zip called something like `FQ Toolkit a1b2c3d.zip`.
+
+1. Double-click it to unzip. You get a folder called **FQ Toolkit**.
+2. Open that folder.
+3. **Right-click** `Install FQ Toolkit.command` and choose **Open**, then click
+   **Open** again in the box that appears.
+
+   Right-click rather than double-click: macOS blocks anything that arrived
+   from somewhere else until you confirm it once. You do this once per file.
+
+It copies everything to `FQ_Toolkit` on your Desktop and opens that folder.
+
+**Updating later** is the same thing again — Austin sends a newer zip, you
+unzip and run the installer. It keeps the working folder you had chosen, so you
+do not have to set it up again. If you are ever unsure which version you are
+running, open `VERSION.txt` and read it to him.
+
+---
+
+## Step 4 — Check it worked
+
+Double-click **`Check This Mac.command`** in the Desktop folder it just made.
 
 It prints a line per item and tells you plainly what, if anything, is wrong —
 with the exact command that fixes it. Anything marked `STOP` has to be sorted
 before the toolkit will run; anything marked `note` is worth knowing but is not
 blocking.
 
-If macOS refuses to open it because it came from somewhere else: right-click
-the file, choose **Open**, then **Open** again in the box. You only do this
-once per file.
+Same right-click-then-Open the first time, for the same reason.
 
 ---
 
-## Step 4 — Start it
+## Step 5 — Start it
 
 Double-click **`Start FQ Toolkit.command`**.
 

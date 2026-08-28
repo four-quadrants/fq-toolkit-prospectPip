@@ -450,7 +450,7 @@ def _clean(s):
 def proposed_name(doc, person=None):
     """Name from what the CONTENT says, following the firm's convention.
 
-    Statements:  "Sara Chk (BancFirst) x4108 2026-01.pdf"
+    Statements:  "Nadia Chk (BancFirst) x4108 2026-01.pdf"
     Everything:  "Daniel W-2 2024.pdf"  /  "Payroll summary 2026-02.pdf"
 
     Returns None when there is not enough to beat the existing name — a rename
