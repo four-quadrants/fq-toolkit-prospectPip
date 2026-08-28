@@ -264,3 +264,90 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# --------------------------------------------------------------------------
+# the portal conversation
+# --------------------------------------------------------------------------
+# Comments are not only the client answering. Chad wrote "the only things we're
+# missing are the Personal Debt Schedule" on Oyler a week before the auditor
+# reached the same conclusion by reading documents, and Kelly wrote "I don't
+# get paystubs" against an item the auditor still reports as missing. Both are
+# knowledge the team already had and the tool was throwing away.
+#
+# Shown, never acted on. These are surfaced next to the item so a person can
+# read them and decide; nothing here marks anything satisfied. That line matters
+# because the matching is good, not perfect — see MAX_CONCEPTS below.
+MAX_CONCEPTS = 3
+
+
+def _is_client(who, project):
+    """Is this comment from the client rather than from us?
+
+    Worked out from the project name — "Oyler, Brian" tells us Brian Oyler is
+    the client and everyone else on the thread is ours. Better than a hardcoded
+    staff list, which would silently mislabel the next person who joins.
+    """
+    who = (who or '').lower()
+    parts = [p.strip().lower() for p in re.split(r'[,\-–]', project or '') if p.strip()]
+    return any(p and p in who for p in parts) or any(
+        w and w in who for p in parts for w in p.split() if len(w) > 2)
+
+
+def all_comments(data):
+    """Every comment on the project, newest last, tagged with who said it."""
+    out = []
+    project = data.get('project') or ''
+    for task in data.get('tasks') or []:
+        for c in task.get('comments') or []:
+            text = (c.get('text') or '').strip()
+            if not text:
+                continue
+            out.append({'who': c.get('who') or 'someone',
+                        'text': text,
+                        'stage': task.get('stage') or '',
+                        'from_client': _is_client(c.get('who'), project)})
+    return out
+
+
+def discussion_for(item, comments):
+    """Comments that look like they are about this checklist item.
+
+    Two filters, both learned from the real threads:
+
+    1. The comment has to touch one of the concepts the item asks for.
+    2. It must not touch more than MAX_CONCEPTS of them. A long chatty message
+       — one client's paragraph about an $844 interest payment mentioned debt,
+       balance, credit, profit and production — matches half the checklist and
+       tells you nothing about any of it. A comment about everything is about
+       nothing.
+
+    Plus the item has to be named: at least one distinctive word from the ask
+    has to appear, so "thanks, will do" never attaches to anything.
+    """
+    want = set(item.get('satisfied_by') or [])
+    if not want:
+        return []
+    words = [w for w in re.findall(r'[a-z]{4,}', (item.get('label') or '').lower())
+             if w not in NOISE]
+    hits = []
+    for c in comments:
+        cons = set(vocab.concepts_in(c['text']))
+        if len(cons) > MAX_CONCEPTS or not (want & cons):
+            continue
+        hay = vocab._words(vocab.normalise(c['text']))
+        if words and not any(vocab.has_word(hay, w) for w in words):
+            continue
+        hits.append(c)
+    return hits
+
+
+def attach_discussion(items, data):
+    """Hang the relevant comments off each item, in place."""
+    comments = all_comments(data)
+    for it in items:
+        found = discussion_for(it, comments)
+        if found:
+            it['discussion'] = [{'who': c['who'], 'text': c['text'][:400],
+                                 'from_client': c['from_client']} for c in found[:4]]
+    return comments

@@ -1089,6 +1089,14 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
 .ckpick label{font-size:11px;color:#6C7480;text-transform:uppercase;letter-spacing:.5px}
+.cksaid{font-size:11.5px;line-height:1.45;color:#37506B;background:#fff;
+  border-left:3px solid var(--fq-baby);border-radius:0;padding:5px 9px;margin-top:5px}
+.cksaid b{color:var(--fq-navy)}
+.saidrow{display:flex;gap:10px;padding:9px 0;border-top:1px solid #F0EDE7}
+.saidrow:first-of-type{border-top:0}
+.saidwho{flex:0 0 130px;font-weight:600;font-size:12.5px;color:var(--fq-navy)}
+.saidwho span{display:block;font-weight:400;font-size:11px;color:#8A94A0}
+.saidtext{flex:1;min-width:0;font-size:13px;white-space:pre-wrap;word-break:break-word}
 .ckhuman{font-size:11px;background:var(--fq-navy);color:#fff;border-radius:10px;
   padding:1px 8px;margin-left:6px;vertical-align:1px}
 
@@ -1636,6 +1644,14 @@ def render_checklist_summary(a, results, client, verdicts=None):
         a('<div class="cklab">%s</div>' % lab)
         if r.get('note') and r['status'] != 'satisfied':
             a('<div class="cknote">%s</div>' % _e(r['note']))
+        # What was said about this in the portal. Context, not a verdict —
+        # nothing here changes the item's status, it just stops the reviewer
+        # having to remember a conversation from three weeks ago.
+        for d in (r['item'].get('discussion') or [])[:3]:
+            a('<div class="cksaid"><b>%s%s</b> %s</div>'
+              % (_e(d.get('who') or 'someone'),
+                 '' if d.get('from_client') else ' (us)',
+                 _e((d.get('text') or '')[:200])))
         # Cap the chips. One tax-return item on a real client matched fifteen
         # documents, and printing them all buried every other item on the page.
         docs = r.get('docs') or []
@@ -1691,7 +1707,7 @@ def _tip(names, cap=7):
 
 
 def build_html(res, client, checklist_source, path, decisions=None, cache_dir=None,
-               redacted_dir=None, previews='redacted'):
+               redacted_dir=None, previews='redacted', comments=None):
     docs, results = res['docs'], res['results']
     cross, leaks = res['cross'], res['leaks']
     unexpected = res.get('unexpected', [])
@@ -1924,6 +1940,20 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
         for p in collided:
             a('<li><code>%s</code> &rarr; <b>%s</b></li>' % (_e(p['file']), _e(p['new_name'])))
         a('</ul></div>')
+
+    if comments:
+        a('<details class="panel"><summary>What was said in the portal'
+          '<span class="n">%d message(s)</span></summary><div class="pbody">' % len(comments))
+        a('<p class="hint">The whole thread, oldest first. Worth a look before '
+          'chasing anything — half of what looks missing has usually been '
+          'discussed already.</p>')
+        for c in comments:
+            a('<div class="saidrow"><div class="saidwho">%s<span>%s</span></div>'
+              '<div class="saidtext">%s</div></div>'
+              % (_e(c.get('who') or 'someone'),
+                 'client' if c.get('from_client') else 'our team',
+                 _e(c.get('text') or '')))
+        a('</div></details>')
 
     a('<details class="panel"><summary>Detail'
       '<span class="n">checklist, missing months, duplicates</span></summary><div class="pbody">')

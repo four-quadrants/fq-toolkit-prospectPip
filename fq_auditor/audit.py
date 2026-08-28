@@ -64,6 +64,49 @@ def find_reviewed_checklist(folder, levels=3):
     return None
 
 
+def find_tasks_file(folder, levels=3):
+    """launchbay_tasks.json, wherever it sits above the documents folder.
+
+    Same walk as the reviewed checklist, for the same reason: the caller may
+    hand us the documents folder, the client folder, or the _Audit folder.
+    """
+    here = os.path.abspath(folder)
+    for _ in range(levels + 1):
+        cand = os.path.join(here, 'launchbay_tasks.json')
+        if os.path.exists(cand):
+            return cand
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return None
+
+
+def load_discussion(folder, items, quiet=False):
+    """Attach the portal conversation to the checklist, if we have it.
+
+    Optional by design: a client with no LaunchBay export still audits
+    normally, just without the extra context.
+    """
+    path = find_tasks_file(folder)
+    if not path:
+        return []
+    try:
+        import lb_checklist
+        with open(path) as fh:
+            data = json.load(fh)
+        comments = lb_checklist.attach_discussion(items, data)
+        if not quiet and comments:
+            n = sum(1 for i in items if i.get('discussion'))
+            print(f"  read {len(comments)} portal comment(s); "
+                  f"{n} checklist item(s) have something said about them")
+        return comments
+    except Exception as e:
+        if not quiet:
+            print(f"  (could not read the portal comments: {e})")
+        return []
+
+
 def load_checklist(checklist_path, folder, force_fallback=False):
     """Prefer a reviewed JSON, then a parsed PDF, then the hardcoded fallback.
 
@@ -973,6 +1016,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
 
     checklist, source = load_checklist(a.checklist, outdir, a.fallback_checklist)
+    portal_comments = load_discussion(outdir, checklist)
     if 'BUILT-IN FALLBACK' in source and not a.fallback_checklist:
         # Grading one client against another's checklist produces a confident,
         # completely wrong answer. Say so where it cannot be missed.
@@ -1051,7 +1095,8 @@ def main():
             print("  !! --previews originals: the review page will embed unredacted pages")
         build_html(res, a.client, source, html_path,
                    decisions=decisions, cache_dir=a.cache,
-                   redacted_dir=red_dir, previews=a.previews)
+                   redacted_dir=red_dir, previews=a.previews,
+                   comments=portal_comments)
         plan = build_plan(res['docs'], decisions, res.get('mislabeled') or ())
 
         # The ledger is what makes a second batch cheap to handle: it remembers

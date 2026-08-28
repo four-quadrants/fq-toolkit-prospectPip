@@ -1,116 +1,177 @@
-# Setting up the Intake Auditor on a Mac
+# Setting up the FQ Toolkit on a Mac
 
-You do this once. After that, running an audit is a double-click.
+You do this once. After that, everything is a double-click.
 
-Nothing here needs an Apple Developer account, and nothing you install sends
-client documents anywhere — the auditor reads the files on your own Mac and
-writes its report to the same folder.
+Nothing you install sends client documents anywhere. The toolkit reads files on
+your own Mac and on the Analysis share, and writes its results back to the
+client's folder. There is no cloud account and no login.
 
 ---
 
-## Step 1 — Install the two tools it needs (about 10 minutes, once)
+## Step 1 — Install the two things it needs
 
-Open **Terminal**. It's in Applications → Utilities, or press `Cmd + Space`,
-type "terminal", and press return. A window with a text prompt appears.
+About ten minutes, once, and you never need Terminal again afterwards.
 
-**a) Install Homebrew**, which is how Macs install this kind of tool. Copy the
-line below, paste it into Terminal, and press return:
+Open **Terminal**: press `Cmd + Space`, type "terminal", press return. A window
+with a text prompt appears.
+
+**a) Install Homebrew**, which is how Macs install tools like this. Copy the
+line below, paste it, press return:
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-It will ask for your Mac password. Typing shows nothing at all — no dots, no
-asterisks. That's normal; type it and press return. This step takes several
-minutes and prints a lot of text. If it finishes by telling you to run two extra
-commands ("Next steps"), copy and run those too.
+It asks for your Mac password. **Typing shows nothing at all** — no dots, no
+asterisks. That is normal. Type it and press return.
 
-**b) Install the text reader and Python.** Paste this and press return:
+This takes several minutes and prints a lot of text. If it finishes by telling
+you to run two more commands under a heading like "Next steps", copy and run
+those too — Homebrew does not work until you do.
 
-```
-brew install tesseract python
-```
-
-**c) Check it worked.** Paste this:
+**b) Install Python and the text reader.** Paste this, press return:
 
 ```
-tesseract --version && python3 --version
+brew install python tesseract
 ```
-
-You should see a version number for each. If you do, you're done with setup —
-you never need Terminal again.
 
 ---
 
-## Step 2 — Run an audit
+## Step 2 — Connect to the Analysis share
 
-1. Open the `fq_auditor` folder.
-2. Double-click **`Run Intake Auditor.command`**.
+The client folders live on the office server, not on your Mac.
 
-   The very first time, macOS may refuse to open it because it came from
-   somewhere else. If so: right-click the file, choose **Open**, then click
-   **Open** in the box that appears. You only do this once.
+In Finder: **Go → Connect to Server** (`Cmd + K`), enter:
 
-3. It asks you three things:
-   - **The client's folder.** Don't type the path — drag the folder from Finder
-     into the Terminal window and press return.
-   - **The client's checklist PDF.** Drag it in the same way. (Press return with
-     nothing typed to use the standard built-in checklist.)
-   - **The client's name** and how the email should greet them.
+```
+smb://192.168.62.170/Analysis
+```
 
-4. It shows you **how it read the checklist** and waits. Read that list. Each
-   item shows what document satisfies it and what it will ask the client for.
-   Anything it's unsure about is marked `>> CHECK`.
+Click Connect and sign in with your office account. Tick "Remember this
+password in my keychain" so you are not asked every morning.
 
-   If something is wrong, open `checklist_reviewed.json` in the client's folder,
-   fix it, and save. It's an ordinary text file. Then type `y` and press return.
-
-5. It reads every page and writes two files into the client's folder:
-
-   - **`<Client> - Internal Audit.docx`** — for us. Opens in Pages. Satisfied,
-     mismatched, missing and unexpected items, statement months that never
-     arrived, files whose contents don't match their name, duplicates, and a
-     residual-PII section.
-   - **`<Client> - Client Email.txt`** — a draft "here's what we still need"
-     email, ready to paste in and adjust.
-
-Both open automatically when it finishes.
+You should end up with an **Analysis** drive in the Finder sidebar. Prospects
+live under `Brogan/Prospects/2026`.
 
 ---
 
-## Two things to know
+## Step 3 — Check it worked
+
+Double-click **`Check This Mac.command`** in the main folder.
+
+It prints a line per item and tells you plainly what, if anything, is wrong —
+with the exact command that fixes it. Anything marked `STOP` has to be sorted
+before the toolkit will run; anything marked `note` is worth knowing but is not
+blocking.
+
+If macOS refuses to open it because it came from somewhere else: right-click
+the file, choose **Open**, then **Open** again in the box. You only do this
+once per file.
+
+---
+
+## Step 4 — Start it
+
+Double-click **`Start FQ Toolkit.command`**.
+
+A Terminal window opens and your browser opens the toolkit. **Leave the Terminal
+window alone while you work** — closing it shuts the toolkit down.
+
+You will see four tabs.
+
+### 1 · Download Files
+
+Pick the client's folder, then press **Download from LaunchBay** to pull
+everything they have uploaded.
+
+The **Audit** button beside it turns **green with a tick** when every document
+LaunchBay lists is already on your Mac — that is your signal there is nothing
+left to fetch. It stays grey if documents are missing, and also if the list
+itself is out of date, because "nothing new" from a stale list looks exactly
+like a client who has sent nothing.
+
+### 2 · Audit & File
+
+Press **Run the audit**. The first run on a client takes a few minutes because
+it reads every page of every document. After that it is quick — it remembers
+what it read, keyed to the contents of each file, so renaming or moving
+documents does not cause a re-read, and a client sending five more documents
+means only those five are read.
+
+### 3 · Review
+
+This is where the work happens.
+
+- **The checklist is at the top.** Outstanding items first. Each one names the
+  documents that answered it, and clicking a document name opens it — PDFs as
+  a page image, spreadsheets as a proper grid with column letters and row
+  numbers.
+- **"Your call" on every item.** The auditor reads text; it cannot open a debt
+  schedule and judge whether the rows under the practice loans are the doctor's
+  car. When you know better, say so: satisfied, practice side only, personal
+  side only, not applicable, or still missing, plus a note. Your answer carries
+  into the chase list and the client email, not just the screen.
+- **Decide these** lists documents it could not place confidently.
+- **Save decisions** as often as you like. It confirms, then re-arms as soon as
+  you change anything else.
+- **Build File Tree**, at the bottom, files everything. It re-runs the audit
+  itself, so it picks up whatever you just saved.
+
+Hovering any number under "Where this client stands" tells you what it is
+counting.
+
+### 4 · Redact
+
+For producing shareable copies with identifiers removed. Not needed for
+ordinary intake.
+
+---
+
+## Things worth knowing
+
+**Originals are never moved.** Filing makes copies. If something is filed
+wrongly, the original is still sitting in `Original_sourcedocs` exactly where
+the client put it.
 
 **The internal report is internal.** Its residual-PII section lists real account
-and ID numbers found in supposedly-redacted files. Never forward that report to
-a client. The draft email is generated separately and is checked automatically
-for account numbers, ID numbers and internal filenames — if any turn up, the tool
-refuses to write the email at all rather than hand you something unsafe.
+and ID numbers found in the documents. Never forward it to a client. The draft
+email is generated separately and checked automatically — if an account number
+or ID would leak into it, the tool refuses to write the email at all rather than
+hand you something unsafe.
 
-**First run is slow, later runs are fast.** The auditor reads every page of every
-document, which for a few hundred pages takes a few minutes. It remembers what it
-read, keyed to the file's contents, so running it again is nearly instant. When a
-client sends five more documents, only those five are read. Renaming or moving a
-file doesn't cause a re-read.
+**Passwords the client sent are saved beside the documents**, in
+`Original_sourcedocs/_PASSWORDS.txt`, copied word for word. This means an
+encrypted return can actually be opened — and it also means that file is as
+sensitive as the documents themselves.
 
 ---
 
 ## If something goes wrong
 
-**"command not found: brew"** — Homebrew didn't finish installing, or the "Next
-steps" commands it printed weren't run. Run step 1a again and read the last few
-lines it prints.
+Run **`Check This Mac.command`** first. It rules out the boring causes in about
+two seconds.
 
-**The window flashes and disappears** — right-click `Run Intake Auditor.command`
-and choose Open instead of double-clicking.
+**"command not found: brew"** — Homebrew did not finish installing, or the
+"Next steps" commands it printed were not run. Redo step 1a and read the last
+few lines it prints.
 
-**"That isn't a folder"** — the folder was typed rather than dragged in. Drag it
-from Finder; the path fills in correctly by itself.
+**The window flashes and disappears** — right-click the `.command` file and
+choose Open rather than double-clicking.
 
-**A document comes out as "Unrecognised"** — it's usually a scan too faint to
-read, or a document type the classifier hasn't been taught yet. It'll be listed
-in the unexpected section of the report so it isn't silently ignored. Send the
-file along and it can be added.
+**The browser says the site can't be reached** — an older copy of the toolkit is
+probably still running and holding the port. Close every Terminal window running
+it and start again, or run `pkill -f fq_app.py`.
 
-**The report says the client email wasn't written** — that's the safety check
-doing its job. The message lists what would have leaked. Tell Austin; it's a bug
-in the email wording, not something you did wrong.
+**A preview says the app is older than the page** — exactly what it says. Quit
+the toolkit and start it again.
+
+**A preview says a PDF is encrypted** — the client sent it locked and did not
+send us a password that opens it. Ask them for it.
+
+**The client folders are missing** — the Analysis share has unmounted. Redo
+step 2.
+
+**A document comes out unrecognised** — usually a scan too faint to read, or a
+document type the classifier has not been taught yet. It appears in the
+unexpected section rather than being silently ignored. Send it to Austin and it
+can be added.

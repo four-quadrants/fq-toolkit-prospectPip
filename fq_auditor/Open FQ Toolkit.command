@@ -36,14 +36,15 @@ if ! command -v tesseract >/dev/null 2>&1; then
 fi
 
 python3 - <<'PYCHECK' >/dev/null 2>&1
-import pymupdf, pytesseract, docx, PIL
+import pymupdf, pytesseract, docx, PIL, openpyxl
 PYCHECK
 if [ $? -ne 0 ]; then
     echo "Installing the Python pieces (one time only, about a minute)…"
     python3 -m pip install --quiet --break-system-packages \
         pymupdf pytesseract pillow python-docx openpyxl >/dev/null 2>&1 \
       || python3 -m pip install --quiet --user pymupdf pytesseract pillow python-docx openpyxl \
-      || { echo "${R}Couldn't install the Python packages.${P} Open SETUP.md."
+      || { echo "${R}Couldn't install the Python packages.${P}"
+           echo "Run 'Check This Mac.command' — it will say exactly what is wrong."
            read -r -p "Press return to close. "; exit 1; }
     echo "Done."
 fi
