@@ -1357,7 +1357,7 @@ function wire(){
         // falling through to the flat text if the workbook cannot be read —
         // a .xls saved by an old version, say, which openpyxl will not open.
         var low = (b.dataset.path||'').toLowerCase();
-        if(/\.(xlsx|xlsm|xltx|csv|tsv)$/.test(low)){
+        if(/\.(xlsx|xlsm|xltx|csv|tsv|docx)$/.test(low)){
           fetch('/api/sheet?path=' + encodeURIComponent(b.dataset.path)
                 + '&folder=' + encodeURIComponent(window.__FQ_FOLDER__||''))
             .then(function(r){

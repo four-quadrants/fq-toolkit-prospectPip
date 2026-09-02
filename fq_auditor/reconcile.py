@@ -245,6 +245,18 @@ def reconcile(docs, checklist):
     by_type = defaultdict(list)
     for d in docs:
         by_type[d['doc_type']].append(d)
+        # A document can honestly answer more than one ask. One client sent a
+        # single table headed Dr Days / Total Patients / New Patients and said
+        # so in the portal; indexing only its primary label meant it answered
+        # one item while the other two were chased from someone who had
+        # already sent them.
+        #
+        # The document's identity does not change — everywhere else still reads
+        # doc_type, so filing and naming are unaffected. This only widens what
+        # it can be found under.
+        for extra in d.get('also_types') or ():
+            if extra != d['doc_type']:
+                by_type[extra].append(d)
 
     facts = corroborate(docs)
     matched, results = set(), []

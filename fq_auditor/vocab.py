@@ -147,6 +147,13 @@ CONCEPTS = {
     },
     'line_of_credit': {'any': ['line of credit']},
     'fee_schedule': {'any': ['fee schedule', 'procedure codes fee', 'fee study']},
+    # An estimate of what a building is worth. Usually a one-line spreadsheet
+    # or a typed number, never a formal document — the request itself says "a
+    # guesstimate is fine".
+    'building_value': {'any': ['building value', 'value of the building',
+                               'commercial building', 'building appraisal',
+                               'appraised value', 'property value',
+                               'real estate value', 'estimated value of']},
     'production_report': {
         # The last three are Dentrix's names for the same thing. Oyler's request
         # asks for "Analysis Summary (Provider) Reports", which matched nothing,
@@ -262,6 +269,14 @@ def satisfied_by(text):
             # classifier calls it a day sheet — correctly. Accepting it here
             # stops the item reading missing while the answer sits in the folder.
             out += ['dr_days_worked', 'day_sheet', 'production_report']
+        elif c == 'production_report':
+            # "Day Sheet & Provider Productivity Reports" is one ask, and both
+            # named documents answer it. Rebol sent three of each, correctly
+            # classified, and the item still read missing because the concept
+            # only accepted a report literally called a production report.
+            # These are the same information under the names the practice
+            # management systems actually print.
+            out += ['production_report', 'day_sheet', 'provider_productivity']
         else:
             out.append(c)
     seen, uniq = set(), []

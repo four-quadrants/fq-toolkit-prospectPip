@@ -413,6 +413,11 @@ def _r(doc_type, label, side, test):
     return Rule(doc_type, label, side, test)
 
 
+# Labels that can honestly describe the same document. Kept deliberately small:
+# every pair here is one a practice actually prints together.
+COUNTS_FAMILY = {'day_sheet', 'provider_productivity', 'production_report',
+                 'total_patients', 'new_patients', 'dr_days_worked'}
+
 RULES = [
     # credit reports first: they are long and quote every financial term there is
     # Tested on the FULL text, not the head. Daniel's 51-page report says "credit
@@ -555,6 +560,15 @@ RULES = [
        lambda h, t: has(h, r'fee schedule') or count(t, r'\bD[0-9]{4}\b') >= 8),
     _r('new_patients', 'New patient counts', 'Practice',
        lambda h, t: has(h, r'new patient(?:s)? (?:count|report|by month)', r'\bNew Patients\b')),
+    # What a building is thought to be worth. The request asks for a
+    # guesstimate, so this is nearly always a two-line spreadsheet or a typed
+    # figure rather than an appraisal — Rebol's read "Aproximate Value of
+    # Office Buildings" (the client's spelling) over two addresses. Matching
+    # "approx" strictly would have missed it, which is the whole reason this
+    # reads content loosely and requires a value word plus a building word.
+    _r('building_value', 'Building value estimate', 'Practice',
+       lambda h, t: (has(h, r'value') and has(h, r'building|propert|real estate'))
+                    and not has(h, r'balance sheet|profit\s*(?:and|&)\s*loss')),
 
     # Clients answer these three by typing a handful of numbers into a Word
     # document — "Total Patients: 2024- 3164 patients". Both were on the filing
@@ -785,7 +799,8 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
 
     doc = dict(doc_type='unknown', label='Unrecognised document', owner_side=None,
                year=None, month=None, period=None, granularity=None,
-               issuer=None, account_tail=None, confidence='low', notes=[])
+               issuer=None, account_tail=None, confidence='low', notes=[],
+               also_types=[])
 
     # The one place the extension is allowed to decide. Everything else in this
     # module reads content on purpose, because filenames lie — but a QuickBooks
@@ -798,15 +813,42 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
                    owner_side='Practice', confidence='high',
                    notes=['identified by file type — a QuickBooks backup holds no readable text'])
 
+    # First match wins the document's identity, but it is not always the only
+    # true thing about it. Rebol's client put doctor days, total patients and
+    # new patients in one table and said so in the portal — "I combined Dr.
+    # Days, Patients, and New Patients into one word doc". The classifier
+    # picked one label, so that document answered one checklist item and the
+    # other two were chased from a client who had already sent them.
+    #
+    # So a document may carry extra labels — but ONLY within a declared family.
+    # The first version of this recorded every rule that matched, on the theory
+    # that a secondary label held to the same test as the primary was equally
+    # safe. That was wrong, and measurably so: the rules are ordered and later
+    # ones are written assuming earlier ones already claimed the document, so
+    # collecting them all made a 1040 "also a brokerage statement" and a balance
+    # sheet "also a line of credit". On Rebol it marked the investment
+    # statements satisfied by a tax return — an item the client genuinely had
+    # not answered, which would then never have been chased.
+    #
+    # Only these travel together, because they are genuinely one report in
+    # practice: a day sheet or productivity report is where patient counts and
+    # doctor days come from, and practices routinely put all of them on one
+    # page. Everything else stays single-label.
     for rule in (() if is_qb_backup else RULES):
         try:
             hit = rule.test(h, t)
         except Exception:
             hit = False
-        if hit:
+        if not hit:
+            continue
+        if doc['doc_type'] == 'unknown':
             doc.update(doc_type=rule.doc_type, label=rule.label, owner_side=rule.side,
                        confidence='high')
-            break
+        elif (rule.doc_type != doc['doc_type']
+              and rule.doc_type not in doc['also_types']
+              and doc['doc_type'] in COUNTS_FAMILY
+              and rule.doc_type in COUNTS_FAMILY):
+            doc['also_types'].append(rule.doc_type)
 
     if doc['doc_type'] == 'unknown' and looks_like_client_note(t, household):
         doc.update(doc_type='client_note', label='Client note', owner_side='Personal',

@@ -313,6 +313,40 @@ def read_sheets(path, kind=None):
     kind = (kind or os.path.splitext(path)[1]).lower()
     out = []
 
+    if kind == '.docx':
+        # Word documents that are really tables. Clients answer "total patients,
+        # new patients, doctor days" with a single Word table far more often
+        # than with a spreadsheet, and flattening it to text produced a wall of
+        # pipes nobody could read. Paragraphs outside the tables are kept as
+        # single-cell rows so a note above the numbers is not lost.
+        import docx as _docx
+        d = _docx.Document(path)
+        lead = [pp.text.strip() for pp in d.paragraphs if pp.text.strip()]
+        for i, tb in enumerate(d.tables):
+            rows = []
+            for row in tb.rows[:SHEET_MAX_ROWS]:
+                rows.append([c.text.replace('\xa0', ' ').strip()
+                             for c in row.cells][:SHEET_MAX_COLS])
+            while rows and not any(c for c in rows[0]):
+                rows.pop(0)
+            while rows and not any(c for c in rows[-1]):
+                rows.pop()
+            if not rows:
+                continue
+            width = max(len(r) for r in rows)
+            rows = [r + [''] * (width - len(r)) for r in rows]
+            keep = [j for j in range(width) if any(r[j] for r in rows)]
+            rows = [[r[j] for j in keep] for r in rows]
+            out.append({'name': ('Table %d' % (i + 1)) if len(d.tables) > 1 else 'Table',
+                        'rows': rows,
+                        'cols': [_col_letter(j) for j in range(len(keep))],
+                        'header': _header_row(rows), 'truncated': False})
+        if lead and not out:
+            out.append({'name': os.path.basename(path),
+                        'rows': [[l] for l in lead], 'cols': ['A'],
+                        'header': None, 'truncated': False})
+        return out
+
     if kind in ('.csv', '.tsv', '.txt'):
         import csv as _csv
         delim = '\t' if kind == '.tsv' else ','
@@ -936,6 +970,18 @@ function browse(path){
     if(!d.root){ return; }
     CUR=d.path;
     document.getElementById('crumb').textContent=d.path;
+    // Name the folder on the button itself. "Use this folder" left the eye on
+    // the list below and the button appearing to refer to whatever was last
+    // clicked, rather than to where you now are — and clicking a row only ever
+    // navigates INTO it, so nothing in the list is ever the thing being chosen.
+    // Picking the wrong client folder is the worst mistake available here, so
+    // the confirm should say the name out loud.
+    var here = (d.path||'').replace(/\/+$/,'').split('/').pop() || d.path;
+    var pickBtn = document.getElementById('pick');
+    if(pickBtn){
+      pickBtn.textContent = 'Use \u201c' + here + '\u201d';
+      pickBtn.title = 'Use ' + d.path;
+    }
     // No way above the working folder, so the control is hidden there rather
     // than sitting dead.
     document.getElementById('up').style.display = d.at_root ? 'none' : '';
