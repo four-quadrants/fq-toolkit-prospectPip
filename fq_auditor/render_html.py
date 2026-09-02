@@ -54,6 +54,7 @@ TYPE_MAP = {
     'day_sheet':             ('Practice', 'Production/Monthly Production'),
     'provider_productivity': ('Practice', 'Production/Monthly Production'),
     'fee_schedule':          ('Practice', 'Fees'),
+    'building_value':        ('Practice', ''),
     'debt_schedule':         (None,       'Debt'),
     # A line of credit is debt, and it can sit on either side of the house — so
     # it takes the debt_schedule treatment: no forced side, the classifier's
@@ -1523,6 +1524,7 @@ LIKELY_FOR = {
     'day_sheet':             ['Business/Production/Monthly Production', 'Business/Production'],
     'provider_productivity': ['Business/Production/Monthly Production', 'Business/Production'],
     'fee_schedule':          ['Business/Fees'],
+    'building_value':        ['Business'],
     'debt_schedule':         ['Personal/Debt', 'Business/Debt'],
     'disability_insurance':  ['Personal/Insurance'],
     'life_insurance':        ['Personal/Insurance'],

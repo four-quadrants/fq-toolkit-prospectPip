@@ -507,6 +507,23 @@ RULES = [
                             r'taxpayer identification number',
                             r'overpayment applied', r'qualified business income deduction')),
 
+    # A preparer's packet whose cover pages carry no form number at all.
+    # Katherine Rebol's 2023 return opens with the accountant's letterhead and a
+    # two-year income comparison; "1040" does not appear anywhere in the first
+    # 3500 characters. With no form number the rules above cannot fire, and the
+    # phrase "HEALTH SAVINGS ACCOUNT DEDUCTION" in its income summary was enough
+    # to file it as a bank statement.
+    #
+    # No single phrase here is decisive, so it takes four. "Adjusted gross
+    # income" beside "married filing jointly" beside "taxable income" is a tax
+    # return; nothing else in a client folder talks that way.
+    _r('personal_tax_return', 'Personal tax return (preparer packet, no form number)', 'Personal',
+       lambda h, t: sum(bool(re.search(p_, h, re.I)) for p_ in (
+           r'married filing (?:jointly|separately)', r'adjusted gross income',
+           r'taxable income', r'total income', r'overpayment applied',
+           r'itemi[sz]ed deductions?', r'standard deduction',
+           r'filing status', r'refund')) >= 4),
+
     # State returns never say 1040. Indiana files an IT-40, Oklahoma a 511, and
     # each state has its own number, so match the shape rather than the digits.
     _r('personal_tax_return', 'Personal tax return (state)', 'Personal',
@@ -596,12 +613,27 @@ RULES = [
        lambda h, t: has(h, r'\bbrokerage\b', r'\bIRA\b', r'\b401\s?\(?k\)?\b', r'\b457\b',
                         r'\b529\b', r'\bRoth\b', r'portfolio (?:value|summary)',
                         r'\bmutual fund\b', r'market value', r'\bshares\b')),
+    # Two tiers, because one weak phrase is not a bank statement.
+    #
+    # "savings account" alone used to be enough, and a 1040 carrying the line
+    # "HEALTH SAVINGS ACCOUNT DEDUCTION" in its income summary was filed as a
+    # Citizens bank statement into Business/Banking. The word "citizens"
+    # elsewhere on the return supplied a plausible issuer and the direct-deposit
+    # section supplied an account number, so nothing downstream looked wrong.
+    #
+    # The strong phrases below only ever appear on a real statement, so they
+    # still stand alone. The weak ones — an account TYPE, which any document can
+    # mention — now need a statement-shaped signal beside them.
     _r('bank_statement', 'Bank statement', None,
        lambda h, t: has(h, r'beginning balance', r'ending balance',
                         r'deposits and (?:other )?credits',
-                        r'withdrawals and (?:other )?debits', r'checking account',
-                        r'savings account', r'money market', r'summary of accounts',
-                        r'account statement')),
+                        r'withdrawals and (?:other )?debits',
+                        r'summary of accounts', r'account statement')
+                    or (has(h, r'(?<!health )(?<!flexible )checking account',
+                            r'(?<!health )savings account', r'money market')
+                        and has(h, r'statement period', r'statement date',
+                                r'\bbalance\b', r'\bdeposits?\b', r'\bwithdrawals?\b',
+                                r'transactions?'))),
 
     # ---- insurance ------------------------------------------------------
     _r('disability_insurance', 'Disability insurance policy', 'Personal',
