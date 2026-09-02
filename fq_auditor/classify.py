@@ -532,9 +532,11 @@ RULES = [
                     and has(h, r'individual income tax')),
     _r('business_tax_return', 'Practice tax return (Form 1120-S)', 'Practice',
        lambda h, t: has(h, r'Form\s*1120-?\s?S\b', r'Income Tax Return for an S Corporation',
-                        r'Small Business Corporation Income Tax')),
+                        r'Small Business Corporation Income Tax')
+                    or (preparer_packet(h) and has(h, r'\bS corporation\b'))),
     _r('partnership_tax_return', 'Partnership tax return (Form 1065)', 'Practice',
-       lambda h, t: has(h, r'Form\s*1065\b', r'Return of Partnership Income')),
+       lambda h, t: has(h, r'Form\s*1065\b', r'Return of Partnership Income')
+                    or (preparer_packet(h) and has(h, r'\bpartnership\b'))),
     _r('k1', 'Schedule K-1', 'Practice',
        lambda h, t: has(h, r'Schedule\s*K-?1\b', r"Partner'?s Share of Income",
                         r"Shareholder'?s Share of Income")),
@@ -823,6 +825,20 @@ def looks_like_client_note(t, household=()):
     if has(t, *_FINANCIAL_MARKERS):
         return False
     return any(re.search(r'\b' + re.escape(p) + r'\b', t, re.I) for p in household)
+
+
+
+# A tax preparer's packet, recognised by the software's own cover boilerplate
+# rather than by a form number. Aprio's packets open with a letterhead and a
+# two-year comparison, so "1120-S" or "1040" can sit well past the window the
+# classifier reads — and what IS in that window is "Net Ordinary Income" and
+# "Total for Income", which made an S-corp return classify as a profit & loss.
+#
+# Measured on Rebol: present in all three of his tax packets, and in none of his
+# six P&Ls or balance sheets. QuickBooks does not print this; tax software does.
+def preparer_packet(h):
+    return bool(re.search(r'forms printed from within adobe acrobat', h, re.I)
+                and re.search(r"client'?s copy", h, re.I))
 
 
 def classify(text, filename='', practice_names=(), home_tokens=(), household=()):
