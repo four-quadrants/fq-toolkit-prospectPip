@@ -482,6 +482,12 @@ RULES = [
     # the 1099 rule below fired first and called a 91-page 1040 a 1099. Form 8879
     # exists only to authorise the e-filing of a personal return, which makes it
     # a safe thing to lead on.
+    # Placed ahead of the tax-return rules on purpose — see leads_with above.
+    _r('w2', 'W-2 wage statement', 'Personal',
+       lambda h, t: leads_with(h, r'Wage and Tax Statement',
+                               r'form\s*1\s*040\b|adjusted gross income|'
+                               r'married filing (?:jointly|separately)')),
+
     _r('personal_tax_return', 'Personal tax return (e-file packet)', 'Personal',
        lambda h, t: has(h, r'form\s*8879')
                     and has(h, r'e-?file signature authorization', r'1545-0074')),
@@ -836,6 +842,24 @@ def looks_like_client_note(t, household=()):
 #
 # Measured on Rebol: present in all three of his tax packets, and in none of his
 # six P&Ls or balance sheets. QuickBooks does not print this; tax software does.
+
+# Which of two things a document leads with. Clients bundle a W-2 together with
+# pages of the return it belongs to, and the tax rules run first, so four of
+# Rebol's six W-2s were filed as personal tax returns — the 2025 pair, sent on
+# their own, classified correctly. Same document type, same client, different
+# answer by year, and the W-2 item read satisfied on two documents out of six.
+#
+# Position decides, the way it already does for account tails: a bundle whose
+# wage statement comes before its 1040 pages is a W-2 with the return attached.
+# A real return packet carries no wage statement in range at all.
+def leads_with(h, first, second):
+    a = re.search(first, h, re.I)
+    if not a:
+        return False
+    b = re.search(second, h, re.I)
+    return b is None or a.start() < b.start()
+
+
 def preparer_packet(h):
     return bool(re.search(r'forms printed from within adobe acrobat', h, re.I)
                 and re.search(r"client'?s copy", h, re.I))

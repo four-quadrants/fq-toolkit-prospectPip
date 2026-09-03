@@ -317,9 +317,13 @@ def build_item(raw):
     #   - a document spanning a range gets one year. Oyler's "2024 thru 2026"
     #     balance sheet is tagged 2026, so a 2024-2025 requirement reads unmet
     #     while the answer sits in the folder.
-    #   - documents are claimed by the first item that matches, so the broad tax
-    #     items took the 2023 and 2024 W-2s and left the W-2 item holding only
-    #     2025.
+    #   - four of six W-2s were classified as personal tax returns, because the
+    #     client bundled each W-2 with pages of its return and the tax rules ran
+    #     first. So the W-2 item genuinely held only two documents. (Fixed since,
+    #     by position: see leads_with in classify.py. An earlier version of this
+    #     comment blamed items claiming documents from each other — that does not
+    #     happen; reconcile's `matched` set only feeds the "unexpected" list, and
+    #     every item searches the full pool independently.)
     #
     # Measured: Oyler fell from 10 satisfied to 8, Rebol gained two and lost
     # two. Fixing the detection first, then enforcing, is the right order.
