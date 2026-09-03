@@ -76,6 +76,33 @@ NOISE = {'total', 'your', 'please', 'provide', 'report', 'reports', 'statement',
          'all', 'and', 'for', 'the', 'any'}
 
 
+
+# A message that asks for something, or promises it, is not an answer.
+#
+# Rebol's client satisfied both QuickBooks items with "Items 3, 4: I can set you
+# up with a Quickbooks sign in, I just need the appropriate email to send the
+# invite" — a request for information, read as a submission. The other candidate
+# was "What email should I send the invite to?", a plain question. Neither is
+# separable by length or by how many concepts it touches: his catch-all was 430
+# characters and 2 concepts, his real answers 40 to 100 characters and 1 to 2.
+#
+# What separates them is mood. An answer states; these ask and promise.
+PENDING = re.compile(
+    r'\?|'                                     # any question at all
+    r"\b(i'?ll|i will|we will|will upload|will send|will get|as soon as|"
+    r"i need|i just need|can you|could you|let me know|"
+    r"isn'?t working|is not working|trying to|working on it)\b", re.I)
+# "not yet" is deliberately NOT in that list. It rejected "We don't have a
+# written financial plan and 2025 personal taxes are not yet complete" — one
+# message carrying a real answer about one item and a pending note about
+# another. Losing the answer to catch the promise is the wrong trade.
+
+
+def sounds_like_an_answer(text):
+    """False when the message asks for something or promises it later."""
+    return not PENDING.search(text or '')
+
+
 def answered_by_comment(item_text, comments, wants=None):
     """Did the client answer this item in a portal message?
 
@@ -102,8 +129,21 @@ def answered_by_comment(item_text, comments, wants=None):
         text = c.get('text') or ''
         if not re.search(r'\d', text):
             continue
+        if not sounds_like_an_answer(text):
+            continue
         hay = vocab._words(vocab.normalise(text))
-        if sum(1 for w in set(words) if vocab.has_word(hay, w)) < need:
+        # Word overlap is a proxy for subject; concept overlap is the real test,
+        # and it is the stricter of the two — it was added precisely because
+        # word overlap credited a "NEW Patients" comment against "Total
+        # Patients". So where the concepts agree, the words need not.
+        #
+        # Rebol's client answered "Birthdates for both of you" with "Item 11 -
+        # AB 03/09/1971, CD 11/22/1974". The word "birthdates" appears
+        # nowhere in it, so the item read unanswered with the answer sitting in
+        # the thread. Concepts see it; words never could.
+        concept_hit = bool(wants and (set(wants) & set(vocab.concepts_in(text))))
+        if not concept_hit and sum(
+                1 for w in set(words) if vocab.has_word(hay, w)) < need:
             continue
 
         # Word overlap alone is not enough. It credited Kelly's "NEW Patients:
@@ -335,8 +375,12 @@ def discussion_for(item, comments):
         cons = set(vocab.concepts_in(c['text']))
         if len(cons) > MAX_CONCEPTS or not (want & cons):
             continue
+        # Same reasoning as answered_by_comment: the concept test already
+        # established the subject, so a message that names the thing only in
+        # numbers still belongs beside its item.
         hay = vocab._words(vocab.normalise(c['text']))
-        if words and not any(vocab.has_word(hay, w) for w in words):
+        if words and not (want & cons) and not any(
+                vocab.has_word(hay, w) for w in words):
             continue
         hits.append(c)
     return hits

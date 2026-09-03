@@ -182,8 +182,13 @@ CONCEPTS = {
     'property_insurance': {'any': ['homeowners insurance', 'property insurance',
                                    'dwelling coverage']},
     'quickbooks_file': {
+        # A bare mention counts. Rebol's client answered this item by granting
+        # read access rather than sending a file — "Sent email invite ... for
+        # Read access", "sign in to Quickbooks" — and none of the phrases below
+        # appear in those words, so the item had nothing attached to it at all
+        # and the reviewer never saw that it had been dealt with.
         'any': ['quickbooks backup', 'quickbooks desktop backup', 'quickbooks online access',
-                'quickbooks file'],
+                'quickbooks file', 'quickbooks', 'quick books', 'qbo'],
     },
     'engagement_letter': {'any': ['engagement letter', 'service agreement',
                                   'signed engagement']},
@@ -194,7 +199,8 @@ CONCEPTS = {
     'provider_schedule': {'any': ['schedule for each provider', 'schedule for each dentist',
                                   'provider schedule', 'hygienist schedule']},
     'bonus_structure': {'any': ['bonus structure', 'bonus plan']},
-    'birthdates': {'any': ['birthdates', 'birth dates', 'date of birth']},
+    'birthdates': {'any': ['birthdates', 'birth dates', 'date of birth', 'birthday',
+                           'dob', 'born']},
 }
 
 # ANY item can be answered in the portal instead of uploaded — a client might type
@@ -215,6 +221,29 @@ OFTEN_TYPED = {
 }
 
 
+DOB_RE = re.compile(r'\b(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\d|3[01])[/-](19\d{2}|20[0-2]\d)\b')
+
+
+def looks_like_birthdates(text, today_year=None):
+    """Two or more dates that can only be dates of birth.
+
+    A client answered this item with nothing but "Item 11 - AB 03/09/1971,
+    CD 11/22/1974" (dates invented here; never paste a client's own) — no word
+    saying what those numbers are, so nothing matched and the item showed as
+    unanswered with the answer sitting in the thread.
+
+    Deliberately narrow: at least two full dates, every year old enough to
+    belong to an adult, and a short message. A bank statement mentions dates
+    constantly, which is why length and age both have to hold.
+    """
+    import datetime
+    today_year = today_year or datetime.date.today().year
+    if len(text or '') > 300:
+        return False
+    years = [int(m.group(1)) for m in DOB_RE.finditer(text or '')]
+    return len(years) >= 2 and all(1900 < y <= today_year - 18 for y in years)
+
+
 def concepts_in(text):
     """Every concept this text refers to, best-first."""
     found = []
@@ -232,6 +261,9 @@ def concepts_in(text):
                     and matches_any(text, rule['unless_also'])):
                 continue
         found.append(name)
+
+    if 'birthdates' not in found and looks_like_birthdates(text):
+        found.append('birthdates')
 
     # A specific reading beats a general one: an item naming the practice's return
     # should not also count as the generic "some tax return".
