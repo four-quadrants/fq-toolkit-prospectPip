@@ -259,8 +259,17 @@ def harvest_practice_names(raw, max_names=6):
     return keep[:max_names]
 
 
-_STREET = (r'([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s+'
-           r'(?:Dr|Drive|St|Street|Ave|Avenue|Blvd|Rd|Road|Ln|Lane|Ct|Court|Way|Pkwy)\b')
+# Case-insensitive on purpose. The original pattern required title case, and
+# one preparer prints every address in capitals — "488 BULL CREEK ROAD" — so no
+# home token was harvested at all for that client and twenty-six personal
+# statements could not be told from practice ones. They all landed in
+# _Needs Review, which is the shape of failure where the tool looks like it is
+# working and simply hands everything back.
+_STREET = re.compile(
+    r'\b([A-Za-z][A-Za-z]+(?:\s+[A-Za-z][A-Za-z]+)?)\s+'
+    r'(?:Dr|Drive|St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Ln|Lane|'
+    r'Ct|Court|Way|Pkwy|Parkway|Cir|Circle|Ter|Terrace|Pl|Place)\b',
+    re.I)
 
 
 def harvest_home_tokens(docs, quiet=False):

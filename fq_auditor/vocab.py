@@ -147,6 +147,10 @@ CONCEPTS = {
     },
     'line_of_credit': {'any': ['line of credit']},
     'fee_schedule': {'any': ['fee schedule', 'procedure codes fee', 'fee study']},
+    'employment_contract': {'any': ['associate contract', 'employment agreement',
+                                    'associate agreement', 'employment contract',
+                                    'offer letter', 'employment offer',
+                                    'contract for dr', 'associate employment']},
     # An estimate of what a building is worth. Usually a one-line spreadsheet
     # or a typed number, never a formal document — the request itself says "a
     # guesstimate is fine".

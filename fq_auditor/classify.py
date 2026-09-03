@@ -591,9 +591,38 @@ RULES = [
     # Office Buildings" (the client's spelling) over two addresses. Matching
     # "approx" strictly would have missed it, which is the whole reason this
     # reads content loosely and requires a value word plus a building word.
+    # An associate's contract or offer letter. Rebol sent both — a signed
+    # employment agreement and an offer letter — and with no rule for either,
+    # one fell to "unknown" and the other was read as a brokerage statement,
+    # so the checklist item asking for it reported missing while both sat in
+    # the folder.
+    #
+    # Placed ahead of the statement rules because an offer letter quotes a
+    # salary and a benefits package, which is enough numbers to look like a
+    # financial statement to a rule that is only counting words.
+    _r('employment_contract', 'Associate contract or offer letter', 'Practice',
+       lambda h, t: has(h, r'employment agreement', r'associate agreement',
+                        r'employment offer', r'offer of employment',
+                        r'independent contractor agreement')
+                    or (has(h, r'\boffer\b') and has(h, r'position of')
+                        and has(h, r'compensation|salary'))),
+
     _r('building_value', 'Building value estimate', 'Practice',
-       lambda h, t: (has(h, r'value') and has(h, r'building|propert|real estate'))
-                    and not has(h, r'balance sheet|profit\s*(?:and|&)\s*loss')),
+       # The words have to belong to each other. The first version asked only
+       # for "value" somewhere and "building" somewhere, and a 403(b) statement
+       # reading "YOUR CURRENT VALUE $17,048.72" alongside marketing copy about
+       # "building a more secure financial future" was filed as a property
+       # valuation. Two true words, no relationship between them.
+       lambda h, t: (has(h, r'(?:approximate|aproximate|estimated|current|'
+                            r'appraised|market)\s+value\s+of\s+'
+                            r'(?:the\s+|our\s+|my\s+)?'
+                            r'(?:office|commercial|dental|rental)?\s*'
+                            r'(?:building|propert|real estate)',
+                        r'building\s+valu', r'propert(?:y|ies)\s+valu',
+                        r'real estate\s+valu', r'appraisal')
+                     and not has(h, r'balance sheet|profit\s*(?:and|&)\s*loss|'
+                                    r'403\s*\(?b\)?|401\s*\(?k\)?|annuity|'
+                                    r'retirement'))),
 
     # Clients answer these three by typing a handful of numbers into a Word
     # document — "Total Patients: 2024- 3164 patients". Both were on the filing
