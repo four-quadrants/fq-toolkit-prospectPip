@@ -308,7 +308,35 @@ def build_item(raw):
                 f"required tax year inferred as {years[-1]} because the checklist "
                 f"only names {m.group(1)} as optional — confirm")
 
+    # NOT extracting years from the ask, deliberately. "2024 taxes" and "2025
+    # taxes" plainly name a year, and reading them made four Rebol items stop
+    # pointing at the same undifferentiated pile — but enforcing it made things
+    # worse overall, because year DETECTION on documents cannot carry the
+    # weight:
+    #
+    #   - a document spanning a range gets one year. Oyler's "2024 thru 2026"
+    #     balance sheet is tagged 2026, so a 2024-2025 requirement reads unmet
+    #     while the answer sits in the folder.
+    #   - documents are claimed by the first item that matches, so the broad tax
+    #     items took the 2023 and 2024 W-2s and left the W-2 item holding only
+    #     2025.
+    #
+    # Measured: Oyler fell from 10 satisfied to 8, Rebol gained two and lost
+    # two. Fixing the detection first, then enforcing, is the right order.
+
     satisfied_by = _satisfied_by(text)
+
+    # A tax item naming an entity is not asking for a 1040. Rebol's "2024 taxes
+    # for 69 McDowell Street LLC" mapped to personal_tax_return, so his LLC
+    # return could never satisfy it and his personal returns always did.
+    ENTITY = re.compile(r'\b(LLC|L\.L\.C|PLLC|P\.?A\b|P\.?C\b|Inc\.?|Corp\.?|'
+                        r'corporation|partnership|practice|building entity)\b', re.I)
+    if (satisfied_by == ['personal_tax_return']
+            and ENTITY.search(text) and not re.search(r'\bpersonal\b', text, re.I)):
+        satisfied_by = ['partnership_tax_return', 'business_tax_return']
+        review_flags.append("read as an entity return rather than a personal one "
+                            "because the ask names a company — confirm")
+
     if not satisfied_by:
         review_flags.append("no document type mapped — confirm what satisfies this")
 

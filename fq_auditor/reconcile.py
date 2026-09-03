@@ -409,10 +409,40 @@ def apply_item_verdicts(results, verdicts, who='reviewer'):
         if not rule:
             continue
         r['auto_status'] = r.get('auto_status', r['status'])
+
+        # A verdict is a judgement about the evidence as it stood when it was
+        # made. Evidence moves. On Rebol the investment statements were marked
+        # "still missing" during the initial request — correct then — and the
+        # client sent them a week later. The verdict kept winning silently, so
+        # the item stayed red with five matching documents sitting in the
+        # folder, and nothing on the page suggested the instruction was old.
+        #
+        # The person's call still wins: they may have opened the documents and
+        # found them wrong, which no amount of matching can see. But when the
+        # auditor's own reading has since moved the other way, that has to be
+        # visible, or a stale instruction quietly outlives the situation that
+        # produced it.
+        auto = r['auto_status']
+        want = rule['status']
+        if auto != want and (
+                (want in ('missing', 'partly satisfied') and auto == 'satisfied')
+                or (want == 'satisfied' and auto in ('missing', 'mismatched'))):
+            r['verdict_stale'] = {
+                'said': want, 'now': auto, 'docs': len(r.get('docs') or [])}
+
         r['status'] = rule['status']
         r['human'] = True
         r['chase'] = rule['chase']
         note = rule['note'] % who
         extra = ((v or {}).get('note') or '').strip()
         r['note'] = (note + ' — ' + extra) if extra else note
+        if r.get('verdict_stale'):
+            st = r['verdict_stale']
+            if st['now'] == 'satisfied':
+                r['note'] += ('. Worth a second look: %d document(s) now match this, '
+                              'so the answer may have arrived since you marked it.'
+                              % st['docs'])
+            else:
+                r['note'] += ('. Worth a second look: the auditor no longer finds '
+                              'this answered.')
     return results

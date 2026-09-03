@@ -1086,6 +1086,11 @@ button.ckdoc{font-size:11.5px;margin-top:0;background:#fff;border:1px solid #CFD
   text-overflow:ellipsis;white-space:nowrap;font-family:inherit}
 button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckmore{font-size:11.5px;color:#6C7480;align-self:center}
+.ckover{margin-top:6px}
+.ckover>summary{cursor:pointer;font-size:11px;color:#8A94A0;list-style:none;
+  display:inline-block;padding:1px 0;border-bottom:1px dotted #C7CDD4}
+.ckover>summary::-webkit-details-marker{display:none}
+.ckover>summary:hover{color:var(--fq-navy)}
 .ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
@@ -1098,6 +1103,8 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .saidwho{flex:0 0 130px;font-weight:600;font-size:12.5px;color:var(--fq-navy)}
 .saidwho span{display:block;font-weight:400;font-size:11px;color:#8A94A0}
 .saidtext{flex:1;min-width:0;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.ckstale{font-size:11px;background:var(--fq-orange);color:#fff;border-radius:10px;
+  padding:1px 8px;margin-left:6px;vertical-align:1px;font-weight:600}
 .ckhuman{font-size:11px;background:var(--fq-navy);color:#fff;border-radius:10px;
   padding:1px 8px;margin-left:6px;vertical-align:1px}
 
@@ -1643,6 +1650,8 @@ def render_checklist_summary(a, results, client, verdicts=None):
         lab = _e(r['item'].get('label') or r['item'].get('id'))
         if r.get('human'):
             lab += '<span class="ckhuman">your call</span>'
+        if r.get('verdict_stale'):
+            lab += '<span class="ckstale">check \u2014 evidence changed</span>'
         a('<div class="cklab">%s</div>' % lab)
         if r.get('note') and r['status'] != 'satisfied':
             a('<div class="cknote">%s</div>' % _e(r['note']))
@@ -1675,9 +1684,17 @@ def render_checklist_summary(a, results, client, verdicts=None):
         # the doctor's car. Whoever can, says so here, and it carries into the
         # client email rather than stopping at the screen.
         cur = (r.get('_verdict') or '')
-        opts = [('', 'Auditor\u2019s call'), ('satisfied', 'Satisfied \u2014 all here'),
+        opts = [('', '\u2014 leave as is \u2014'), ('satisfied', 'Satisfied \u2014 all here'),
                 ('practice', 'Practice side only'), ('personal', 'Personal side only'),
                 ('not_applicable', 'Not applicable'), ('missing', 'Still missing')]
+        # Shown open only where a person is likely to want it. Putting an open
+        # dropdown on all 36 items made a page with two real decisions look like
+        # a 36-item to-do list, and "Auditor's call" sitting on a satisfied item
+        # read as a question rather than as a statement that nobody has
+        # overruled it. Everything is still overridable; it just waits to be asked.
+        settled = r['status'] in ('satisfied', 'not_applicable') and not cur
+        if settled:
+            a('<details class="ckover"><summary>change this</summary>')
         a('<div class="ckpick"><label>Your call</label>')
         a('<select class="ckv" data-item="%s">' % _e(str(r['item'].get('id'))))
         for val, txt in opts:
@@ -1687,6 +1704,8 @@ def render_checklist_summary(a, results, client, verdicts=None):
         a('<input class="cknote" data-item="%s" placeholder="note (optional)" value="%s">'
           % (_e(str(r['item'].get('id'))), _e(r.get('_vnote') or '')))
         a('</div>')
+        if settled:
+            a('</details>')
         a('</div></div>')
     a('</div></div>')
 
@@ -2055,7 +2074,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
                 for r in results if r['status'] == status]
 
     for label, n, cls, names in [
-        ('need a decision', len(review), 'warn', [p['file'] for p in review]),
+        ('documents to place', len(review), 'warn', [p['file'] for p in review]),
         ('satisfied', counts.get('satisfied', 0), 'ok', _by('satisfied')),
         ('mismatched', counts.get('mismatched', 0), '', _by('mismatched')),
         ('missing', counts.get('missing', 0), 'warn', _by('missing')),
