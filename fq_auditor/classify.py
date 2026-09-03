@@ -492,8 +492,16 @@ RULES = [
        lambda h, t: has(h, r'form\s*8879')
                     and has(h, r'e-?file signature authorization', r'1545-0074')),
 
+    # A document that MENTIONS a 1099 is not a 1099. A Northwestern Mutual life
+    # policy statement carries the line "Interest totaling $10.00 or more within
+    # a calendar year will be reported to the IRS on form 1099-INT" — standard
+    # boilerplate on any interest-bearing product — and that one word was enough
+    # to file a life insurance policy as a 1099.
     _r('form_1099', '1099 income statement', 'Personal',
-       lambda h, t: has(h, r'\b1099\b')
+       lambda h, t: (has(h, r'\b1099\b')
+                     and not re.search(r'(?:reported|report(?:ed|able)?\s+to|'
+                                       r'will be reported|reported on)'
+                                       r'[^.]{0,60}\b1099\b', h, re.I))
                     or (has(h, r'tax statement for forms')
                         and has(h, r'for tax year|omb'))),
 
@@ -642,6 +650,24 @@ RULES = [
                     and has(h, r'\bdays?\b')),
 
     # ---- statements -----------------------------------------------------
+    # Ahead of the card and bank rules on purpose. A life policy statement
+    # carries a premium "Payment Due Date" and markets account aggregation
+    # with the words "credit cards", which was enough for the card rule to
+    # claim it — the same two-unrelated-words failure as the building rule.
+    #
+    # An insurer's annual statement opens with a mailing block, so the words
+    # naming the product sit thousands of characters in — "Life Insurance
+    # Benefit" appeared at 4,765 on Rebol's, well past the head the classifier
+    # reads. Consults the whole document, but only when the head already shows
+    # an insurer writing to a policyholder, so this cannot pick up a passing
+    # mention in a bank statement.
+    _r('life_insurance', 'Life insurance policy (annual statement)', 'Personal',
+       lambda h, t: has(h, r'\binsured\b')
+                    and has(h, r'\bpremium\b|\bpolicy\b|\bcoverage\b')
+                    and has(t, r'life insurance benefit', r'life insurance policy',
+                            r'whole life', r'\bterm life\b')
+                    and not has(h, r'disability income|overhead expense')),
+
     _r('cc_statement', 'Credit card statement', None,
        lambda h, t: has(h, r'minimum payment (?:due|amount)', r'payment due date',
                         r'credit (?:line|limit)', r'available credit', r'\bAADVANTAGE\b')
