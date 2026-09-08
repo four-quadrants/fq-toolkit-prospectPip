@@ -163,6 +163,16 @@ def _eval_item(item, found, facts):
     # reviewer to stop chasing something the client never sent. So when the
     # entity cannot be confirmed the item is NOT satisfied, even though that
     # means occasionally asking a human about a document that was in fact right.
+    # ---- answered only by something the client has taken down ----------
+    # Not downgraded to missing: she may have replaced a bad export, or
+    # misclicked, and chasing her for a document she just sent is its own kind
+    # of wrong. But a green tick resting entirely on a file that is no longer
+    # in the portal is a claim we cannot support, so it says so.
+    if found and all(d.get('withdrawn') for d in found):
+        problems.append(
+            "the only document(s) answering this were removed from the portal "
+            "by the client after uploading — confirm they meant to")
+
     want, phrase = entity_asked_for(item)
     if want and any(t in facts.get('contested_types', ())
                     for t in item.get('satisfied_by') or ()):

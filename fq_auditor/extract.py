@@ -17,6 +17,11 @@ from PIL import Image
 # faster than letting each tesseract call fight for the same cores.
 os.environ.setdefault('OMP_THREAD_LIMIT', '1')
 
+# Where documents go once LaunchBay stops listing them. A subfolder of the
+# intake folder, not a sibling, so it travels with the client and cannot be
+# mistaken for another client's material.
+WITHDRAWN_DIR = '_Withdrawn'
+
 OCR_DPI = 150
 # A page with fewer than this many characters in its text layer is treated as
 # image-only and sent to OCR. Redacted pages sometimes carry a few stray glyphs.
@@ -499,6 +504,16 @@ def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=T
     expand_zips(folder, quiet=not progress)
     files = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
              if readable(os.path.join(folder, f))]
+    # Documents the client has since removed from the portal. They are still
+    # read, because a withdrawal is at least as often a re-upload or a misclick
+    # as a considered retraction, and a document that silently stops existing
+    # takes its checklist item down with it without saying so. They are kept in
+    # their own folder, and marked, so the report can say which answers rest on
+    # something the client no longer shows.
+    wd = os.path.join(folder, WITHDRAWN_DIR)
+    if os.path.isdir(wd):
+        files += [os.path.join(wd, f) for f in sorted(os.listdir(wd))
+                  if readable(os.path.join(wd, f))]
     workers = workers or max(1, (os.cpu_count() or 2))
 
     out, pending, tasks = [], {}, []

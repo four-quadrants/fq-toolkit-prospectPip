@@ -508,7 +508,9 @@ def audit_folder(folder, checklist, cache_dir=None, workers=None, quiet=False):
                         home_tokens=home_tokens, household=household)
         info.update(file=r['file'], path=r['path'], sha256=r['sha256'],
                     n_pages=r['n_pages'], n_ocr_pages=r['n_ocr_pages'],
-                    text=r['text'])
+                    text=r['text'],
+                    withdrawn=(os.path.basename(os.path.dirname(r['path']))
+                               == extract.WITHDRAWN_DIR))
         docs.append(info)
         findings = scan_pii(r['text'], dedupe=False)
         if not any(f['confidence'] != 'low' for f in findings):
