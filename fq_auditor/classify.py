@@ -698,8 +698,15 @@ RULES = [
     #
     # After new_patients on purpose: "Total New Patients" must not be read as a
     # total patient count, which is the same distinction the vocabulary makes.
+    # "Active patients" is what a practice-management system calls the standing
+    # patient base, and it is the number the "Total Patients" ask wants.
+    # CareStack's Patient Growth export has a New Patients column and an Active
+    # Patients column side by side: one file answers both asks. Matching only
+    # the literal words "total patients" credited it for new patients alone and
+    # left Total Patients on the chase list with the answer already in hand.
     _r('total_patients', 'Total patient counts', 'Practice',
-       lambda h, t: has(h, r'total\s+patients?\b', r'patients?\s+seen\b')
+       lambda h, t: has(h, r'total\s+patients?\b', r'patients?\s+seen\b',
+                        r'\bactive\s+patients?\b')
                     and has(h, r'\d')),
     _r('dr_days_worked', 'Doctor days worked', 'Practice',
        lambda h, t: has(h, r'(?:doctor|dr\.?)\s+days\s+worked',

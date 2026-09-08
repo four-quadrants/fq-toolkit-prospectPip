@@ -89,9 +89,22 @@ NOISE = {'total', 'your', 'please', 'provide', 'report', 'reports', 'statement',
 # What separates them is mood. An answer states; these ask and promise.
 PENDING = re.compile(
     r'\?|'                                     # any question at all
-    r"\b(i'?ll|i will|we will|will upload|will send|will get|as soon as|"
+    r"\bwill\s+\w+|"                           # any promise of a future send
+    r"\b(i'?ll|as soon as|plan to|planning to|going to|"
     r"i need|i just need|can you|could you|let me know|"
-    r"isn'?t working|is not working|trying to|working on it)\b", re.I)
+    r"isn'?t working|is not working|trying to|working on)\b", re.I)
+# The list used to name the verbs — "will upload", "will send", "will get" —
+# and a client wrote "will include P&L and Balance sheets for these". That
+# passed as an ANSWER, and would have marked her Profit & Loss and Balance
+# Sheet items satisfied on the strength of a sentence promising to send them
+# later. Naming verbs meant the guard only caught the phrasings someone had
+# already thought of, so it now matches "will" followed by anything.
+#
+# The cost is real and accepted: a message reading "we will not have one" is a
+# genuine answer and is now rejected too. Rejecting only means the auditor
+# declines to close the item by itself and leaves it to a human, which is the
+# safe direction. Crediting a promise is not recoverable — nobody chases an
+# item that already looks answered.
 # "not yet" is deliberately NOT in that list. It rejected "We don't have a
 # written financial plan and 2025 personal taxes are not yet complete" — one
 # message carrying a real answer about one item and a pending note about
