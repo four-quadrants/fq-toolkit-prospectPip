@@ -1748,9 +1748,13 @@ def render_checklist_summary(a, results, client, verdicts=None):
         if g != _seen:
             if _seen is not None:
                 a('</div></details>')
-            a('<details class="ckgroup"%s><summary class="ckgrp">%s'
+            # All three start closed. Opening the first one hid the fact that
+            # any of them could be closed — the group you land in looks like the
+            # page, and nobody discovers a control they never see in its shut
+            # state. Closed, the three headings read as three headings.
+            a('<details class="ckgroup"><summary class="ckgrp">%s'
               '<span class="ckgn">%d</span></summary><div class="sumgrid">'
-              % (' open' if g == 0 else '', _headings[g], _counts.get(g, 0)))
+              % (_headings[g], _counts.get(g, 0)))
             _seen = g
         cls, mark = CK_MARK.get(r['status'], ('part', '?'))
         a('<div class="ck %s">' % cls)
@@ -1889,11 +1893,11 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     a('<style>%s</style></head><body>' % CSS)
 
     a('<header><div class="hrow">')
+    # No logo here. The app already shows one in its own header directly above,
+    # so this page was stacking a second Four Quadrants mark on top of the first
+    # and pushing the client's name — the one thing that identifies which file
+    # you are looking at — into third place.
     a('<div class="hbrand">')
-    _logo = logo_data_uri()
-    if _logo:
-        a('<img class="hlogo" src="%s" alt="Four Quadrants">' % _logo)
-        a('<div class="hrule"></div>')
     a('<div class="hleft">')
     a('<h1>%s</h1>' % _e(client))
     a('<div class="sub">Intake review &middot; %s &middot; %d documents, %d pages</div>'

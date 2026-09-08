@@ -143,6 +143,34 @@ def contested_entity_types(checklist):
     return {t for t, keys in seen.items() if len(keys) > 1}
 
 
+def qualifier_scope(ask):
+    """Drop parentheticals that qualify a SUB-PART rather than the whole ask.
+
+    "Total Doctor Days Worked (you and associate(s), if applicable)" is not an
+    optional item. The days are always wanted; "if applicable" attaches to the
+    associates, because not every practice has one. Reading it as a condition on
+    the whole line made a required number into a yes/no question, and it dropped
+    off the chase list entirely.
+
+    The distinction is whether the bracket contains anything BUT the qualifier:
+
+        "(where applicable)"                  -> the ask itself is conditional
+        "(you and associate(s), if applicable)" -> the associates are
+
+    So a bracket holding only the qualifier is kept and everything else is
+    removed before the test. "(s)" is stripped first, or the naive bracket match
+    ends at the wrong parenthesis.
+    """
+    if not ask:
+        return ''
+    s = re.sub(r'\(s\)', 's', ask, flags=re.I)
+    return re.sub(r'\(([^()]*)\)',
+                  lambda m: m.group(0)
+                  if re.fullmatch(r'\s*(?:if|where)\s+applicable\s*', m.group(1), re.I)
+                  else ' ',
+                  s)
+
+
 def _eval_item(item, found, facts):
     """Return (status, note). `found` is every doc matching the item's types."""
     problems = []
@@ -429,7 +457,7 @@ def reconcile(docs, checklist):
         # These need a yes/no, not a chase. They are reported separately so the
         # reviewer asks "do you have one?" once and it is then settled for good
         # via confirmed_unavailable.
-        ask = item.get('client_ask') or item.get('label') or ''
+        ask = qualifier_scope(item.get('client_ask') or item.get('label') or '')
         conditional = bool(item.get('optional')) or bool(re.search(
             r'\bif applicable\b|\bif any\b|\bif you (?:have|own)\b|'
             r'\bif the \w+ has\b|\bif there (?:is|are)\b|^\s*if\b',
