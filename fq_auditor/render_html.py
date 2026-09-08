@@ -718,15 +718,29 @@ def build_clarification(res, plan, client):
         except Exception:
             pass
 
-    L.append('SUMMARY')
-    L.append('  %d checklist item(s) missing' % len(missing))
-    L.append('  %d item(s) only half answered' % len(partial))
-    L.append('  %d item(s) arrived but in the wrong scope' % len(mismatched))
-    L.append('  %d statement series with missing months' % len(cross['gaps']))
-    L.append('  %d document(s) need a filing decision from a human' % len(review))
-    L.append('  %d document(s) renamed from their contents' % len([p for p in plan if p.get('new_name')]))
-    L.append('  %d rename(s) need the period confirmed' % len([p for p in plan if p.get('needs_confirmation')]))
-    L.append('  %d filename(s) contradict their contents' % len(cross.get('mislabeled') or []))
+    # Only what is actually true of this client. The block used to print eight
+    # counters unconditionally, so a clean run read as a wall of zeroes and the
+    # two lines that mattered were lost among six that said nothing. A count of
+    # none is not information; it is padding that trains people to skim.
+    counts = [
+        (len(missing),    'checklist item(s) still missing'),
+        (len(partial),    'item(s) only half answered'),
+        (len(mismatched), 'item(s) arrived but need your call'),
+        (len(cross['gaps']), 'statement series with missing months'),
+        (len(review),     'document(s) need a filing decision'),
+        (len([p for p in plan if p.get('needs_confirmation')]),
+                          'rename(s) need the period confirmed'),
+        (len(cross.get('mislabeled') or []),
+                          'filename(s) contradict their contents'),
+    ]
+    live = [(n, what) for n, what in counts if n]
+    if live:
+        L.append('WHAT NEEDS A HUMAN')
+        for n, what in live:
+            L.append('  %d %s' % (n, what))
+    else:
+        L.append('Nothing outstanding — every item is answered and every '
+                 'document has a home.')
     L.append('')
 
     if partial:
@@ -1686,9 +1700,20 @@ def render_checklist_summary(a, results, client, verdicts=None):
         # the doctor's car. Whoever can, says so here, and it carries into the
         # client email rather than stopping at the screen.
         cur = (r.get('_verdict') or '')
-        opts = [('', '\u2014 leave as is \u2014'), ('satisfied', 'Satisfied \u2014 all here'),
+        # The blank option used to read "\u2014 leave as is \u2014", which sits in the one
+        # place a reader looks to find out what an item currently IS and answers
+        # a different question instead: it describes what happens if you do
+        # nothing, not what the auditor concluded. Naming the current reading
+        # makes the default self-explanatory and the dropdown a correction
+        # rather than a quiz.
+        _said = {'satisfied': 'satisfied', 'missing': 'missing',
+                 'mismatched': 'needs your call', 'partly satisfied': 'half answered',
+                 'not_applicable': 'not applicable'}.get(r['status'], r['status'])
+        opts = [('', 'Auditor says: %s \u2014 keep it' % _said),
+                ('satisfied', 'Satisfied \u2014 all here'),
                 ('practice', 'Practice side only'), ('personal', 'Personal side only'),
-                ('not_applicable', 'Not applicable'), ('missing', 'Still missing')]
+                ('not_applicable', 'Not applicable \u2014 they do not have one'),
+                ('missing', 'Still missing \u2014 chase it')]
         # Shown open only where a person is likely to want it. Putting an open
         # dropdown on all 36 items made a page with two real decisions look like
         # a 36-item to-do list, and "Auditor's call" sitting on a satisfied item
@@ -1778,8 +1803,8 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     a('<div class="hright">')
     a('<span id="undecided"></span>')
     a('<button class="primary" id="dlDec" disabled>Save decisions</button>')
-    a('<button id="dlMemo" title="Download the chase list">Writeup</button>')
-    a('<button id="cpMemo" title="Copy the chase list">Copy</button>')
+    a('<button id="dlMemo" title="Download this writeup as a file">Download</button>')
+    a('<button id="cpMemo" title="Copy this writeup, ready to paste into an email">Copy writeup</button>')
     a('</div>')
     a('</div>')
     a('<div class="progwrap"><div class="prog" id="prog"></div></div>')

@@ -100,6 +100,14 @@ def alnum_ratio(text):
     return sum(1 for c in solid if c.isalnum()) / len(solid)
 
 
+def illegible(text):
+    """True when a page has plenty of text and none of it reads as words."""
+    body = (text or '').strip()
+    if len(body) < MIN_CHARS_TO_JUDGE:
+        return False
+    return alnum_ratio(body) < MIN_LEGIBLE_ALNUM
+
+
 def _page_text(page, dpi=OCR_DPI):
     t = page.get_text() or ''
     if len(t.strip()) >= MIN_TEXT_LAYER_CHARS:
@@ -258,7 +266,12 @@ SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
 #   v7 (2026-09-04): pages whose text layer is a substitution cipher (a PDF with
 #                    no ToUnicode map) are now OCR'd. Their cached gibberish
 #                    would otherwise be served forever.
-OCR_VERSION = 7
+#   v8 (2026-09-08): v7 only fixed the SERIAL reader. Folders go through
+#                    _survey() and the page pool, which still gated on length
+#                    alone — so the cipher pages were re-cached unchanged and
+#                    the fix looked like it had done nothing. The comment on
+#                    _ocr_page_task warns about exactly this.
+OCR_VERSION = 8
 
 
 def _cache_paths(cache_dir, digest):
@@ -322,11 +335,17 @@ def _survey(path):
     texts, todo = [], []
     for i, page in enumerate(doc):
         t = page.get_text() or ''
-        if len(t.strip()) >= MIN_TEXT_LAYER_CHARS:
-            texts.append(t)
-        else:
-            texts.append(None)
+        if len(t.strip()) < MIN_TEXT_LAYER_CHARS:
+            texts.append(None)                 # nothing there: OCR it
             todo.append(i)
+        elif illegible(t):
+            # A full text layer that is not text — see _page_text. The original
+            # is KEPT rather than discarded, so that if OCR comes back worse the
+            # merge can fall back to it.
+            texts.append(t)
+            todo.append(i)
+        else:
+            texts.append(t)
     doc.close()
     return texts, todo
 
@@ -606,7 +625,12 @@ def _absorb(pending, path, pageno, text, cache_dir, out):
     st = pending.get(path)
     if st is None:
         return
-    st['texts'][pageno] = text
+    # A page queued because its text layer was a cipher still HOLDS that text.
+    # Keep whichever reads better, so a page OCR could not improve is left as it
+    # was rather than replaced with something worse.
+    had = st['texts'][pageno]
+    if had is None or alnum_ratio(text) > alnum_ratio(had):
+        st['texts'][pageno] = text
     st['todo'].discard(pageno)
     if not st['todo']:
         _finish(pending, path, cache_dir, out)
