@@ -756,6 +756,11 @@ def build_clarification(res, plan, client):
         for r in missing:
             opt = ' (optional)' if r['item'].get('optional') else ''
             L.append('  - [%s] %s%s' % (r['item'].get('section'), r['item'].get('label'), opt))
+            # A note written against a missing item is the most useful sentence
+            # on the page — "she is sending this Monday" — and this section
+            # printed labels only, so it reached the screen and nothing else.
+            if r.get('note'):
+                L.append('      %s' % r['note'])
         L.append('')
 
     if mismatched:
@@ -1114,6 +1119,17 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
   display:inline-block;padding:1px 0;border-bottom:1px dotted #C7CDD4}
 .ckover>summary::-webkit-details-marker{display:none}
 .ckover>summary:hover{color:var(--fq-navy)}
+.bar{display:flex;height:11px;border-radius:6px;overflow:hidden;margin:10px 0 7px;
+     background:var(--fq-line)}
+.bar span{display:block}
+.bok{background:#1D9E75} .bcall{background:var(--fq-orange)} .bmiss{background:#C8CDD3}
+.barkey{display:flex;gap:16px;font-size:12px;color:var(--fq-slate);margin-bottom:10px}
+.barkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.kok{background:#1D9E75} .kcall{background:var(--fq-orange)} .kmiss{background:#C8CDD3}
+/* A group heading inside the checklist, so the three jobs read as three jobs. */
+.ckgrp{grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:.4px;
+       text-transform:uppercase;color:var(--fq-slate);margin:14px 0 2px}
+.ckgrp:first-child{margin-top:2px}
 .ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
@@ -1657,17 +1673,60 @@ def render_checklist_summary(a, results, client, verdicts=None):
                 if r['status'] in ('missing', 'mismatched', 'partly satisfied'))
     n_ok = sum(1 for r in results if r['status'] == 'satisfied')
 
+    # Three numbers, because there are three different jobs and they were being
+    # presented as one undifferentiated list of seventeen. An item the auditor
+    # settled needs nothing. An item it could not settle needs YOU. An item
+    # nobody has sent needs the CLIENT. Sorting outstanding-first put those last
+    # two next to each other and left the reader counting tiles to find out how
+    # much work was actually theirs.
+    n_call = sum(1 for r in results
+                 if r['status'] in ('mismatched', 'partly satisfied')
+                 or r.get('verdict_stale'))
+    n_miss = sum(1 for r in results if r['status'] == 'missing')
+    n_done = len(results) - n_call - n_miss
+
     a('<div class="sum">')
     a('<h3>What we asked %s for</h3>' % _e(client))
-    if n_out:
-        a('<div class="sumsub">%d of %d items still need something. '
-          'Outstanding ones are listed first. Click a document name to look at it.</div>'
-          % (n_out, len(results)))
+    a('<div class="bar" title="%d answered, %d need your call, %d not sent yet">'
+      % (n_done, n_call, n_miss))
+    for n, cls in ((n_done, 'bok'), (n_call, 'bcall'), (n_miss, 'bmiss')):
+        if n:
+            a('<span class="%s" style="flex:%d"></span>' % (cls, n))
+    a('</div>')
+    a('<div class="barkey">'
+      '<span><i class="kok"></i>%d answered</span>'
+      '<span><i class="kcall"></i>%d need your call</span>'
+      '<span><i class="kmiss"></i>%d not sent yet</span></div>'
+      % (n_done, n_call, n_miss))
+    if n_call:
+        a('<div class="sumsub">Start with the %d marked <b>your call</b> — the '
+          'auditor read the documents but cannot decide these. The rest is either '
+          'settled or waiting on the client.</div>' % n_call)
+    elif n_out:
+        a('<div class="sumsub">Nothing needs your judgement. %d item(s) are simply '
+          'waiting on the client.</div>' % n_out)
     else:
         a('<div class="sumsub">All %d items are answered. Click a document name to '
           'spot-check it.</div>' % n_ok)
     a('<div class="sumgrid">')
+
+    def _group(r):
+        if r['status'] in ('mismatched', 'partly satisfied') or r.get('verdict_stale'):
+            return 0
+        return 2 if r['status'] == 'satisfied' else 1
+
+    rows = sorted(rows, key=lambda r: (_group(r), CK_ORDER.get(r['status'], 9),
+                                       (r['item'].get('label') or '').lower()))
+    _headings = {0: 'Your call — the auditor cannot decide these',
+                 1: 'Waiting on the client',
+                 2: 'Answered'}
+    _seen = None
+
     for r in rows:
+        g = _group(r)
+        if g != _seen:
+            a('<div class="ckgrp">%s</div>' % _headings[g])
+            _seen = g
         cls, mark = CK_MARK.get(r['status'], ('part', '?'))
         a('<div class="ck %s">' % cls)
         a('<div class="ckmark">%s</div><div class="ckbody">' % mark)
@@ -1727,9 +1786,14 @@ def render_checklist_summary(a, results, client, verdicts=None):
         # a 36-item to-do list, and "Auditor's call" sitting on a satisfied item
         # read as a question rather than as a statement that nobody has
         # overruled it. Everything is still overridable; it just waits to be asked.
-        settled = r['status'] in ('satisfied', 'not_applicable') and not cur
+        # 'missing' joins these. A document nobody sent is not a judgement call
+        # — it is a chase — and leaving twelve open dropdowns on a seventeen-item
+        # page made four real decisions impossible to find. Still one click away,
+        # because "she told me on the phone there isn't one" has to go somewhere.
+        settled = r['status'] in ('satisfied', 'not_applicable', 'missing') and not cur
         if settled:
-            a('<details class="ckover"><summary>change this</summary>')
+            a('<details class="ckover"><summary>%s</summary>'
+              % ('say something about this' if r['status'] == 'missing' else 'change this'))
         a('<div class="ckpick"><label>Your call</label>')
         a('<select class="ckv" data-item="%s">' % _e(str(r['item'].get('id'))))
         for val, txt in opts:

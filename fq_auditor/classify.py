@@ -1126,6 +1126,17 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
     if doc['doc_type'] in ENTITY_TYPES:
         doc['entity'] = entity_name(t)
 
+    # A lease is Personal by default because most of them are the doctor's
+    # rental properties. A COMMERCIAL lease is the practice's premises, and
+    # saying so is the whole first line of the document. Prather's Memphis lease
+    # was read as Personal, so the two lease items reported "these look like
+    # personal accounts, not practice ones" about the very document that
+    # answered them — and she had already ticked that subtask as sent.
+    if doc['doc_type'] == 'rental_lease' and has(
+            h, r'\bcommercial lease\b', r'\bcommercial\s+(?:property|premises|space)\b',
+            r'\boffice\s+(?:lease|space)\b', r'\bretail\s+(?:lease|space)\b'):
+        doc['owner_side'] = 'Practice'
+
     doc['account_kind'] = account_kind(t, doc['doc_type'], doc.get('account_tail'))
     if doc['doc_type'] != 'unknown' and doc['owner_side'] is None:
         doc['notes'].append('personal vs practice unclear - needs a human call')
