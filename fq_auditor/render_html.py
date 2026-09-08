@@ -1119,17 +1119,23 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
   display:inline-block;padding:1px 0;border-bottom:1px dotted #C7CDD4}
 .ckover>summary::-webkit-details-marker{display:none}
 .ckover>summary:hover{color:var(--fq-navy)}
-.bar{display:flex;height:11px;border-radius:6px;overflow:hidden;margin:10px 0 7px;
-     background:var(--fq-line)}
-.bar span{display:block}
+/* ckbar, not bar. A `.bar` rule already exists in this stylesheet — dead, but
+   still matching — and its align-items:center stopped the segments stretching,
+   so they had no height and the whole thing rendered as an empty grey track.
+   Same failure as the preview table that inherited the page's own .grid and
+   collapsed into two columns. Prefix anything added to a shared stylesheet. */
+.ckbar{display:flex;align-items:stretch;gap:0;height:11px;border-radius:6px;
+       overflow:hidden;margin:10px 0 7px;background:var(--fq-line)}
+.ckbar span{display:block;height:100%}
 .bok{background:#1D9E75} .bcall{background:var(--fq-orange)} .bmiss{background:#C8CDD3}
-.barkey{display:flex;gap:16px;font-size:12px;color:var(--fq-slate);margin-bottom:10px}
-.barkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.ckbarkey{display:flex;gap:16px;font-size:12px;color:var(--fq-slate);margin-bottom:10px}
+.ckbarkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
 .kok{background:#1D9E75} .kcall{background:var(--fq-orange)} .kmiss{background:#C8CDD3}
 /* A group heading inside the checklist, so the three jobs read as three jobs. */
-.ckgrp{grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:.4px;
-       text-transform:uppercase;color:var(--fq-slate);margin:14px 0 2px}
-.ckgrp:first-child{margin-top:2px}
+.ckgrp{grid-column:1/-1;font-size:13px;font-weight:700;letter-spacing:.3px;
+       color:var(--fq-navy);margin:18px 0 4px;padding-bottom:5px;
+       border-bottom:2px solid var(--fq-baby)}
+.ckgrp:first-child{margin-top:4px}
 .ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
@@ -1687,13 +1693,13 @@ def render_checklist_summary(a, results, client, verdicts=None):
 
     a('<div class="sum">')
     a('<h3>What we asked %s for</h3>' % _e(client))
-    a('<div class="bar" title="%d answered, %d need your call, %d not sent yet">'
+    a('<div class="ckbar" title="%d answered, %d need your call, %d not sent yet">'
       % (n_done, n_call, n_miss))
     for n, cls in ((n_done, 'bok'), (n_call, 'bcall'), (n_miss, 'bmiss')):
         if n:
             a('<span class="%s" style="flex:%d"></span>' % (cls, n))
     a('</div>')
-    a('<div class="barkey">'
+    a('<div class="ckbarkey">'
       '<span><i class="kok"></i>%d answered</span>'
       '<span><i class="kcall"></i>%d need your call</span>'
       '<span><i class="kmiss"></i>%d not sent yet</span></div>'
