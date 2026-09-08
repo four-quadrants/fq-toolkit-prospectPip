@@ -1132,10 +1132,21 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckbarkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
 .kok{background:#1D9E75} .kcall{background:var(--fq-orange)} .kmiss{background:#C8CDD3}
 /* A group heading inside the checklist, so the three jobs read as three jobs. */
-.ckgrp{grid-column:1/-1;font-size:13px;font-weight:700;letter-spacing:.3px;
-       color:var(--fq-navy);margin:18px 0 4px;padding-bottom:5px;
-       border-bottom:2px solid var(--fq-baby)}
-.ckgrp:first-child{margin-top:4px}
+.ckgroup{margin-top:14px}
+.ckgroup:first-of-type{margin-top:4px}
+.ckgrp{font-size:13px;font-weight:700;letter-spacing:.3px;color:var(--fq-navy);
+       padding:7px 0 6px;border-bottom:2px solid var(--fq-baby);cursor:pointer;
+       list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+.ckgrp::-webkit-details-marker{display:none}
+/* A caret drawn in CSS, so the heading reads as something you can open before
+   anyone clicks it. Rotates when the group opens. */
+.ckgrp::before{content:'';width:0;height:0;border-left:5px solid var(--fq-slate);
+       border-top:4px solid transparent;border-bottom:4px solid transparent;
+       transition:transform .12s}
+.ckgroup[open]>.ckgrp::before{transform:rotate(90deg)}
+.ckgn{margin-left:auto;font-weight:600;font-size:12px;color:var(--fq-slate);
+      background:var(--fq-baby-pale);border-radius:9px;padding:1px 9px}
+.ckgroup>.sumgrid{margin-top:9px}
 .ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
@@ -1714,8 +1725,6 @@ def render_checklist_summary(a, results, client, verdicts=None):
     else:
         a('<div class="sumsub">All %d items are answered. Click a document name to '
           'spot-check it.</div>' % n_ok)
-    a('<div class="sumgrid">')
-
     def _group(r):
         if r['status'] in ('mismatched', 'partly satisfied') or r.get('verdict_stale'):
             return 0
@@ -1726,12 +1735,22 @@ def render_checklist_summary(a, results, client, verdicts=None):
     _headings = {0: 'Your call — the auditor cannot decide these',
                  1: 'Waiting on the client',
                  2: 'Answered'}
+    _counts = {0: n_call, 1: n_miss, 2: n_done}
     _seen = None
 
+    # Each group is its own <details> holding its own grid. The tiles sit in a
+    # CSS grid, so a heading could only ever be a full-width row inside it —
+    # which is why the first version scrolled: seventeen tiles, always open,
+    # with nothing to collapse. Only the group that needs a decision starts
+    # open; the other two are one click away and cost no screen until asked for.
     for r in rows:
         g = _group(r)
         if g != _seen:
-            a('<div class="ckgrp">%s</div>' % _headings[g])
+            if _seen is not None:
+                a('</div></details>')
+            a('<details class="ckgroup"%s><summary class="ckgrp">%s'
+              '<span class="ckgn">%d</span></summary><div class="sumgrid">'
+              % (' open' if g == 0 else '', _headings[g], _counts.get(g, 0)))
             _seen = g
         cls, mark = CK_MARK.get(r['status'], ('part', '?'))
         a('<div class="ck %s">' % cls)
@@ -1812,7 +1831,9 @@ def render_checklist_summary(a, results, client, verdicts=None):
         if settled:
             a('</details>')
         a('</div></div>')
-    a('</div></div>')
+    if _seen is not None:
+        a('</div></details>')          # close the last group's grid and details
+    a('</div>')                        # close .sum
 
 
 
