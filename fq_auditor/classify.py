@@ -232,6 +232,64 @@ def covered_months(text):
     return out
 
 
+# A company suffix is the only reliable marker of an entity name in a tax
+# packet. Matching bare capitalised words instead pulls in every heading on the
+# page, and matching the "Name" box fails because the label and the value sit in
+# different text runs — the box reads "Name" then, next line, the form's own
+# instructions.
+_ENTITY_LINE = re.compile(
+    r'^[ \t]*([^\n]{3,70}?\b(?:LLC|L\.L\.C\.|PLLC|P\.L\.L\.C\.|'
+    r'P\.?A\.?|INC\.?|CORP\.?|CORPORATION|LTD\.?|P\.?C\.?)\.?)[ \t]*$',
+    re.M)
+
+# Lines that carry a company suffix but are not the taxpayer.
+_NOT_ENTITY = re.compile(r'\b(?:form|schedule|worksheet|instructions|page|'
+                         r'department of the treasury|internal revenue)\b', re.I)
+
+
+def entity_name(text, pages=8):
+    """The entity a business document belongs to, or None.
+
+    WHY FREQUENCY RATHER THAN POSITION
+    A tax packet names two companies: the taxpayer and whoever prepared it. The
+    preparer is often FIRST — the cover letter is on their letterhead — so
+    "take the earliest" reliably returns the accountant. But the taxpayer is
+    reprinted at the top of every schedule while the preparer appears once, so
+    the one that RECURS is the one the document is about.
+
+    That is also why a single occurrence is never enough. On a personal 1040 the
+    only company name present is the preparer's, and returning it would attach a
+    firm to a document that has no entity at all.
+
+    Returns the name as printed, so "PAIGE M PRATHER, DDS, PLLC" keeps its case
+    for display. Compare with entity_key().
+    """
+    if not text:
+        return None
+    # A tax packet runs to hundreds of pages; the taxpayer's name is reprinted
+    # on the first few. Scanning the whole thing costs seconds per document and
+    # finds nothing the opening pages did not.
+    counts = {}
+    for m in _ENTITY_LINE.finditer(text[:120000]):
+        name = ' '.join(m.group(1).split())
+        if _NOT_ENTITY.search(name) or len(name) < 5:
+            continue
+        counts[entity_key(name)] = counts.get(entity_key(name), [0, name])
+        counts[entity_key(name)][0] += 1
+    best = [v for v in counts.values() if v[0] >= 2]
+    if not best:
+        return None
+    best.sort(key=lambda v: -v[0])
+    return best[0][1]
+
+
+def entity_key(name):
+    """A name reduced for comparison: lowercase, no punctuation, no suffix."""
+    s = re.sub(r'[^a-z0-9 ]+', ' ', (name or '').lower())
+    s = re.sub(r'\b(?:llc|pllc|pa|pc|inc|corp|corporation|ltd|dds|dmd|md)\b', ' ', s)
+    return ' '.join(s.split())
+
+
 def primary_year(text, doc_type=None):
     """The year the document is ABOUT, not every year it mentions."""
     head = text[:4000]
@@ -866,6 +924,14 @@ INSURANCE_TYPES = ('disability_insurance', 'life_insurance', 'overhead_insurance
 PERIODIC = set(STATEMENT_TYPES) | {'payroll_summary', 'provider_productivity',
                                    'day_sheet', 'pnl', 'balance_sheet'}
 
+# Types whose subject is a company, so an entity name read off them is the
+# entity the document is ABOUT. Deliberately excludes statements — a bank
+# statement's letterhead names the bank — and personal returns, which name no
+# company at all beyond whoever prepared them.
+ENTITY_TYPES = ('business_tax_return', 'partnership_tax_return', 'pnl',
+                'balance_sheet', 'debt_schedule', 'employment_contract',
+                'rental_lease')
+
 
 _FINANCIAL_MARKERS = (r'account\s*(?:number|no\.?)', r'statement', r'balance', r'\binvoice\b',
                       r'\bpolicy\b', r'\bpremium\b', r'gross pay', r'\bpayroll\b',
@@ -1017,6 +1083,12 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
     if doc['owner_side'] is None:
         doc['owner_side'] = infer_side(h, doc['doc_type'], practice_names, full=t,
                                        home_tokens=home_tokens)
+    # Which company this belongs to. Only asked of document types that name one:
+    # a bank statement's letterhead is the BANK, and a personal return names
+    # nobody, so reading either would attach an entity that isn't the subject.
+    if doc['doc_type'] in ENTITY_TYPES:
+        doc['entity'] = entity_name(t)
+
     doc['account_kind'] = account_kind(t, doc['doc_type'], doc.get('account_tail'))
     if doc['doc_type'] != 'unknown' and doc['owner_side'] is None:
         doc['notes'].append('personal vs practice unclear - needs a human call')

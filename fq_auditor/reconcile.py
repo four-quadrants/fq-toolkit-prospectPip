@@ -15,6 +15,7 @@ single lease becomes a mismatch rather than a satisfied item.
 import re
 from collections import defaultdict
 
+import classify
 from classify import MONTH_NAMES
 from series import month_index
 
@@ -67,6 +68,81 @@ def corroborate(docs):
 # per-item evaluation
 # --------------------------------------------------------------------------
 
+# Words that sit in front of "clinic"/"location"/"building" without naming
+# anything — the qualifier is the word before them, not these.
+_ENTITY_STOP = {'the', 'a', 'an', 'and', 'or', 'of', 'for', 'each', 'all',
+                'any', 'other', 'every', 'ytd', 'main', 'this', 'that'}
+
+# "for the wellness clinic", "Memphis location Profit & Loss", "dental building"
+_ENTITY_ASK = re.compile(
+    r"\b([A-Za-z][A-Za-z'&.-]{2,})\s+(clinic|location|building)\b", re.I)
+
+
+def entity_asked_for(item):
+    """The specific entity a checklist item names, or None.
+
+    WHY THIS IS READ FROM THE LABEL AND NOT STORED ON THE ITEM
+    checklist_reviewed.json files already exist for every client processed so
+    far. Adding a field would mean every one of them silently lacks it, and the
+    check would appear to work while doing nothing on exactly the clients we
+    already believe we have audited.
+
+    ONE entity, or none. An ask that lists several — Prather's debt schedule
+    wants "all locations where applicable (the main office, Wellness Clinic,
+    Memphis Location)" — is a single document covering all of them. Demanding
+    that it belong to the wellness clinic would replace the false green this
+    function exists to prevent with an equally wrong false red.
+
+    Returns (key, phrase) — the distinctive word to match on, and the wording
+    to quote back to the reviewer — or (None, None).
+    """
+    # Nothing to check if the evidence could never carry an entity. A .qbb
+    # backup and a "guesstimate of the building's value" name no company, so
+    # enforcing on them turns a satisfied item into a question nobody can
+    # answer from the document.
+    if not any(t in classify.ENTITY_TYPES for t in (item.get('satisfied_by') or ())):
+        return None, None
+
+    label = item.get('label') or ''
+    hits = []
+    for m in _ENTITY_ASK.finditer(label):
+        word = m.group(1).lower()
+        # A list member, not a lone subject: "personal, practice, & dental
+        # building" wants all three, and Rebol has five items shaped that way.
+        # Reading the last one as THE entity marked his practice P&Ls wrong.
+        before = label[:m.start()].rstrip().lower()
+        if before.endswith(('&', 'and', ',', 'or', '+', 'e.g.', 'such as')):
+            continue
+        if word not in _ENTITY_STOP and word not in [h[0] for h in hits]:
+            hits.append((word, ' '.join(m.group(0).split()).lower()))
+    return hits[0] if len(hits) == 1 else (None, None)
+
+
+def contested_entity_types(checklist):
+    """Document types that two or more DIFFERENT entities are asked for under.
+
+    This is the condition that actually produces a false green. Prather's
+    checklist asks for business tax returns for the wellness clinic AND for the
+    Memphis location; one Paige M Prather PLLC return arrived and satisfied
+    both. Neither item could have been confirmed from the documents, because
+    nothing distinguishes them but the entity.
+
+    Where only ONE entity is named for a type there is no such ambiguity, and
+    demanding proof of identity does harm instead: Rebol's building entity is
+    "69 McDowell Street LLC", which shares no word with the "practice building"
+    the item asks for, so his lease would be marked wrong for a mismatch that
+    exists only in the naming.
+    """
+    seen = defaultdict(set)
+    for item in checklist:
+        key, _ = entity_asked_for(item)
+        if not key:
+            continue
+        for t in item.get('satisfied_by') or ():
+            seen[t].add(key)
+    return {t for t, keys in seen.items() if len(keys) > 1}
+
+
 def _eval_item(item, found, facts):
     """Return (status, note). `found` is every doc matching the item's types."""
     problems = []
@@ -75,6 +151,32 @@ def _eval_item(item, found, facts):
         if item.get('confirmed_unavailable'):
             return 'satisfied', 'confirmed unavailable by the client'
         return 'missing', 'optional (if applicable)' if item.get('optional') else ''
+
+    # ---- the item names a particular entity ----------------------------
+    # An item asking for "the wellness clinic's returns" is not answered by the
+    # main practice's return, but both are business_tax_return and the matcher
+    # sees no difference. On Prather this marked BOTH the wellness-clinic and
+    # the Memphis items satisfied off one Paige M Prather PLLC return — three
+    # separate asks, one document, two of them wrongly closed.
+    #
+    # A false green is the worst outcome this tool can produce: it tells the
+    # reviewer to stop chasing something the client never sent. So when the
+    # entity cannot be confirmed the item is NOT satisfied, even though that
+    # means occasionally asking a human about a document that was in fact right.
+    want, phrase = entity_asked_for(item)
+    if want and any(t in facts.get('contested_types', ())
+                    for t in item.get('satisfied_by') or ()):
+        seen = {(d.get('entity') or '').strip() for d in found if d.get('entity')}
+        if not any(want in classify.entity_key(e) for e in seen):
+            if seen:
+                return 'mismatched', (
+                    "this asks for the %s specifically; what arrived belongs to "
+                    "%s — confirm whether the %s files separately"
+                    % (phrase, ', '.join(sorted(seen)), phrase))
+            return 'mismatched', (
+                "this asks for the %s specifically, and no entity name could be "
+                "read off what arrived — open it and confirm which it is"
+                % phrase)
 
     # ---- required tax years -------------------------------------------
     if item.get('years'):
@@ -259,6 +361,7 @@ def reconcile(docs, checklist):
                 by_type[extra].append(d)
 
     facts = corroborate(docs)
+    facts['contested_types'] = contested_entity_types(checklist)
     matched, results = set(), []
 
     for item in checklist:

@@ -70,9 +70,44 @@ def _ocr_with_rescue(page, dpi):
     return better if len(better.strip()) > len(out.strip()) else out
 
 
+# A page can carry a full text layer that is not text. A PDF whose fonts ship no
+# ToUnicode map extracts as a substitution cipher: Prather's Memphis lease came
+# back as 82,000 characters beginning `!"##$%!&'()($'*$)'+%$$#$,-`, which is
+# "COMMERCIAL LEASE AGREEMENT" shifted. It passed the length gate, classified as
+# unknown, and landed in "unexpected" while two lease items read as missing —
+# the client had sent the document and the audit said she had not.
+#
+# Legible text is mostly letters and digits; a cipher is mostly punctuation.
+# Measured across 532 documents from three completed clients, the lowest ratio
+# on a genuinely readable page was 0.473, and the mojibake lease sits at 0.237.
+# 0.40 sits in that gap with room on both sides.
+MIN_LEGIBLE_ALNUM = 0.40
+# Short pages swing wildly — a two-word page of "$1,204.55 —" proves nothing —
+# so only judge legibility where there is enough text to judge.
+MIN_CHARS_TO_JUDGE = 200
+
+
+def alnum_ratio(text):
+    """Share of non-space characters that are letters or digits."""
+    solid = [c for c in text if not c.isspace()]
+    if not solid:
+        return 0.0
+    return sum(1 for c in solid if c.isalnum()) / len(solid)
+
+
 def _page_text(page, dpi=OCR_DPI):
     t = page.get_text() or ''
     if len(t.strip()) >= MIN_TEXT_LAYER_CHARS:
+        if (len(t.strip()) < MIN_CHARS_TO_JUDGE
+                or alnum_ratio(t) >= MIN_LEGIBLE_ALNUM):
+            return t, False
+        # Same escalation the PSM 6 rescue uses above: try the alternative and
+        # keep it only if it genuinely reads better. If OCR does no better, the
+        # original is returned unchanged — a bad guess must not make things
+        # worse than leaving them alone.
+        alt = _ocr_with_rescue(page, dpi)
+        if alt and alnum_ratio(alt) > alnum_ratio(t):
+            return alt, True
         return t, False
     return _ocr_with_rescue(page, dpi), True
 
@@ -215,7 +250,10 @@ SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
 #                    all, so their empty cache entries must not be reused.
 #   v5 (2026-08-28): password-protected PDFs are now opened, so their
 #                    empty cache entries must not be reused.
-OCR_VERSION = 6
+#   v7 (2026-09-04): pages whose text layer is a substitution cipher (a PDF with
+#                    no ToUnicode map) are now OCR'd. Their cached gibberish
+#                    would otherwise be served forever.
+OCR_VERSION = 7
 
 
 def _cache_paths(cache_dir, digest):

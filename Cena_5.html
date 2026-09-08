@@ -234,7 +234,7 @@
             <div class="toggles" id="toggles"></div>
             <div class="field">
               <label>Also redact these words</label>
-              <input type="text" id="keywords" placeholder="e.g. Rebol, 1234 Oak St">
+              <input type="text" id="keywords" placeholder="e.g. Halvorsen, 1234 Oak St">
               <div class="desc">Comma separated. Case insensitive, matched literally.</div>
             </div>
             <div class="field">
@@ -1026,7 +1026,7 @@ var DETECTORS = {
   },
   creditCard:function(text){
     // Luhn alone passes roughly one in ten random digit strings. Measured against
-    // the Bassett corpus that produced 104 "card numbers" — every one of them a
+    // an early client corpus that produced 104 "card numbers" — every one of them a
     // trace or reference number on a bank statement, not one with a real issuer
     // prefix, and not one with card wording anywhere near it. Issuer BIN plus
     // length is what separates a card from a transaction reference.
