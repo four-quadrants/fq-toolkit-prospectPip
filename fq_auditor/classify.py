@@ -290,6 +290,12 @@ def entity_key(name):
     return ' '.join(s.split())
 
 
+# A tax return is prepared the year AFTER the year it reports on, so its own
+# pages carry the later date everywhere. See primary_year.
+TAX_RETURN_TYPES = ('business_tax_return', 'personal_tax_return',
+                    'partnership_tax_return')
+
+
 def primary_year(text, doc_type=None):
     """The year the document is ABOUT, not every year it mentions."""
     head = text[:4000]
@@ -297,6 +303,13 @@ def primary_year(text, doc_type=None):
               r'for calendar year (20\d\d)',
               r'[Tt]ax [Yy]ear\s*:?\s*(20\d\d)',
               r'beginning[^\n]{0,30}(20\d\d)[^\n]{0,30}ending',
+              # The preparer's cover letter, which is page one of most packets
+              # and states the year in a full sentence: "Your 2023 Federal S
+              # Corporation Income Tax return will be electronically filed".
+              # This is the most reliable year signal in a return and nothing
+              # was reading it.
+              r'\byour\s+(20\d\d)\s+(?:federal|state|amended)',
+              r'(20\d\d)\s+(?:federal|state)[^\n]{0,50}?income tax return',
               r'Form\s*1040[^\n]{0,40}?(20\d\d)',
               r'Form\s*1120-?S[^\n]{0,40}?(20\d\d)',
               r'\bW-?2\b[^\n]{0,40}?(20\d\d)',
@@ -305,9 +318,26 @@ def primary_year(text, doc_type=None):
         if m:
             return m.group(1)
 
-    mon, yr, _ = statement_period(text)
-    if yr:
-        return yr
+    # Only a periodic document has a statement period. Asked of a tax return,
+    # this scans a 200-page packet and returns a date off whichever schedule
+    # mentions one first — a depreciation table, an estimated-payment voucher.
+    # It dated a 2023 return to 2022, another to 2021, and a 1120-S to 2018,
+    # then the renamer wrote those years into the filenames.
+    # Everything except a tax packet keeps this fallback. Written as an
+    # exclusion rather than a list of allowed types because the allow-list
+    # version also stripped it from credit reports and debt schedules, which
+    # are genuinely dated documents that had been reading correctly — 41
+    # documents across three finished clients changed, and only the tax returns
+    # among them were wrong before.
+    #
+    # A return is PREPARED the year after the year it covers, so its packet is
+    # full of the later date: filing instructions, estimated-payment vouchers,
+    # signature dates. Scanning for a period found those and dated a 2024 return
+    # to 2025 — consistently one year out, and on one Rebol 1120-S, five.
+    if doc_type not in TAX_RETURN_TYPES:
+        mon, yr, _ = statement_period(text)
+        if yr:
+            return yr
 
     # Wage forms print the tax year as a bare number, often the only year on the
     # page, and OCR frequently mangles the words around it ("ignmoekonen 2024").

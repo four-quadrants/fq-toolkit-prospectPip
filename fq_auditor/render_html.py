@@ -825,8 +825,16 @@ def build_clarification(res, plan, client):
                 L.append('      - %s' % f)
         L.append('')
 
-    L.append('Open this run\'s Intake Review page to resolve the filing decisions,')
-    L.append('then export decisions.json and re-run with --decisions.')
+    # This used to tell the reader to "export decisions.json and re-run with
+    # --decisions", which was true of the command-line tool and has not been
+    # true since the app grew a Save button. Instructions that describe a
+    # workflow nobody uses are worse than none: they send someone looking for a
+    # flag that isn't there.
+    L.append('This writeup is a snapshot of the run above. Decisions you save on '
+             'the Review page')
+    L.append('do not change it until the audit runs again — press Run the audit, '
+             'or Build File Tree,')
+    L.append('which re-runs it for you.')
     return '\n'.join(L)
 
 
