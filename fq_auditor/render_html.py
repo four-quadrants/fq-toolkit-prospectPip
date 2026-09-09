@@ -1765,7 +1765,13 @@ def render_checklist_summary(a, results, client, verdicts=None):
         if r.get('verdict_stale'):
             lab += '<span class="ckstale">check \u2014 evidence changed</span>'
         a('<div class="cklab">%s</div>' % lab)
-        if r.get('note') and r['status'] != 'satisfied':
+        # A satisfied item normally hides its note, because the auditor's own
+        # note there says nothing a green tick has not already said. A note a
+        # PERSON wrote is different — it is the reason the item is settled, and
+        # it is the only record of a phone call. Marking something satisfied
+        # should not be what makes your own sentence disappear.
+        if r.get('note') and (r['status'] != 'satisfied'
+                              or r.get('human') or r.get('human_note')):
             a('<div class="cknote">%s</div>' % _e(r['note']))
         # What was said about this in the portal. Context, not a verdict —
         # nothing here changes the item's status, it just stops the reviewer

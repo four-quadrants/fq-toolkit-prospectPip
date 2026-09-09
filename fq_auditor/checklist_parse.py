@@ -17,7 +17,7 @@ Checklists vary by client, so NOTHING here runs an audit on its own. The parsed
 model is written out for a human to review and correct first -- see
 `review.py`. `checklist_bassett.py` remains the hardcoded fallback.
 """
-import re, os, json, unicodedata
+import re, os, json, hashlib, unicodedata
 
 import pymupdf
 
@@ -196,10 +196,40 @@ STOP = {'the', 'of', 'a', 'an', 'for', 'and', 'to', 'in', 'any', 'all', 'each',
         'please', 'current', 'that', 'as', 'by', 'with', 'is', 'are', 'be'}
 
 
-def _slug(section, text):
+def _slug(section, text, seen=None):
+    """A stable id for one checklist item. Must be UNIQUE within a checklist.
+
+    This used to be the first three meaningful words, and every request task
+    opens the same way: "2024, 2025, & 2026 YTD Profit & Loss", "…Balance
+    Sheet", "…Total Patients". All of them slugged to b_2024_2025_2026 — eight
+    items sharing one id on Prather, six each on Rebol, Oyler and Spaulding.
+
+    Verdicts and notes are keyed by this id, so marking Total Patients satisfied
+    also marked the P&L, the balance sheet, the production report, doctor days,
+    new patients and both location P&Ls satisfied. On screen every one of those
+    dropdowns carried the same data-item, so changing one wrote to whichever the
+    browser matched first. Nothing about it looked wrong.
+
+    So: more words, plus a short digest of the whole label. The digest is what
+    guarantees uniqueness — words alone still collide on labels that differ only
+    at the end. It is derived from the text, so it is the same on every run and
+    saved decisions keep matching.
+    """
     words = [w for w in re.findall(r'[a-z0-9]+', text.lower()) if w not in STOP]
-    base = '_'.join(words[:3]) or 'item'
-    return ('p_' if section.lower().startswith('personal') else 'b_') + base
+    base = '_'.join(words[:5]) or 'item'
+    digest = hashlib.sha1(' '.join(text.lower().split()).encode('utf-8')).hexdigest()[:6]
+    out = ('p_' if section.lower().startswith('personal') else 'b_') + base + '_' + digest
+    # Two items whose text is genuinely identical — Rebol's checklist carries
+    # the same Quickbooks line twice — cannot be told apart by their text, so
+    # they get a counter. Order within one checklist is stable, so this is too.
+    if seen is not None:
+        n, uniq = 1, out
+        while uniq in seen:
+            n += 1
+            uniq = '%s_%d' % (out, n)
+        seen.add(uniq)
+        return uniq
+    return out
 
 
 def _satisfied_by(text):
@@ -277,7 +307,7 @@ def _client_ask(text, subs, kind, rng, months, years, optional_years):
     return ask
 
 
-def build_item(raw):
+def build_item(raw, seen=None):
     text, subs, section = raw['text'], raw['subs'], raw['section']
     blob = " ".join([text] + subs)
     low = blob.lower()
@@ -359,7 +389,7 @@ def build_item(raw):
                                   re.search(r'"[^"]+"\s*and\s*"', text)) else None
 
     item = dict(
-        id=_slug(section, text),
+        id=_slug(section, text, seen),
         section='Personal' if section.lower().startswith('personal') else 'Practice',
         label=text,
         raw_subs=subs,
@@ -387,7 +417,8 @@ def build_item(raw):
 
 def parse_checklist(pdf_path):
     raws = _tree(_lines(pdf_path))
-    return [build_item(r) for r in raws]
+    seen = set()
+    return [build_item(r, seen) for r in raws]
 
 
 def save(items, path):

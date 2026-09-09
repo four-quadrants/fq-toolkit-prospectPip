@@ -234,7 +234,11 @@ def build(tasks_path, quiet=False):
     with open(tasks_path) as fh:
         data = json.load(fh)
 
-    items, seen = [], set()
+    # `seen` de-duplicates repeated SUBTASK TEXT across stages. `_seen_ids` is a
+    # different job: it guarantees the generated ids are unique, which they were
+    # not — see _slug in checklist_parse. Kept separate because two items can
+    # legitimately share wording across stages and still need distinct ids.
+    items, seen, _seen_ids = [], set(), set()
     for task in data.get('tasks') or []:
         stage = task.get('stage') or 'Request'
         comments = task.get('comments') or []
@@ -249,7 +253,7 @@ def build(tasks_path, quiet=False):
 
             raw = {'section': side_of(text), 'text': text, 'subs': []}
             try:
-                item = build_item(raw)
+                item = build_item(raw, _seen_ids)
             except Exception:
                 continue
             item['stage'] = stage
