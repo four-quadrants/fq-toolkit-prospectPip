@@ -548,6 +548,19 @@ def apply_item_verdicts(results, verdicts, who='reviewer'):
             continue
         rule = VERDICTS.get((v or {}).get('verdict'))
         if not rule:
+            # A note with no verdict. That is the commonest thing anyone writes
+            # against a MISSING item — "she is sending this Monday", "asked on
+            # the call, they don't have one" — and it used to be dropped here,
+            # because this loop only ever looked for a verdict. The note saved,
+            # reappeared in the box, and reached nothing else: not the tile, not
+            # the writeup, not the chase list someone else has to work from.
+            #
+            # It does not change the status. Nobody said it was answered; they
+            # said something about it, and that belongs beside it.
+            extra = ((v or {}).get('note') or '').strip()
+            if extra:
+                r['note'] = (r['note'] + ' — ' + extra) if r.get('note') else extra
+                r['human_note'] = True
             continue
         r['auto_status'] = r.get('auto_status', r['status'])
 
