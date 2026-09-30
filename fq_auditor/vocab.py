@@ -308,7 +308,36 @@ def looks_like_birthdates(text, today_year=None):
     if len(text or '') > 300:
         return False
     years = [int(m.group(1)) for m in DOB_RE.finditer(text or '')]
-    return len(years) >= 2 and all(1900 < y <= today_year - 18 for y in years)
+    if len(years) >= 2 and all(1900 < y <= today_year - 18 for y in years):
+        return True
+    return carries_labelled_birthdate(text, today_year)
+
+
+# A date written out in words, which is how someone types one into a document
+# rather than a form: "Date of Birth    May 1, 1968".
+_DOB_WORDS = re.compile(
+    r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+'
+    r'\d{1,2},?\s+(19\d{2}|20[0-2]\d)\b', re.I)
+_DOB_LABEL = re.compile(r'\b(?:date\s+of\s+birth|birth\s?date|birthday|\bdob\b)\b', re.I)
+
+
+def carries_labelled_birthdate(text, today_year=None):
+    """ONE birthdate, where the document says that is what it is.
+
+    The two-date rule exists because a bare pair of old dates can only be
+    birthdates. A single date cannot carry that on its own — but a document
+    reading "Brian Oyler   Date of Birth   May 1, 1968" says so in words, and
+    an expanded request asking for one person's birth date is answered by
+    exactly that. Requiring two meant the answer sat in the folder unread.
+    """
+    import datetime
+    t = text or ''
+    if len(t) > 400 or not _DOB_LABEL.search(t):
+        return False
+    today_year = today_year or datetime.date.today().year
+    years = ([int(m.group(1)) for m in DOB_RE.finditer(t)]
+             + [int(m.group(1)) for m in _DOB_WORDS.finditer(t)])
+    return bool(years) and all(1900 < y <= today_year - 18 for y in years)
 
 
 def concepts_in(text):

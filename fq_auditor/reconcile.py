@@ -16,6 +16,7 @@ import re
 from collections import defaultdict
 
 import classify
+import vocab
 from classify import MONTH_NAMES
 from series import month_index
 
@@ -118,6 +119,29 @@ def entity_asked_for(item):
     return hits[0] if len(hits) == 1 else (None, None)
 
 
+# "ending in x3309", "account ending 4782", "x2045". Four digits or more, so a
+# year or a month number cannot be mistaken for an account.
+_ACCT_ASK = re.compile(
+    r'(?:ending(?:\s+in)?|acct\.?|account)\s*#?\s*x?(\d{4,})\b|\bx(\d{4,})\b', re.I)
+
+
+def account_asked_for(item):
+    """The account number an item names, or None.
+
+    Only where exactly ONE is named. An item asking for several accounts — "all
+    personal and HSA accounts" — is not about a particular one, and an ask that
+    happens to mention two should not be narrowed to whichever came first.
+    """
+    label = item.get('client_ask') or item.get('label') or ''
+    tails = []
+    for m in _ACCT_ASK.finditer(label):
+        t = (m.group(1) or m.group(2) or '').lstrip('0') or (m.group(1) or m.group(2))
+        t = (m.group(1) or m.group(2))
+        if t not in tails:
+            tails.append(t)
+    return tails[0] if len(tails) == 1 else None
+
+
 def contested_entity_types(checklist):
     """Document types that two or more DIFFERENT entities are asked for under.
 
@@ -179,6 +203,40 @@ def _eval_item(item, found, facts):
         if item.get('confirmed_unavailable'):
             return 'satisfied', 'confirmed unavailable by the client'
         return 'missing', 'optional (if applicable)' if item.get('optional') else ''
+
+    # ---- the item names a particular account ---------------------------
+    # An expanded request stops asking for "bank statements" and starts asking
+    # for THIS account: "ending in x3309", "x4782", each its own item. Matching
+    # on document type alone meant every practice statement satisfied all of
+    # them at once, so three separate asks closed on one account's statements
+    # and nobody noticed the other two were never sent.
+    tail = account_asked_for(item)
+    if tail:
+        same = [d for d in found
+                if str(d.get('account_tail') or '').lstrip('xX') == tail]
+        if not same:
+            seen = sorted({str(d.get('account_tail')).lstrip('xX')
+                           for d in found if d.get('account_tail')})
+            return 'mismatched', (
+                'this asks for the account ending %s; what arrived is %s'
+                % (tail, ('for ' + ', '.join('x' + s for s in seen)) if seen
+                   else 'statements with no account number read'))
+        found = same
+
+    # ---- a birthdate item needs an actual birthdate --------------------
+    # 'client_note' is the catch-all for anything short that classified as
+    # nothing else, and the birthdate item accepts client notes because clients
+    # usually type their birthdates rather than upload them. Together that meant
+    # any unrecognised scrap answered it: Oyler's item was satisfied by a tax
+    # extension. The document has to actually carry the date.
+    if 'birthdates' in (item.get('satisfied_by') or ()):
+        real = [d for d in found
+                if d.get('doc_type') == 'birthdates'
+                or vocab.looks_like_birthdates(d.get('text') or '')]
+        if not real:
+            return 'missing', ('%d document(s) were offered for this, none of them '
+                               'carrying a date of birth' % len(found))
+        found = real
 
     # ---- the item names a particular entity ----------------------------
     # An item asking for "the wellness clinic's returns" is not answered by the
