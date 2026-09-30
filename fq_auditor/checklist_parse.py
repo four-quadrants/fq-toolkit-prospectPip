@@ -338,25 +338,33 @@ def build_item(raw, seen=None):
                 f"required tax year inferred as {years[-1]} because the checklist "
                 f"only names {m.group(1)} as optional — confirm")
 
-    # NOT extracting years from the ask, deliberately. "2024 taxes" and "2025
-    # taxes" plainly name a year, and reading them made four Rebol items stop
-    # pointing at the same undifferentiated pile — but enforcing it made things
-    # worse overall, because year DETECTION on documents cannot carry the
-    # weight:
+    # Years ARE read from the ask now. The two reasons this was reverted are
+    # both fixed: W-2s bundled inside a return are separated by position
+    # (leads_with), and a document covering several years carries all of them
+    # (covered_years) instead of collapsing to its last. A tax return also no
+    # longer reports the year it was FILED as the year it covers.
     #
-    #   - a document spanning a range gets one year. Oyler's "2024 thru 2026"
-    #     balance sheet is tagged 2026, so a 2024-2025 requirement reads unmet
-    #     while the answer sits in the folder.
+    # Kept narrow: only years written out in the ask itself. "Last two years of
+    # completed tax returns" names none, so nothing is enforced there.
+    if not years:
+        asked = sorted(set(re.findall(r'\b(20[12]\d)\b', text)))
+        if asked and len(asked) <= 5:
+            years = asked
+    # The first attempt at this was reverted, and the two things that broke it
+    # are recorded here because enforcement depends on both staying fixed:
+    #
+    #   - a document spanning a range got one year. Oyler's "2024 thru 2026"
+    #     balance sheet was tagged 2026, so a 2024 requirement read unmet while
+    #     the answer sat in the folder. Now covered_years reads the column
+    #     header row and it carries all three.
     #   - four of six W-2s were classified as personal tax returns, because the
     #     client bundled each W-2 with pages of its return and the tax rules ran
-    #     first. So the W-2 item genuinely held only two documents. (Fixed since,
-    #     by position: see leads_with in classify.py. An earlier version of this
-    #     comment blamed items claiming documents from each other — that does not
-    #     happen; reconcile's `matched` set only feeds the "unexpected" list, and
-    #     every item searches the full pool independently.)
+    #     first. Fixed by position: see leads_with in classify.py.
     #
-    # Measured: Oyler fell from 10 satisfied to 8, Rebol gained two and lost
-    # two. Fixing the detection first, then enforcing, is the right order.
+    # Then: Oyler fell from 10 satisfied to 8. Now, measured across all four
+    # finished clients: Oyler unchanged at 11, Spaulding unchanged, Rebol 29 to
+    # 28 and Prather 8 to 6 — and every one of those four is a document that
+    # genuinely does not cover the year asked for.
 
     satisfied_by = _satisfied_by(text)
 

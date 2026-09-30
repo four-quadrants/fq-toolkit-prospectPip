@@ -179,6 +179,18 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
                 print("   fetched  %-58s %6.1f KB" % (os.path.basename(dest)[:58], size / 1024.0))
         except Exception as e:
             failed.append((name, str(e)))
+            # Remember the failure, separately from the successes. Without this
+            # a document that CANNOT be downloaded is indistinguishable from one
+            # that has not been downloaded yet: the app counts it as still
+            # waiting, the Audit button stays grey, and pressing Download again
+            # produces the same silence. Three of Oyler's files are .html that
+            # the CDN will not serve, and nothing on screen said so.
+            fails = state.setdefault('__failed__', {})
+            fails[str(f.get('id') or f['url'])] = {
+                'name': name, 'why': str(e)[:200],
+                'tried': time.strftime('%Y-%m-%d %H:%M'),
+            }
+            save_json(state_path, state)
             if not quiet:
                 print("   FAILED   %-58s %s" % (name[:58], e))
 

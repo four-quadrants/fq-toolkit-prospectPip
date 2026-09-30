@@ -218,7 +218,13 @@ def _eval_item(item, found, facts):
 
     # ---- required tax years -------------------------------------------
     if item.get('years'):
-        got = {str(d.get('year')) for d in found if d.get('year')}
+        # Every year a document covers, not just its headline one. A comparative
+        # balance sheet answers three years at once and used to answer one.
+        got = set()
+        for d in found:
+            got.update(str(y) for y in (d.get('years') or []))
+            if d.get('year'):
+                got.add(str(d['year']))
         absent = [y for y in item['years'] if y not in got]
         if absent:
             problems.append(f"provided {', '.join(sorted(got)) or 'no readable year'}; "

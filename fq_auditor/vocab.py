@@ -36,7 +36,14 @@ SHORT_RATIO = 0.85
 # Short tokens where a near-miss would be a real collision: ira/era, hsa/has,
 # loc/lock, ffs/fees. These must match exactly.
 EXACT_ONLY = {'ira', 'hsa', 'loc', 'ffs', 'w2', 'p', 'l', 'llc', 'plc', 'k1',
-              'roth', 'sep', 'ytd'}
+              'roth', 'sep', 'ytd',
+              # Long enough to pass the fuzz threshold, but one edit away from an
+              # ordinary English word that turns up in checklist prose.
+              # "provider" matched "provided" in "a free report is provided at
+              # annualcreditreport.com", which made a CREDIT report item ask for
+              # PRODUCTION reports — and Oyler's nine Dentrix reports satisfied
+              # it. A misspelling of these is far rarer than the collision.
+              'provider', 'providers'}
 
 
 def normalise(text):
@@ -76,14 +83,64 @@ def has_word(hay_words, word):
     return bool(difflib.get_close_matches(word, hay_words, n=1, cutoff=cutoff))
 
 
+def _positions(hay, word):
+    """Every index in hay where this word appears, allowing a near-miss."""
+    return [i for i, h in enumerate(hay) if has_word([h], word)]
+
+
 def has_phrase(text, phrase):
-    """Every word of the phrase present, each allowed a near-miss.
+    """Every word of the phrase present and CLOSE TOGETHER, each allowed a
+    near-miss.
 
     Word-set rather than substring, so "statements for all life insurance
     policies" still matches the phrase "life insurance statement".
+
+    But a word-set alone matches far too much. "A full credit report (not
+    scores) for Brian (a free report is provided at annualcreditreport.com)"
+    matched the phrase "provider report" — "provided" is a near-miss for
+    "provider", and "report" appears elsewhere in the sentence. That made a
+    credit-report item ask for production reports, and Oyler's nine Dentrix
+    reports duly satisfied it.
+
+    Words that belong to the same phrase sit near each other. Words that merely
+    co-occur in a long sentence do not. So the matched positions must fit inside
+    a window a little wider than the phrase itself — enough for "life insurance
+    statement" to find "statements for all life insurance policies", nowhere
+    near enough to join "provided" at word 12 to "report" at word 3.
     """
     hay = _words(normalise(text))
-    return all(has_word(hay, w) for w in _words(normalise(phrase)))
+    words = _words(normalise(phrase))
+    if not words:
+        return False
+    spots = [_positions(hay, w) for w in words]
+    if any(not s for s in spots):
+        return False
+    if len(words) == 1:
+        return True
+    window = len(words) + 3
+    # Smallest span covering one position from each word's list.
+    best = min(
+        (max(combo) - min(combo)
+         for combo in _pick(spots)), default=None)
+    return best is not None and best <= window
+
+
+def _pick(spots, limit=4000):
+    """Combinations of one position per word, bounded so a long document with a
+    common word in it cannot blow up."""
+    import itertools
+    total = 1
+    for s in spots:
+        total *= len(s)
+        if total > limit:
+            # Too many: fall back to the tightest greedy alignment, which is
+            # enough to decide closeness.
+            base = min(spots, key=len)
+            for b in base:
+                yield [min(s, key=lambda i: abs(i - b)) for s in spots]
+            return
+    for combo in itertools.product(*spots):
+        yield list(combo)
 
 
 def matches_any(text, phrases):
@@ -97,19 +154,25 @@ def matches_any(text, phrases):
 # with: at least one of these must ALSO appear (disambiguates broad words)
 # not:  if any of these appear, it is not this concept
 CONCEPTS = {
+    # An expanded request asks for "2025 personal taxes" and "2025 business
+    # taxes" — the word "return" never appears. None of these phrases matched,
+    # so both items fell through to an older rule keyed on the bare word "tax",
+    # which answers "personal" for everything. Oyler's business-tax item was
+    # then satisfied by his 2023 personal 1040.
     'personal_tax_return': {
         'any': ['personal tax return', 'individual tax return', 'form 1040',
-                'tax returns personal', 'income tax return'],
+                'tax returns personal', 'income tax return', 'personal taxes'],
         'not': ['practice', 'business', 'corporate', 's corp', 'entity'],
         'unless_also': ['personal'],
     },
     'business_tax_return': {
         'any': ['business tax return', 'practice tax return', 'form 1120',
                 'corporate tax return', 's corporation', 'entity tax return',
-                'tax returns for any other entities'],
+                'tax returns for any other entities',
+                'business taxes', 'practice taxes'],
     },
     'tax_return_any': {
-        'any': ['tax return', 'completed tax returns'],
+        'any': ['tax return', 'completed tax returns', 'taxes'],
     },
     'pnl': {
         'any': ['profit and loss', 'income statement', 'p and l statement'],

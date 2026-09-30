@@ -360,6 +360,48 @@ def primary_year(text, doc_type=None):
     return None
 
 
+_YEAR_SPAN = re.compile(r'\b(20[12]\d)\s*(?:thru|through|to|[-–—])\s*(20[12]\d)\b', re.I)
+_YEAR_LIST = re.compile(r'\b(20[12]\d)\b')
+
+
+def covered_years(text, primary=None):
+    """Every year this document reports on, not just the headline one.
+
+    A document can cover several years, and until now each carried exactly one.
+    Oyler sent "2024 thru 2026 Oyler Family Dental Balance Sheets" — one file
+    answering three years — and it was tagged 2026. That single fact is why
+    year enforcement was tried and reverted: any 2024 requirement read as unmet
+    while the answer sat in the folder.
+
+    Read from the head only, and only from an explicit span or an explicit list.
+    A year mentioned in passing on page 40 is not a year the document covers.
+    """
+    head = text[:1200] if text else ''
+    years = set()
+    for a, b in _YEAR_SPAN.findall(head):
+        a, b = int(a), int(b)
+        if 0 < b - a <= 6:
+            years.update(str(y) for y in range(a, b + 1))
+    if not years:
+        # A column header row: "| 2024 | 2025 | 2026 |". Oyler's three-year
+        # balance sheet says its span that way and nowhere else — the words
+        # "2024 thru 2026" are only in the filename, which is never read.
+        #
+        # The separator test is what makes this safe. Any two years in a
+        # document are usually consecutive, so consecutiveness proves nothing:
+        # "Analysis Summary 2025" printed on "DATE 05/13/2026" has both, and
+        # counting it would let a report about one year satisfy a requirement
+        # for a year it says nothing about. Column headers have only bars,
+        # commas and spaces between them; those two are a title apart.
+        for m in re.finditer(r'(20[12]\d)(?:[\s|,&/]+(?:and\s+)?(20[12]\d)){1,5}', head):
+            run = _YEAR_LIST.findall(m.group(0))
+            if len(set(run)) >= 2 and max(map(int, run)) - min(map(int, run)) <= 6:
+                years.update(run)
+    if primary:
+        years.add(str(primary))
+    return sorted(years)
+
+
 def granularity(text):
     """monthly / annual / quarterly / ytd / period."""
     head = text[:6000]
@@ -1143,6 +1185,7 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
     if doc['doc_type'] == 'unknown' and len(t.strip()) < 100:
         doc['notes'].append('little or no extractable text - may be a scan that failed OCR')
 
+    doc['years'] = covered_years(t, doc.get('year'))
     doc['series_key'] = series_key(doc)
     return doc
 

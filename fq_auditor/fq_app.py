@@ -462,12 +462,20 @@ def lb_status(folder):
     man = lb_fetch.load_json(man_path, None) or {}
     state = lb_fetch.load_json(os.path.join(os.path.dirname(man_path),
                                             lb_fetch.FETCHED), {})
+    # A document that FAILED to download is not a document still waiting. It
+    # will not arrive by pressing Download again, so counting it as outstanding
+    # left the Audit button grey for ever with nothing on screen explaining why
+    # — which reads as a broken tool rather than as three files the CDN refuses
+    # to serve. Counted separately, and said out loud.
+    failed = dict(state.get('__failed__') or {})
     waiting = 0
     for f in man.get('files') or []:
         if (f.get('kind') or 'collection') not in lb_fetch.CLIENT_UPLOAD_TYPES:
             continue
-        if str(f.get('id') or f.get('url') or '') not in state:
-            waiting += 1
+        fid = str(f.get('id') or f.get('url') or '')
+        if fid in failed or fid in state:
+            continue
+        waiting += 1
 
     days = (time.time() - os.path.getmtime(man_path)) / 86400.0
     if days < 1:
@@ -477,7 +485,9 @@ def lb_status(folder):
     else:
         age = '%d days ago' % int(days)
     return {'to_fetch': waiting, 'age': age, 'stale': days >= STALE_DAYS,
-            'project': man.get('project') or ''}
+            'project': man.get('project') or '',
+            'failed': [{'name': v.get('name') or '?', 'why': v.get('why') or ''}
+                       for v in failed.values()]}
 
 
 def guess_inputs(folder):
@@ -698,6 +708,8 @@ button.ghost{background:#fff;border:1px solid #D8D4CA;font:inherit;font-size:13p
 .crumb{font:12.5px ui-monospace,Menlo,monospace;color:#5A6270;background:#F2F0EB;
       padding:7px 10px;border-radius:7px;word-break:break-all;margin-bottom:10px}
 .folders{max-height:260px;overflow:auto;border:1px solid #EFEBE3;border-radius:8px}
+.rootchange summary{font-size:12.5px;color:#8A9099;cursor:pointer}
+.rootchange{margin-top:8px}
 .folders div{padding:8px 11px;border-bottom:1px solid #F4F1EB;cursor:pointer;font-size:14px;
       display:flex;justify-content:space-between}
 .folders div:last-child{border-bottom:0}
@@ -752,19 +764,6 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
        This does not sign in to LaunchBay — it works from the list Austin's daily
        refresh leaves in the client's folder.</p>
 
-    <div class="card" id="rootcard">
-      <label>Working folder</label>
-      <p class="sub" style="margin:0 0 10px">This app can only see inside one folder,
-         and it has no access to anything until you choose it. Pick the folder your
-         client folders live in — every action is checked against it, not just the
-         list below.</p>
-      <div class="row">
-        <button class="primary" id="pickroot">Choose folder…</button>
-        <span class="sub" id="roothint" style="margin:0">Opens the normal Mac folder chooser.</span>
-      </div>
-      <div id="rootnow" class="found hide" style="margin-top:10px"></div>
-    </div>
-
     <div class="card" id="pickcard">
       <label>Client folder</label>
       <div class="crumb" id="crumb">…</div>
@@ -775,6 +774,25 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
         <span style="flex:1"></span>
         <button class="primary" id="pick">Use this folder</button>
       </div>
+    </div>
+
+    <!-- The working folder is set once and then left alone. It used to be a
+         primary button at the top of the page, which made "choose a different
+         folder" look like the first step of the job rather than something you
+         do about once a year. It is now a line of text with a quiet way back. -->
+    <div class="card" id="rootcard">
+      <label>Working folder</label>
+      <div id="rootnow" class="found hide"></div>
+      <details class="rootchange">
+        <summary>Change it</summary>
+        <p class="sub" style="margin:8px 0 10px">The app can see inside this folder
+           and nothing else. Every action is checked against it. Changing it is
+           rarely needed — it should point at Prospects.</p>
+        <div class="row">
+          <button class="ghost" id="pickroot">Choose a different folder…</button>
+          <span class="sub" id="roothint" style="margin:0">Opens the normal Mac folder chooser.</span>
+        </div>
+      </details>
     </div>
 
     <div class="card hide" id="lbcard">
@@ -909,6 +927,14 @@ function lbRefresh(){
       // sent nothing. If the refresh stopped running, this is the only clue.
       if(d.stale) lines.push('WARNING: that is old. Ask Austin whether the daily '
                              +'refresh is still running before trusting "nothing new".');
+      // Named, because "3 documents are missing" with no names sends someone
+      // hunting through the folder for which three.
+      if(d.failed && d.failed.length){
+        lines.push('');
+        lines.push(d.failed.length + ' document(s) could not be downloaded. '
+                   + 'Pressing Download again will not help — ask Austin:');
+        d.failed.forEach(function(f){ lines.push('   - ' + f.name); });
+      }
       el.textContent=lines.join('\n');
       setReady(!d.to_fetch && !d.stale);
     })
@@ -1099,7 +1125,7 @@ document.getElementById('openfolder').onclick=function(){
   fetch('/api/reveal?folder='+encodeURIComponent(FOLDER));
 };
 
-refreshRoot().then(function(root){ if(root) browse(''); });
+refreshRoot().then(function(root){ if(root){ browse(''); } });
 </script></body></html>
 """
 
