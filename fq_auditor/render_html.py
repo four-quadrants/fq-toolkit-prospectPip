@@ -1147,6 +1147,31 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckgn{margin-left:auto;font-weight:600;font-size:12px;color:var(--fq-slate);
       background:var(--fq-baby-pale);border-radius:9px;padding:1px 9px}
 .ckgroup>.sumgrid{margin-top:9px}
+.sumhead{font-size:19px;font-weight:600;color:var(--fq-navy)}
+.block{border-radius:12px;padding:14px 16px;margin:12px 0}
+.block.judge{background:#FDF3E4;border:1px solid #F3D9AE}
+.block.gone{background:#F7F5F0;border:1px solid #E7E2D8}
+.block.ok{background:#EAF5EE;border:1px solid #BFE0CC}
+.blocktitle{font-weight:600;font-size:15px;color:var(--fq-ink)}
+.block.judge .blocktitle{color:#8A5A12}
+.blocksub{font-size:13px;color:var(--fq-slate);margin:2px 0 12px}
+.ckline{background:#fff;border-radius:9px;padding:10px 12px;margin-bottom:8px}
+.ckline:last-child{margin-bottom:0}
+.ckline.quiet{background:transparent;padding:5px 2px;margin-bottom:0;
+  border-bottom:1px solid #F1EDE5}
+.ckline.quiet .cklab{font-size:13.5px;color:var(--fq-slate)}
+.ckwhy{font-size:12.5px;color:var(--fq-slate);margin-top:3px}
+.ckdt{margin-left:6px;color:#8A9099;font-weight:400}
+.morerow{border-top:1px solid #EDE8DF;padding:11px 2px;font-size:13.5px;
+  color:var(--fq-slate);cursor:pointer}
+.morerow:hover{color:var(--fq-navy)}
+.morerow>summary{list-style:none;cursor:pointer}
+.morerow>summary::-webkit-details-marker{display:none}
+.chev{display:inline-block;width:0;height:0;margin-right:8px;
+  border-left:5px solid currentColor;border-top:4px solid transparent;
+  border-bottom:4px solid transparent}
+details.morerow[open] .chev{transform:rotate(90deg)}
+.settledlist{margin-top:8px}
 .ckpick{margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ckpick select{font-size:12px;padding:3px 6px;min-width:0;max-width:210px}
 .ckpick input{font-size:12px;padding:3px 7px;flex:1;min-width:130px}
@@ -1667,184 +1692,142 @@ CK_ORDER = {'missing': 0, 'mismatched': 1, 'partly satisfied': 2,
             'satisfied': 3, 'not_applicable': 4}
 
 
-def render_checklist_summary(a, results, client, verdicts=None):
-    """The checklist, at the top, as something you can take in at a glance.
+# The classifier's own wording, so a chip and the filing log cannot disagree
+# about what a document is. Built from its rules rather than retyped.
+def _doc_labels():
+    try:
+        from classify import RULES
+        return {r.doc_type: r.label for r in RULES}
+    except Exception:
+        return {}
 
-    This is the question the reviewer actually arrived with — did the client send
-    what we asked for — and until now the only answer was a four-column table
-    folded inside a collapsed "Detail" panel, below the filing plan. The filing
-    plan is the machine's business. This is the person's.
 
-    Outstanding items sort first. Each satisfied item names the documents that
-    answered it, and each name opens that document, so "is this really the right
-    thing?" is one click rather than a hunt through the folder.
+DOC_LABELS = _doc_labels()
+DOC_LABELS.setdefault('unknown', 'unrecognised')
+DOC_LABELS.setdefault('client_note', 'client note')
+
+
+def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
+    """The whole point of the page, answering two questions and nothing else.
+
+    What needs YOU, and what the client has not sent. Everything that used to
+    sit here — nine counters in a rail, eleven headed sections, a dropdown on
+    every one of thirty items — answered questions nobody had asked, and buried
+    the two that matter.
+
+    An item needing judgement states WHY on its own line ("what arrived is for
+    x4782"), so the reason is readable without opening anything. A missing item
+    needs no reason: nothing came.
     """
     if not results:
         return
     for r in results:
         v = (verdicts or {}).get(str(r['item'].get('id'))) or {}
         r['_verdict'], r['_vnote'] = v.get('verdict') or '', v.get('note') or ''
-    rows = sorted(results, key=lambda r: (CK_ORDER.get(r['status'], 9),
-                                          (r['item'].get('label') or '').lower()))
-    n_out = sum(1 for r in results
-                if r['status'] in ('missing', 'mismatched', 'partly satisfied'))
-    n_ok = sum(1 for r in results if r['status'] == 'satisfied')
 
-    # Three numbers, because there are three different jobs and they were being
-    # presented as one undifferentiated list of seventeen. An item the auditor
-    # settled needs nothing. An item it could not settle needs YOU. An item
-    # nobody has sent needs the CLIENT. Sorting outstanding-first put those last
-    # two next to each other and left the reader counting tiles to find out how
-    # much work was actually theirs.
-    n_call = sum(1 for r in results
-                 if r['status'] in ('mismatched', 'partly satisfied')
-                 or r.get('verdict_stale'))
-    n_miss = sum(1 for r in results if r['status'] == 'missing')
-    n_done = len(results) - n_call - n_miss
+    def needs_you(r):
+        return (r['status'] in ('mismatched', 'partly satisfied')
+                or bool(r.get('verdict_stale')))
+
+    judge   = [r for r in results if needs_you(r)]
+    absent  = [r for r in results if r['status'] == 'missing' and not needs_you(r)]
+    settled = [r for r in results if r not in judge and r not in absent]
 
     a('<div class="sum">')
-    a('<h3>What we asked %s for</h3>' % _e(client))
-    a('<div class="ckbar" title="%d answered, %d need your call, %d not sent yet">'
-      % (n_done, n_call, n_miss))
-    for n, cls in ((n_done, 'bok'), (n_call, 'bcall'), (n_miss, 'bmiss')):
-        if n:
-            a('<span class="%s" style="flex:%d"></span>' % (cls, n))
+    a('<div class="sumhead">%s</div>' % _e(client))
+    bits = ['%d things were asked for' % len(results)]
+    if settled:
+        bits.append('<b>%d are answered</b>' % len(settled))
+    a('<div class="sumsub">%s.</div>' % ', '.join(bits))
+
+    if judge:
+        a('<div class="block judge">')
+        a('<div class="blocktitle">%d need%s your judgement</div>'
+          % (len(judge), '' if len(judge) == 1 else ''))
+        a('<div class="blocksub">Documents arrived, but the auditor could not '
+          'decide whether they answer the ask.</div>')
+        for r in judge:
+            _render_item(a, r, show_why=True)
+        a('</div>')
+
+    if absent:
+        a('<div class="block gone">')
+        a('<div class="blocktitle">%d never arrived</div>' % len(absent))
+        a('<div class="blocksub">Ask the client for these.</div>')
+        for r in absent:
+            _render_item(a, r, show_why=False)
+        a('</div>')
+
+    if not judge and not absent:
+        a('<div class="block ok"><div class="blocktitle">Nothing outstanding</div>'
+          '<div class="blocksub">Every item is answered and every document has a '
+          'home.</div></div>')
+
+    # Everything else, one line each, costing nothing until asked for.
+    if n_review:
+        a('<div class="morerow" onclick="document.getElementById(\'decidethese\')'
+          '.scrollIntoView({behavior:\'smooth\'})">'
+          '<span class="chev"></span>%d document(s) could not be placed '
+          '\u2014 tell it where they go</div>' % n_review)
+    if settled:
+        a('<details class="morerow open"><summary><span class="chev"></span>'
+          '%d answered</summary><div class="settledlist">' % len(settled))
+        for r in settled:
+            _render_item(a, r, show_why=False, quiet=True)
+        a('</div></details>')
     a('</div>')
-    a('<div class="ckbarkey">'
-      '<span><i class="kok"></i>%d answered</span>'
-      '<span><i class="kcall"></i>%d need your call</span>'
-      '<span><i class="kmiss"></i>%d not sent yet</span></div>'
-      % (n_done, n_call, n_miss))
-    if n_call:
-        a('<div class="sumsub">Start with the %d marked <b>your call</b> — the '
-          'auditor read the documents but cannot decide these. The rest is either '
-          'settled or waiting on the client.</div>' % n_call)
-    elif n_out:
-        a('<div class="sumsub">Nothing needs your judgement. %d item(s) are simply '
-          'waiting on the client.</div>' % n_out)
-    else:
-        a('<div class="sumsub">All %d items are answered. Click a document name to '
-          'spot-check it.</div>' % n_ok)
-    def _group(r):
-        if r['status'] in ('mismatched', 'partly satisfied') or r.get('verdict_stale'):
-            return 0
-        return 2 if r['status'] == 'satisfied' else 1
 
-    rows = sorted(rows, key=lambda r: (_group(r), CK_ORDER.get(r['status'], 9),
-                                       (r['item'].get('label') or '').lower()))
-    _headings = {0: 'Your call — the auditor cannot decide these',
-                 1: 'Waiting on the client',
-                 2: 'Answered'}
-    _counts = {0: n_call, 1: n_miss, 2: n_done}
-    _seen = None
 
-    # Each group is its own <details> holding its own grid. The tiles sit in a
-    # CSS grid, so a heading could only ever be a full-width row inside it —
-    # which is why the first version scrolled: seventeen tiles, always open,
-    # with nothing to collapse. Only the group that needs a decision starts
-    # open; the other two are one click away and cost no screen until asked for.
-    for r in rows:
-        g = _group(r)
-        if g != _seen:
-            if _seen is not None:
-                a('</div></details>')
-            # All three start closed. Opening the first one hid the fact that
-            # any of them could be closed — the group you land in looks like the
-            # page, and nobody discovers a control they never see in its shut
-            # state. Closed, the three headings read as three headings.
-            a('<details class="ckgroup"><summary class="ckgrp">%s'
-              '<span class="ckgn">%d</span></summary><div class="sumgrid">'
-              % (_headings[g], _counts.get(g, 0)))
-            _seen = g
-        cls, mark = CK_MARK.get(r['status'], ('part', '?'))
-        a('<div class="ck %s">' % cls)
-        a('<div class="ckmark">%s</div><div class="ckbody">' % mark)
-        lab = _e(r['item'].get('label') or r['item'].get('id'))
-        if r.get('human'):
-            lab += '<span class="ckhuman">your call</span>'
-        if r.get('verdict_stale'):
-            lab += '<span class="ckstale">check \u2014 evidence changed</span>'
-        a('<div class="cklab">%s</div>' % lab)
-        # A satisfied item normally hides its note, because the auditor's own
-        # note there says nothing a green tick has not already said. A note a
-        # PERSON wrote is different — it is the reason the item is settled, and
-        # it is the only record of a phone call. Marking something satisfied
-        # should not be what makes your own sentence disappear.
-        if r.get('note') and (r['status'] != 'satisfied'
-                              or r.get('human') or r.get('human_note')):
-            a('<div class="cknote">%s</div>' % _e(r['note']))
-        # What was said about this in the portal. Context, not a verdict —
-        # nothing here changes the item's status, it just stops the reviewer
-        # having to remember a conversation from three weeks ago.
-        for d in (r['item'].get('discussion') or [])[:3]:
-            a('<div class="cksaid"><b>%s%s</b> %s</div>'
-              % (_e(d.get('who') or 'someone'),
-                 '' if d.get('from_client') else ' (us)',
-                 _e((d.get('text') or '')[:200])))
-        # Cap the chips. One tax-return item on a real client matched fifteen
-        # documents, and printing them all buried every other item on the page.
-        docs = r.get('docs') or []
-        if docs:
-            a('<div class="ckdocs">')
-            for d in docs[:4]:
-                if d.get('path'):
-                    a('<button class="ckdoc openfile" data-path="%s" data-name="%s" '
-                      'title="%s">%s</button>'
-                      % (_e(d['path']), _e(d.get('file') or ''),
-                         _e(d.get('file') or ''), _e(d.get('file') or '')))
-                else:
-                    a('<span class="ckdoc">%s</span>' % _e(d.get('file') or ''))
-            if len(docs) > 4:
-                a('<span class="ckmore">+%d more</span>' % (len(docs) - 4))
-            a('</div>')
-        # The reviewer's own verdict. The auditor reads text; it cannot open a
-        # debt schedule and tell whether the rows under the practice loans are
-        # the doctor's car. Whoever can, says so here, and it carries into the
-        # client email rather than stopping at the screen.
+def _render_item(a, r, show_why=True, quiet=False):
+    """One checklist line: what was asked, why it is here, what you can say."""
+    item = r['item']
+    a('<div class="ckline%s">' % (' quiet' if quiet else ''))
+    a('<div class="cklab">%s</div>' % _e(item.get('label') or item.get('id')))
+    if r.get('verdict_stale'):
+        a('<span class="ckstale">your answer predates the evidence</span>')
+
+    why = []
+    if show_why and r.get('note'):
+        why.append(_e(r['note']))
+    if why:
+        a('<div class="ckwhy">%s</div>' % ' \u00b7 '.join(why))
+
+    docs = r.get('docs') or []
+    if docs and not quiet:
+        a('<div class="ckdocs">')
+        for d in docs[:4]:
+            # The classification, shown only here — on an item you are being
+            # asked about. A chip reading "tax extension.pdf" tells you nothing
+            # about WHY it is attached to a birthdate item; "· client note"
+            # tells you everything.
+            lab = DOC_LABELS.get(d.get('doc_type'), d.get('doc_type') or 'unrecognised')
+            a('<button class="ckdoc" data-path="%s" title="classified as %s">%s'
+              '<span class="ckdt">%s</span></button>'
+              % (_e(d.get('path') or ''), _e(lab), _e(d.get('file') or ''), _e(lab)))
+        if len(docs) > 4:
+            a('<span class="ckmore">+%d more</span>' % (len(docs) - 4))
+        a('</div>')
+
+    if not quiet:
         cur = (r.get('_verdict') or '')
-        # The blank option used to read "\u2014 leave as is \u2014", which sits in the one
-        # place a reader looks to find out what an item currently IS and answers
-        # a different question instead: it describes what happens if you do
-        # nothing, not what the auditor concluded. Naming the current reading
-        # makes the default self-explanatory and the dropdown a correction
-        # rather than a quiz.
-        _said = {'satisfied': 'satisfied', 'missing': 'missing',
+        _said = {'satisfied': 'satisfied', 'missing': 'nothing arrived',
                  'mismatched': 'needs your call', 'partly satisfied': 'half answered',
                  'not_applicable': 'not applicable'}.get(r['status'], r['status'])
-        opts = [('', 'Auditor says: %s \u2014 keep it' % _said),
+        opts = [('', 'Auditor says: %s' % _said),
                 ('satisfied', 'Satisfied \u2014 all here'),
                 ('practice', 'Practice side only'), ('personal', 'Personal side only'),
                 ('not_applicable', 'Not applicable \u2014 they do not have one'),
                 ('missing', 'Still missing \u2014 chase it')]
-        # Shown open only where a person is likely to want it. Putting an open
-        # dropdown on all 36 items made a page with two real decisions look like
-        # a 36-item to-do list, and "Auditor's call" sitting on a satisfied item
-        # read as a question rather than as a statement that nobody has
-        # overruled it. Everything is still overridable; it just waits to be asked.
-        # 'missing' joins these. A document nobody sent is not a judgement call
-        # — it is a chase — and leaving twelve open dropdowns on a seventeen-item
-        # page made four real decisions impossible to find. Still one click away,
-        # because "she told me on the phone there isn't one" has to go somewhere.
-        settled = r['status'] in ('satisfied', 'not_applicable', 'missing') and not cur
-        if settled:
-            a('<details class="ckover"><summary>%s</summary>'
-              % ('say something about this' if r['status'] == 'missing' else 'change this'))
-        a('<div class="ckpick"><label>Your call</label>')
-        a('<select class="ckv" data-item="%s">' % _e(str(r['item'].get('id'))))
+        a('<div class="ckpick">')
+        a('<select class="ckv" data-item="%s">' % _e(str(item.get('id'))))
         for val, txt in opts:
             a('<option value="%s"%s>%s</option>'
               % (_e(val), ' selected' if val == cur else '', _e(txt)))
         a('</select>')
         a('<input class="cknote" data-item="%s" placeholder="note (optional)" value="%s">'
-          % (_e(str(r['item'].get('id'))), _e(r.get('_vnote') or '')))
+          % (_e(str(item.get('id'))), _e(r.get('_vnote') or '')))
         a('</div>')
-        if settled:
-            a('</details>')
-        a('</div></div>')
-    if _seen is not None:
-        a('</div></details>')          # close the last group's grid and details
-    a('</div>')                        # close .sum
-
+    a('</div>')
 
 
 def _tip(names, cap=7):
@@ -1959,7 +1942,8 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # — they just no longer need restating on every client.
 
 
-    render_checklist_summary(a, results, client, item_decisions(decisions))
+    render_checklist_summary(a, results, client, item_decisions(decisions),
+                             n_review=len([p for p in plan if p['review']]))
 
     collided = [p for p in plan if p.get('collision')]
 
@@ -1971,7 +1955,8 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
           'confidently. Have a look at <i>Filed automatically</i> below if you want '
           'to check, otherwise you are done here.</div>')
     else:
-        a('<h2>Decide these<span class="n">%d of %d documents</span></h2>' % (len(review), len(plan)))
+        a('<h2 id="decidethese">Decide these<span class="n">%d of %d documents</span></h2>'
+              % (len(review), len(plan)))
         a('<p class="hint">Everything else has been placed already. Work down this list, '
           'then press <b>Save decisions</b> at the top. Nothing moves until you do.</p>')
 
@@ -2200,40 +2185,11 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
 
     a('</div>')                                    # .main
 
-    # The counts live down the side rather than in a row across the top: they are
-    # context for the work, not the work itself, and a row of seven tiles was the
-    # first thing the eye landed on.
-    a('<aside class="rail">')
-    a('<div class="railcard"><h3>Where this client stands</h3>')
-    def _by(status):
-        return [r['item'].get('label') or r['item'].get('id')
-                for r in results if r['status'] == status]
-
-    for label, n, cls, names in [
-        ('documents to place', len(review), 'warn', [p['file'] for p in review]),
-        ('satisfied', counts.get('satisfied', 0), 'ok', _by('satisfied')),
-        ('mismatched', counts.get('mismatched', 0), '', _by('mismatched')),
-        ('missing', counts.get('missing', 0), 'warn', _by('missing')),
-        ('partly satisfied', counts.get('partly satisfied', 0), 'warn',
-         _by('partly satisfied')),
-        ('not applicable', counts.get('not_applicable', 0), '', _by('not_applicable')),
-        ('series gaps', len(cross['gaps']), '',
-         [g.get('label') for g in cross['gaps']]),
-        ('unexpected', len(unexpected), '',
-         [u.get('file') if isinstance(u, dict) else u for u in unexpected]),
-        ('files with PII', len(leaks), '',
-         [l.get('file') if isinstance(l, dict) else l for l in leaks]),
-    ]:
-        a('<div class="stat %s" data-tip="%s"><b>%d</b><span>%s</span></div>'
-          % (cls, _e(_tip(names)), n, label))
-    a('</div>')
-    a('<div class="railcard tips"><h3>What to do</h3>'
-      '<ol><li>Work down <b>Decide these</b>, and mark anything on the checklist '
-      'the auditor got wrong.</li>'
-      '<li>Press <b>Save decisions</b> — you can save as often as you like.</li>'
-      '<li>Press <b>Build File Tree</b>. It re-runs the audit itself, so your '
-      'choices are picked up.</li></ol></div>')
-    a('</aside>')
+    # The rail is gone. Nine counters — partly satisfied, series gaps, files
+    # with residual PII — answered nine questions nobody had asked, and the
+    # two that matter (what needs me, what never arrived) were competing with
+    # them for the same glance. Those two now ARE the page; the rest is one
+    # collapsed line each, or lives in the internal report where it belongs.
     a('</div>')                                    # .grid
 
     a('</div><footer>Generated locally by the FQ intake auditor. '

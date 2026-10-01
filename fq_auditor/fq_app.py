@@ -604,6 +604,18 @@ def save_settings(folder, client, greeting, checklist):
         pass
 
 
+# What tells us a folder is a CLIENT rather than a drawer holding clients.
+# Any one of these is enough: a folder that has been pulled has the manifest, one
+# that has been worked has _Audit, and one the team set up by hand has a
+# Documents tree long before this tool sees it.
+_CLIENT_MARKS = ('Original_sourcedocs', 'launchbay_manifest.json', '_Audit',
+                 'Documents', '3.) Documents')
+
+
+def is_client_folder(d):
+    return any(os.path.exists(os.path.join(d, m)) for m in _CLIENT_MARKS)
+
+
 def list_dir(path):
     """Folders only, and only inside the root. This is a client picker."""
     root = get_root()
@@ -623,7 +635,8 @@ def list_dir(path):
                     n = len([f for f in os.listdir(full) if not f.startswith('.')])
                 except OSError:
                     n = 0
-                entries.append({'name': name, 'path': full, 'count': n})
+                entries.append({'name': name, 'path': full, 'count': n,
+                                'client': is_client_folder(full)})
     except OSError:
         pass
     parent = os.path.dirname(path)
@@ -708,6 +721,10 @@ button.ghost{background:#fff;border:1px solid #D8D4CA;font:inherit;font-size:13p
 .crumb{font:12.5px ui-monospace,Menlo,monospace;color:#5A6270;background:#F2F0EB;
       padding:7px 10px;border-radius:7px;word-break:break-all;margin-bottom:10px}
 .folders{max-height:260px;overflow:auto;border:1px solid #EFEBE3;border-radius:8px}
+.folders .clientrow{background:var(--fq-baby-pale);font-weight:600;color:var(--fq-navy)}
+.folders .clientrow:hover{background:var(--fq-baby)}
+.folders .clientrow.picked{background:var(--fq-baby);box-shadow:inset 3px 0 0 var(--fq-orange)}
+#golog{max-height:240px;overflow:auto}
 .rootchange summary{font-size:12.5px;color:#8A9099;cursor:pointer}
 .rootchange{margin-top:8px}
 .folders div{padding:8px 11px;border-bottom:1px solid #F4F1EB;cursor:pointer;font-size:14px;
@@ -746,7 +763,6 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   <h1>FQ Toolkit</h1>
   <nav>
     <button id="tab-get" class="on">1 &nbsp;Download Files</button>
-    <button id="tab-audit">2 &nbsp;Audit &amp; File</button>
     <button id="tab-review">3 &nbsp;Review</button>
     <button id="tab-redact">4 &nbsp;Redact</button>
   </nav>
@@ -759,20 +775,19 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   </div>
 
   <div class="pane on" id="pane-get"><div class="wrap">
-    <h2>Download Files</h2>
-    <p class="sub">Downloads whatever the client has uploaded that isn't here yet.
-       This does not sign in to LaunchBay — it works from the list Austin's daily
-       refresh leaves in the client's folder.</p>
+    <h2>Choose a client</h2>
+    <p class="sub">Click a client and the whole job runs: anything they have
+       uploaded is downloaded, the documents are read, and the review opens with
+       what needs you.</p>
 
     <div class="card" id="pickcard">
-      <label>Client folder</label>
       <div class="crumb" id="crumb">…</div>
       <div class="folders" id="folders"></div>
       <div class="row" style="margin-top:10px">
         <button class="ghost" id="up">↑ Up one level</button>
         <button class="ghost" id="home">Back to top</button>
         <span style="flex:1"></span>
-        <button class="primary" id="pick">Use this folder</button>
+        <button class="primary" id="go" disabled>Pick a client first</button>
       </div>
     </div>
 
@@ -780,6 +795,26 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
          primary button at the top of the page, which made "choose a different
          folder" look like the first step of the job rather than something you
          do about once a year. It is now a line of text with a quiet way back. -->
+    <div class="card hide" id="gocard">
+      <div class="row" style="gap:18px">
+        <div style="flex:1;min-width:200px">
+          <label>Client name</label>
+          <input type="text" id="client" placeholder="filled in from LaunchBay">
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label>Email greeting</label>
+          <input type="text" id="greeting" placeholder="Dr. Lastname">
+        </div>
+      </div>
+      <div id="foldernow" class="found" style="margin-top:10px">No client chosen yet.</div>
+      <div id="found"></div>
+      <label style="margin-top:12px">Progress</label>
+      <pre class="log" id="golog"></pre>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="openfolder">Show the files in Finder</button>
+      </div>
+    </div>
+
     <div class="card" id="rootcard">
       <label>Working folder</label>
       <div id="rootnow" class="found hide"></div>
@@ -799,55 +834,10 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <label>Documents from the client</label>
       <div id="lbstatus" class="found">Checking…</div>
       <div class="row" style="margin-top:12px">
-        <button class="primary" id="getdocs">Download from LaunchBay</button>
-        <button class="ghost" id="skipget">Audit</button>
+        <button class="ghost" id="getdocs">Check for new uploads</button>
+        <button class="ghost" id="skipget">Re-read the documents</button>
       </div>
       <pre class="log hide" id="lblog" style="margin-top:12px"></pre>
-    </div>
-  </div></div>
-
-  <div class="pane" id="pane-audit"><div class="wrap">
-    <h2>Audit &amp; File</h2>
-    <p class="sub">Reads every document, checks them against the checklist, and works
-       out where each one should be filed.</p>
-
-    <div class="card" id="foldercard">
-      <label>Client folder</label>
-      <div id="foldernow" class="found">No folder chosen yet.</div>
-      <div class="row" style="margin-top:10px">
-        <button class="ghost" id="backtoget">Choose a different folder</button>
-      </div>
-    </div>
-
-    <div class="card hide" id="ready">
-      <div class="row" style="gap:18px">
-        <div style="flex:1;min-width:200px">
-          <label>Client name</label>
-          <input type="text" id="client" placeholder="filled in from LaunchBay">
-        </div>
-        <div style="flex:1;min-width:200px">
-          <label>Email greeting</label>
-          <input type="text" id="greeting" placeholder="Dr. Lastname">
-        </div>
-      </div>
-      <div id="found"></div>
-      <div class="row" style="margin-top:16px">
-        <button class="primary" id="run">Run the audit</button>
-        <span class="sub" style="margin:0">First run takes a few minutes. After that it's quick.</span>
-      </div>
-    </div>
-
-    <div class="card hide" id="logcard">
-      <label>Progress</label>
-      <pre class="log" id="log"></pre>
-      <div id="done" class="hide" style="margin-top:14px">
-        <p class="sub" style="margin:0 0 10px">Audit finished. Open the <b>Review</b> tab to
-          look at anything it was unsure about, and to build the file tree.</p>
-        <div class="row">
-          <button class="primary" id="goreview">Open the review</button>
-          <button class="ghost" id="openfolder">Show the files in Finder</button>
-        </div>
-      </div>
     </div>
   </div></div>
 
@@ -865,7 +855,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 var CUR = null, FOLDER = null, since = 0, poll = null;
 
 function show(name){
-  ['get','redact','audit','review'].forEach(function(n){
+  ['get','redact','review'].forEach(function(n){
     document.getElementById('pane-'+n).classList.toggle('on', n===name);
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
   });
@@ -879,9 +869,9 @@ function show(name){
 }
 document.getElementById('tab-get').onclick=function(){show('get');};
 document.getElementById('tab-redact').onclick=function(){show('redact');};
-document.getElementById('tab-audit').onclick=function(){show('audit');};
-document.getElementById('backtoget').onclick=function(){show('get');};
-document.getElementById('skipget').onclick=function(){show('audit');};
+document.getElementById('skipget').onclick=function(){
+  if(PICKED) startClient(PICKED.path, PICKED.name);
+};
 
 // --- Get documents ----------------------------------------------------
 // Reads the manifest the scheduled refresh left in the client folder. There is
@@ -996,69 +986,105 @@ function browse(path){
     if(!d.root){ return; }
     CUR=d.path;
     document.getElementById('crumb').textContent=d.path;
-    // Name the folder on the button itself. "Use this folder" left the eye on
-    // the list below and the button appearing to refer to whatever was last
-    // clicked, rather than to where you now are — and clicking a row only ever
-    // navigates INTO it, so nothing in the list is ever the thing being chosen.
-    // Picking the wrong client folder is the worst mistake available here, so
-    // the confirm should say the name out loud.
-    var here = (d.path||'').replace(/\/+$/,'').split('/').pop() || d.path;
-    var pickBtn = document.getElementById('pick');
-    if(pickBtn){
-      pickBtn.textContent = 'Use \u201c' + here + '\u201d';
-      pickBtn.title = 'Use ' + d.path;
-    }
     // No way above the working folder, so the control is hidden there rather
     // than sitting dead.
     document.getElementById('up').style.display = d.at_root ? 'none' : '';
     var box=document.getElementById('folders'); box.innerHTML='';
     if(!d.entries.length){ box.innerHTML='<div><span style="color:#9aa2ad">no folders here</span></div>'; }
+    // A drawer opens. A CLIENT starts the job. There used to be one confirm
+    // button reading "Use <whatever folder you are standing in>" — which, while
+    // browsing 2026, offered to audit the whole year. Clicking a client is now
+    // the decision, and nothing else can be selected by accident.
     d.entries.forEach(function(e){
       var row=document.createElement('div');
-      row.innerHTML='<span>'+e.name+'</span><span class="n">'+e.count+' items</span>';
-      row.onclick=function(){ browse(e.path); };
+      row.className = e.client ? 'clientrow' : '';
+      row.dataset.path = e.path;
+      row.innerHTML='<span>'+(e.client?'':'› ')+e.name+'</span>'
+        + '<span class="n">'+(e.client ? 'open this client' : e.count+' items')+'</span>';
+      // Selecting and starting are two different things. Firing the whole job
+      // on a single click means a mis-click is a five-minute run on the wrong
+      // client, and there is no moment to notice before it happens.
+      row.onclick=function(){ e.client ? selectClient(e.path, e.name) : browse(e.path); };
       box.appendChild(row);
     });
   });
 }
+document.getElementById('go').onclick=function(){
+  if(PICKED) startClient(PICKED.path, PICKED.name);
+};
 document.getElementById('up').onclick=function(){ browse(CUR.replace(/\/[^\/]+$/,'')||'/'); };
 document.getElementById('home').onclick=function(){ browse(''); };   // '' snaps to the root
 
-document.getElementById('pick').onclick=function(){
-  FOLDER=CUR;
-  document.getElementById('foldernow').textContent=FOLDER;
-  lbRefresh();
-  fetch('/api/inspect?folder='+encodeURIComponent(FOLDER)).then(function(r){return r.json();}).then(function(d){
-    document.getElementById('ready').classList.remove('hide');
-    document.getElementById('client').value=d.client||'';
-    document.getElementById('greeting').value=d.greeting||'';
-    var f=document.getElementById('found'); f.innerHTML='';
-    function note(txt, good){
-      var el=document.createElement('div');
-      el.className='found'+(good?'':' miss'); el.textContent=txt; f.appendChild(el);
-    }
-    note(d.n_docs+' documents in '+FOLDER.split('/').pop(), true);
-    if(d.checklist) note('Checklist found: '+d.checklist.split('/').pop(), true);
-    else note('NO CHECKLIST for this client — the audit would grade them against '
-              + "another client's list. Ask Austin to pull them from LaunchBay first.", false);
-    if(d.decisions) note('Your saved decisions were found and will be applied', true);
-    if(d.redacted) note('Redacted copies found, previews will use them', true);
-    window.scrollTo(0, document.body.scrollHeight);
+var PICKED = null;
+function selectClient(path, name){
+  PICKED = {path: path, name: name};
+  var b = document.getElementById('go');
+  b.disabled = false;
+  b.textContent = 'Download and audit \u201c' + name + '\u201d';
+  document.querySelectorAll('.folders .clientrow').forEach(function(r){
+    r.classList.toggle('picked', r.dataset.path === path);
   });
-};
+  var crumb = document.getElementById('crumb');
+  if(crumb) crumb.textContent = path;
+}
 
-function runAudit(){
-  var btn=document.getElementById('run'); btn.disabled=true;
-  document.getElementById('logcard').classList.remove('hide');
-  document.getElementById('done').classList.add('hide');
-  document.getElementById('log').textContent='';
-  since=0;
+// One press, the whole job. It used to be three — Download, Audit, Review —
+// each of which could be done out of order, skipped, or pressed twice. They
+// are not three decisions; they are one job with three stages, and the operator
+// has no useful choice between them.
+function startClient(path, name){
+  CUR = path;
+  FOLDER = path;
+  document.getElementById('foldernow').textContent = FOLDER;
+  var crumb = document.getElementById('crumb');
+  if(crumb) crumb.textContent = path;
+  var st = document.getElementById('golog');
+  document.getElementById('gocard').classList.remove('hide');
+  st.textContent = 'Opening ' + name + '…\n';
+  // Read the client's details first, so the audit runs under the right name and
+  // we know whether there is a checklist to grade against at all.
+  fetch('/api/inspect?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();}).then(function(d){
+      document.getElementById('client').value = d.client || name;
+      document.getElementById('greeting').value = d.greeting || '';
+      if(!d.checklist){
+        st.textContent += '\nNo checklist for this client yet — they have not '
+          + 'been pulled from LaunchBay.\nEverything would be graded against '
+          + 'another client’s list, so the run has stopped here.\n';
+        return;
+      }
+      st.textContent += 'Downloading anything new…\n';
+      goFetch(st);
+    });
+}
+function goFetch(st){
+  since = 0;
+  fetch('/api/lbfetch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER})})
+    .then(function(){ poll=setInterval(function(){ goTick(st, goAudit); }, 700); });
+}
+function goTick(st, next){
+  fetch('/api/log?since='+since).then(function(r){return r.json();}).then(function(d){
+    since=d.total;
+    if(d.lines.length){ st.textContent += d.lines.join('\n')+'\n'; st.scrollTop=st.scrollHeight; }
+    if(!d.running){ clearInterval(poll); next(st); }
+  });
+}
+function goAudit(st){
+  st.textContent += '\nReading the documents. The first run on a client takes a '
+    + 'few minutes.\n';
+  since = 0;
   fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({folder:FOLDER, client:document.getElementById('client').value,
                          greeting:document.getElementById('greeting').value})})
-    .then(function(){ poll=setInterval(tick,700); });
+    .then(function(){ poll=setInterval(function(){ goTick(st, goDone); }, 700); });
 }
-document.getElementById('run').onclick=runAudit;
+function goDone(st){
+  st.textContent += '\nDone. Opening the review.\n';
+  lbRefresh();
+  show('review');
+}
+
 
 // Filing re-runs the whole audit with --file-them, so the copies are made from a
 // plan built seconds ago rather than one that predates the operator's decisions.
@@ -1102,25 +1128,8 @@ function fileTick(){
   });
 }
 document.getElementById('filethem').onclick=fileThem;
-window.runAudit=runAudit; window.showTab=show;   // the review frame calls these
+window.showTab=show;   // the review frame calls this
 
-function tick(){
-  fetch('/api/log?since='+since).then(function(r){return r.json();}).then(function(d){
-    since=d.total;
-    if(d.lines.length){
-      var el=document.getElementById('log');
-      el.textContent += d.lines.join('\n')+'\n';
-      el.scrollTop=el.scrollHeight;
-    }
-    if(!d.running){
-      clearInterval(poll);
-      document.getElementById('run').disabled=false;
-      document.getElementById('done').classList.remove('hide');
-      var f=document.getElementById('reviewframe'); f.src='about:blank';
-    }
-  });
-}
-document.getElementById('goreview').onclick=function(){ show('review'); };
 document.getElementById('openfolder').onclick=function(){
   fetch('/api/reveal?folder='+encodeURIComponent(FOLDER));
 };

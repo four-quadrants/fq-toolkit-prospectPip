@@ -298,7 +298,11 @@ TAX_RETURN_TYPES = ('business_tax_return', 'personal_tax_return',
 
 def primary_year(text, doc_type=None):
     """The year the document is ABOUT, not every year it mentions."""
-    head = text[:4000]
+    # "(Rev. January 2021)" is when the IRS last revised the FORM, not the year
+    # it reports on. Four of Oyler's returns were dated 2021 from this alone:
+    # the e-file authorization page carries the revision marker and no other
+    # year at all, so the fallback had nothing else to take.
+    head = re.sub(r'\(\s*Rev\.?\s+[A-Za-z]+\s+20\d\d\s*\)', ' ', text[:4000], flags=re.I)
     for p in (r'For the year Jan\.?\s*1[^\n]{0,40}?(20\d\d)',
               r'for calendar year (20\d\d)',
               r'[Tt]ax [Yy]ear\s*:?\s*(20\d\d)',
