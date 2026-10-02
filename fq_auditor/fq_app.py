@@ -1524,6 +1524,27 @@ SAVE_SHIM = r"""
   // this page belongs to, and it can find a file whose recorded absolute
   // path came from another machine.
   window.__FQ_FOLDER__ = FOLDER;
+
+  // Autosave. The page calls this whenever anything changes, debounced, so
+  // there is no button to forget and nothing to lose by closing the tab.
+  // The old Save button remains below for the standalone file, but when the
+  // page is served here it becomes a status line instead.
+  window.__FQ_SAVE__ = function(decisions){
+    var el = document.getElementById('dlDec');
+    if(el){ el.textContent = 'Saving\u2026'; el.disabled = true; }
+    fetch('/api/decisions', {method:'POST', headers:{'Content-Type':'application/json'},
+                             body: JSON.stringify({folder: FOLDER, decisions: decisions})})
+      .then(function(r){ if(!r.ok) throw new Error('server said ' + r.status); })
+      .then(function(){
+        if(el){ el.textContent = 'Saved \u2713'; }
+      })
+      .catch(function(e){
+        if(el){ el.textContent = 'NOT SAVED \u2014 ' + (e && e.message || e);
+                el.disabled = false; }
+        if(window.console) console.error('[fq] autosave failed:', e);
+      });
+  };
+
   var btn = document.getElementById('dlDec');
   if(!btn) return;
 
@@ -1533,8 +1554,10 @@ SAVE_SHIM = r"""
   // button and left it stuck on "Saving…".
   var fresh = btn.cloneNode(true);
   btn.parentNode.replaceChild(fresh, btn);
-  fresh.textContent = 'Save decisions';
-  fresh.disabled = false;
+  // Saved as you go now, so this is a status line rather than a button.
+  // It still works if clicked, for anyone who reaches for it out of habit.
+  fresh.textContent = 'Saved \u2713';
+  fresh.disabled = true;
 
   var state = 'save';                       // save -> run -> running
 

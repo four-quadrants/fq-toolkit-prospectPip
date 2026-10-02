@@ -25,6 +25,7 @@ Add a document type by appending a Rule. Rules are evaluated in order and the
 first match wins, so specific rules go above general ones.
 """
 import re
+import vocab
 import unicodedata
 from collections import namedtuple
 
@@ -1125,6 +1126,16 @@ def classify(text, filename='', practice_names=(), home_tokens=(), household=())
               and doc['doc_type'] in COUNTS_FAMILY
               and rule.doc_type in COUNTS_FAMILY):
             doc['also_types'].append(rule.doc_type)
+
+    # A document that is nothing but somebody's date of birth. Oyler sent a Word
+    # file reading "Brian Oyler   Date of Birth   May 1, 1968" — the whole
+    # document — and it classified as unknown, so the item asking for his birth
+    # date read missing with the answer sitting in the folder under a filename
+    # saying so. Checked before the client-note fallback because it is more
+    # specific: this is not a note that happens to mention a date, it IS the date.
+    if doc['doc_type'] == 'unknown' and vocab.looks_like_birthdates(t):
+        doc.update(doc_type='birthdates', label='Date(s) of birth',
+                   owner_side='Personal', confidence='high')
 
     if doc['doc_type'] == 'unknown' and looks_like_client_note(t, household):
         doc.update(doc_type='client_note', label='Client note', owner_side='Personal',

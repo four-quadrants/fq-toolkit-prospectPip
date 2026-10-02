@@ -723,9 +723,22 @@ def render_email(results, cross, client, greeting=None):
     W = L.append
     W("Subject: A few remaining items for your file\n")
     W(f"Hi {greeting or client},\n")
-    W("Thank you for sending everything over - we've been through it all. There "
-      "are just a few items still outstanding before we can finish putting your "
-      "file together. When you get a chance, could you send:\n")
+    # Name what arrived before asking for what did not. "Thank you for sending
+    # everything over" is what you write when you have not looked; saying how
+    # many of their items are done shows that someone did, and it tells the
+    # client how close they are — which is the question behind "what else do you
+    # need from me".
+    n_done = len([r for r in results if r['status'] == 'satisfied'])
+    n_all = len(results)
+    if n_done:
+        W("Thank you for sending everything through - we've been through it all. "
+          "We now have %d of the %d items we asked for. There are a few still "
+          "outstanding before we can finish putting your file together. When you "
+          "get a chance, could you send:\n" % (n_done, n_all))
+    else:
+        W("Thank you for getting started on this. There are a few items we still "
+          "need before we can put your file together. When you get a chance, "
+          "could you send:\n")
 
     for sec in ('Personal', 'Practice'):
         rows = [r for r in wanted if r['item']['section'] == sec]
@@ -829,12 +842,19 @@ def _politely_correct(ask, r):
     # strip any filename the internal note may cite before going near a client
     note = re.sub(r'\s*\([^()]*\.(?:pdf|docx|xlsx|PDF)[^()]*\)', '', raw)
     note = re.sub(r'\s*appear on \S+', ' appear on your tax return', note)
-    if 'look like practice accounts' in note:
-        return (ask + ". The statements we received look like the practice cards, "
-                      "so we're still missing the personal ones")
-    if 'look like personal accounts' in note:
-        return (ask + ". The statements we received look like personal cards, "
-                      "so we're still missing the practice ones")
+    # Only where the item is actually about statements. These two lines were
+    # matching on the NOTE alone, so "A full credit report for Brian" went out
+    # reading "the statements we received look like the practice cards", as did
+    # "Birth date for Brian" and "2025 business taxes". A sentence that makes no
+    # sense against the item it follows is worse than no sentence: the client
+    # reads it, cannot act on it, and trusts the next one less.
+    about_statements = re.search(r'statement|account', ask, re.I)
+    if about_statements and 'look like practice accounts' in note:
+        return (ask + ". The statements we received look like the practice ones, "
+                      "so we're still missing the personal accounts")
+    if about_statements and 'look like personal accounts' in note:
+        return (ask + ". The statements we received look like personal ones, "
+                      "so we're still missing the practice accounts")
     if 'annual' in note and 'rather than monthly' in note:
         gap = re.search(r'missing \d+ month\(s\): (.+)$', note)
         extra = f", so we're short {gap.group(1)}" if gap else ""

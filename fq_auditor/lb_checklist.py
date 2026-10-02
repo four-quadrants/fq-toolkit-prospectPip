@@ -57,7 +57,11 @@ PRACTICE_HINT = re.compile(
     r'profit\s*&?\s*loss|\bp\s*&\s*l\b|balance sheet|open dental|eaglesoft', re.I)
 PERSONAL_HINT = re.compile(
     r'\bpersonal\b|\bhome\b|spouse|w-?2|1099|pay\s?stub|credit report|'
-    r'life insurance|529|ira\b|roth|401|hsa\b|birthdate|annuity', re.I)
+    # "birth date" as two words: Oyler's expanded request says "Birth date for
+    # Brian", which matched nothing, so the item defaulted to Practice and a
+    # personal document answering it was reported as the wrong side.
+    r'life insurance|529|ira\b|roth|401|hsa\b|birth\s?dates?|annuity|'
+    r'credit report|w-?2s?\b|pay\s?stub', re.I)
 
 
 def side_of(text):

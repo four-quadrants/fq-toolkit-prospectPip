@@ -1148,6 +1148,42 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
       background:var(--fq-baby-pale);border-radius:9px;padding:1px 9px}
 .ckgroup>.sumgrid{margin-top:9px}
 .sumhead{font-size:19px;font-weight:600;color:var(--fq-navy)}
+.donutrow{display:flex;align-items:center;gap:18px;margin:14px 0 8px;flex-wrap:wrap}
+.donut{width:92px;height:92px;border-radius:50%;flex:0 0 auto;position:relative;
+  background:conic-gradient(#1D9E75 calc(var(--pct)*1%),#E4E0D8 0)}
+.donutmid{position:absolute;inset:11px;border-radius:50%;background:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.donutmid b{font-size:21px;color:var(--fq-navy)}
+.donutmid span{font-size:10px;color:var(--fq-slate);text-transform:uppercase;letter-spacing:.5px}
+.tiles{display:flex;flex-wrap:wrap;gap:4px;flex:1 1 240px;align-content:center}
+.tiles i{width:17px;height:17px;border-radius:4px;display:block;cursor:default}
+.tok{background:#1D9E75} .tcall{background:var(--fq-orange)} .tmiss{background:#D5D9DE}
+.tiles i:hover{outline:2px solid var(--fq-navy);outline-offset:1px}
+.md{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:14px;margin-top:14px}
+.mdlist{max-height:430px;overflow:auto;border:1px solid #EFEBE3;border-radius:10px;
+  background:#fff;padding:4px}
+button.mdrow{display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;
+  background:none;border:0;border-radius:7px;padding:7px 9px;font-size:13px;
+  color:var(--fq-ink);cursor:pointer;margin:0;line-height:1.35}
+button.mdrow:hover{background:var(--fq-baby-pale)}
+button.mdrow.on{background:var(--fq-baby-pale);box-shadow:inset 3px 0 0 var(--fq-orange);
+  font-weight:600;color:var(--fq-navy)}
+button.mdrow i{flex:0 0 auto;width:9px;height:9px;border-radius:3px;margin-top:5px}
+.mddetail{background:var(--fq-navy);border-radius:10px;padding:15px 17px;
+  align-self:start;color:#E8EEF4}
+.mddetail .cklab{color:#fff;font-size:14px;line-height:1.4}
+.mddetail .ckwhy{color:#AFC4D6}
+.mddetail button.ckdoc{background:#20406180;border-color:#3C5F82;color:#DCE8F2}
+.mddetail button.ckdoc:hover{background:#2B527A;border-color:#6E93B5}
+.mddetail .ckdt{color:#9DB4C9}
+.mddetail button.ckmore{background:#20406180;border-color:#3C5F82;color:#DCE8F2}
+.mddetail select,.mddetail input{background:#fff;border-color:#3C5F82}
+.mddetail .ckstale{background:var(--fq-orange)}
+.mdwhat{font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;
+  color:#7E9CB8;margin-bottom:8px}
+.mdpane.hide{display:none}
+.mdpane .ckline{background:none;padding:0;margin:0}
+@media (max-width:620px){.md{grid-template-columns:1fr}.mdlist{max-height:220px}}
 .block{border-radius:12px;padding:14px 16px;margin:12px 0}
 .block.judge{background:#FDF3E4;border:1px solid #F3D9AE}
 .block.gone{background:#F7F5F0;border:1px solid #E7E2D8}
@@ -1162,6 +1198,9 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .ckline.quiet .cklab{font-size:13.5px;color:var(--fq-slate)}
 .ckwhy{font-size:12.5px;color:var(--fq-slate);margin-top:3px}
 .ckdt{margin-left:6px;color:#8A9099;font-weight:400}
+.ckx{display:none}
+button.ckmore{font-size:11.5px;margin-top:0;background:var(--fq-baby-pale);border:1px dashed #9FC2DA;color:var(--fq-navy);border-radius:7px;padding:3px 9px;cursor:pointer}
+button.ckmore:hover{background:var(--fq-baby)}
 .morerow{border-top:1px solid #EDE8DF;padding:11px 2px;font-size:13.5px;
   color:var(--fq-slate);cursor:pointer}
 .morerow:hover{color:var(--fq-navy)}
@@ -1296,6 +1335,7 @@ function setUndecided(){
 }
 
 function record(sha, dest, note, row){
+  setTimeout(autosave, 0);
   if(!dest){ delete DEC[sha]; }
   else { DEC[sha] = {dest:dest, note:note||''}; }
   if(row){
@@ -1477,6 +1517,12 @@ function wire(){
   // Checklist verdicts. Stored the moment they change, like every other
   // decision on this page, so nothing is lost by scrolling away; they still
   // only take effect when Save is pressed.
+  // What a verdict means for the page, mirroring reconcile's VERDICTS table.
+  // The server decides this for real on the next run; this is the same mapping
+  // applied straight away, so the dot and the counts move when you do.
+  var VERDICT_TO = {satisfied:'ok', not_applicable:'ok', practice:'call',
+                    personal:'call', missing:'miss'};
+
   function recordItem(id){
     var sel  = document.querySelector('select.ckv[data-item="'+CSS.escape(id)+'"]');
     var note = document.querySelector('input.cknote[data-item="'+CSS.escape(id)+'"]');
@@ -1485,6 +1531,58 @@ function wire(){
     if(!v && !n) delete ITEMS[id];
     else ITEMS[id] = {verdict: v, note: n};
     setUndecided();
+    if(v) restat(id, VERDICT_TO[v]);
+    autosave();
+  }
+
+  // Move the item's dot and redraw the counts. Without this, marking something
+  // satisfied changed nothing on screen until the next audit run — which reads
+  // exactly like the click not working, so people click again.
+  function restat(id, kind){
+    if(!kind) return;
+    var pane = document.querySelector('.mdpane select.ckv[data-item="'
+                                      + CSS.escape(id) + '"]');
+    if(!pane) return;
+    var i = pane.closest('.mdpane').dataset.i;
+    var row = document.querySelector('.mdrow[data-i="' + i + '"] i');
+    if(row) row.className = ({ok:'tok', call:'tcall', miss:'tmiss'})[kind];
+    var tile = document.querySelectorAll('.tiles i')[parseInt(i, 10)];
+    recount();
+  }
+
+  function recount(){
+    var dots = document.querySelectorAll('.mdlist .mdrow i');
+    var ok = 0, call = 0, miss = 0;
+    dots.forEach(function(d){
+      if(d.classList.contains('tok')) ok++;
+      else if(d.classList.contains('tcall')) call++;
+      else miss++;
+    });
+    var total = ok + call + miss || 1;
+    var tiles = document.querySelectorAll('.tiles i');
+    dots.forEach(function(d, n){ if(tiles[n]) tiles[n].className = d.className; });
+    var pct = Math.round(100 * ok / total);
+    var donut = document.querySelector('.donut');
+    if(donut){
+      donut.style.setProperty('--pct', pct);
+      var b = donut.querySelector('.donutmid b');
+      if(b) b.textContent = pct + '%';
+    }
+    var key = document.querySelector('.ckbarkey');
+    if(key) key.innerHTML = '<span><i class="kok"></i>' + ok + ' answered</span>'
+      + '<span><i class="kcall"></i>' + call + ' need you</span>'
+      + '<span><i class="kmiss"></i>' + miss + ' not sent yet</span>';
+  }
+
+  // Saved as you work. The Save button was a step people forgot, and forgetting
+  // it lost everything with no warning — the page looked identical either way.
+  var saveTimer = null;
+  function autosave(){
+    if(!window.__FQ_SAVE__) return;          // standalone file: no server to save to
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){
+      window.__FQ_SAVE__({files: DEC, accounts: ACCTS, items: ITEMS});
+    }, 600);
   }
   document.querySelectorAll('select.ckv').forEach(function(sel){
     sel.addEventListener('change', function(){ recordItem(sel.dataset.item); });
@@ -1735,47 +1833,178 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
 
     a('<div class="sum">')
     a('<div class="sumhead">%s</div>' % _e(client))
-    bits = ['%d things were asked for' % len(results)]
-    if settled:
-        bits.append('<b>%d are answered</b>' % len(settled))
-    a('<div class="sumsub">%s.</div>' % ', '.join(bits))
 
-    if judge:
-        a('<div class="block judge">')
-        a('<div class="blocktitle">%d need%s your judgement</div>'
-          % (len(judge), '' if len(judge) == 1 else ''))
-        a('<div class="blocksub">Documents arrived, but the auditor could not '
-          'decide whether they answer the ask.</div>')
-        for r in judge:
-            _render_item(a, r, show_why=True)
+    # Where the client stands, first and as a picture. Collapsing this to one
+    # line of prose and pushing the answered list to the bottom of the page made
+    # the single most-asked question — how much of this have they sent? — the
+    # hardest thing on the screen to find.
+    # One tile per item, in the order they were asked for. A bar shows the
+    # proportion; tiles show the proportion AND the count AND which specific
+    # items are where, because every tile carries the item's name on hover.
+    # Thirty things asked for is a shape you can take in at a glance; "61%" is
+    # a number you have to think about.
+    pct = int(round(100.0 * len(settled) / (len(results) or 1)))
+    a('<div class="donutrow">')
+    a('<div class="donut" style="--pct:%d">'
+      '<div class="donutmid"><b>%d%%</b><span>complete</span></div></div>' % (pct, pct))
+    # Same order and index as the rows below, so a tile and a row are the same
+    # item. They were drawn in two different orders, which meant updating one
+    # recoloured the wrong square in the other.
+    order = judge + absent + settled
+    a('<div class="tiles">')
+    for n, r in enumerate(order):
+        if r in judge:
+            cls, what = 'tcall', 'needs you'
+        elif r in absent:
+            cls, what = 'tmiss', 'not sent yet'
+        else:
+            cls, what = 'tok', 'answered'
+        a('<i class="%s" data-i="%d" title="%s — %s"></i>'
+          % (cls, n, _e(r['item'].get('label') or ''), what))
+    a('</div></div>')
+    a('<div class="ckbarkey"><span><i class="kok"></i>%d answered</span>'
+      '<span><i class="kcall"></i>%d need you</span>'
+      '<span><i class="kmiss"></i>%d not sent yet</span></div>'
+      % (len(settled), len(judge), len(absent)))
+
+    # List on the left, the selected item opened on the right. Every item is in
+    # the list, in the order it was asked for, so "what have they sent" is the
+    # same glance as "what is left" — and only one item's detail is on screen at
+    # a time, which is what stopped this page being a wall.
+    shorts = short_labels([(r['item'].get('label') or r['item'].get('id') or '',
+                            r['item'].get('satisfied_by') or ())
+                           for r in order])
+    a('<div class="md">')
+    a('<div class="mdlist">')
+    for n, r in enumerate(order):
+        dot = 'tcall' if r in judge else ('tmiss' if r in absent else 'tok')
+        full = r['item'].get('label') or r['item'].get('id') or ''
+        a('<button class="mdrow%s" data-i="%d" title="%s"><i class="%s"></i>'
+          '<span>%s</span></button>'
+          % (' on' if n == 0 else '', n, _e(full), dot, _e(shorts[n])))
+    a('</div>')
+    a('<div class="mddetail">')
+    for n, r in enumerate(order):
+        a('<div class="mdpane%s" data-i="%d">' % ('' if n == 0 else ' hide', n))
+        a('<div class="mdwhat">What we asked for</div>')
+        _render_item(a, r, show_why=True)
         a('</div>')
+    a('</div></div>')
 
-    if absent:
-        a('<div class="block gone">')
-        a('<div class="blocktitle">%d never arrived</div>' % len(absent))
-        a('<div class="blocksub">Ask the client for these.</div>')
-        for r in absent:
-            _render_item(a, r, show_why=False)
-        a('</div>')
-
-    if not judge and not absent:
-        a('<div class="block ok"><div class="blocktitle">Nothing outstanding</div>'
-          '<div class="blocksub">Every item is answered and every document has a '
-          'home.</div></div>')
-
-    # Everything else, one line each, costing nothing until asked for.
     if n_review:
         a('<div class="morerow" onclick="document.getElementById(\'decidethese\')'
           '.scrollIntoView({behavior:\'smooth\'})">'
           '<span class="chev"></span>%d document(s) could not be placed '
           '\u2014 tell it where they go</div>' % n_review)
-    if settled:
-        a('<details class="morerow open"><summary><span class="chev"></span>'
-          '%d answered</summary><div class="settledlist">' % len(settled))
-        for r in settled:
-            _render_item(a, r, show_why=False, quiet=True)
-        a('</div></details>')
     a('</div>')
+    a('''<script>
+(function(){
+  var rows = document.querySelectorAll('.mdrow');
+  var panes = document.querySelectorAll('.mdpane');
+  function open(i){
+    rows.forEach(function(x){ x.classList.toggle('on', x.dataset.i === i); });
+    panes.forEach(function(p){ p.classList.toggle('hide', p.dataset.i !== i); });
+    var row = document.querySelector('.mdrow[data-i="' + i + '"]');
+    if(row && row.scrollIntoView) row.scrollIntoView({block:'nearest'});
+  }
+  rows.forEach(function(b){
+    b.addEventListener('click', function(){ open(b.dataset.i); });
+  });
+  // A tile is the same item as a row. Clicking one opens it, which turns the
+  // chart from a picture into a way in.
+  document.querySelectorAll('.tiles i').forEach(function(t){
+    t.style.cursor = 'pointer';
+    t.addEventListener('click', function(){ open(t.dataset.i); });
+  });
+  window.__FQ_OPEN__ = open;
+})();
+</script>''')
+
+
+# A LIST of years at the front is noise — nearly every ask opens '2024,
+# 2025, & 2026 YTD'. A single year is the opposite: '2025 business taxes'
+# and '2025 personal taxes' are told apart by nothing else.
+# A checklist row should read like a label, not like the sentence we sent the
+# client. Built from WHAT IS ASKED FOR rather than by truncating the wording:
+# "QuickBooks Online login information or a QuickBooks backup file for the
+# dental building entity (Moonridge), if available (reach out if you need
+# guidance...)" is "QuickBooks · building", and thirty of those is a list you
+# can read down in one pass.
+SHORT_BY_TYPE = {
+    'debt_schedule': 'Debt schedule', 'bank_statement': 'Bank statements',
+    'personal_tax_return': 'Personal taxes', 'business_tax_return': 'Business taxes',
+    'partnership_tax_return': 'Entity taxes', 'pnl': 'Profit & loss',
+    'balance_sheet': 'Balance sheet', 'production_report': 'Production reports',
+    'day_sheet': 'Production reports', 'provider_productivity': 'Production reports',
+    'fee_schedule': 'Fee schedule', 'w2': 'W-2s', 'form_1099': '1099s',
+    'credit_report': 'Credit report', 'birthdates': 'Birth date',
+    'quickbooks_file': 'QuickBooks', 'rental_lease': 'Lease',
+    'life_insurance': 'Life insurance', 'disability_insurance': 'Disability cover',
+    'brokerage_statement': 'Investment statements', 'hsa_statement': 'HSA statements',
+    'financial_plan': 'Financial plan', 'employment_contract': 'Associate contracts',
+    'dr_days_worked': 'Doctor days', 'total_patients': 'Total patients',
+    'new_patients': 'New patients', 'paystub': 'Pay stubs',
+    'line_of_credit': 'Line of credit', 'building_value': 'Building value',
+    'cc_statement': 'Card statements', 'payroll_summary': 'Payroll',
+    'staff_roster': 'Staff roster', 'client_note': 'Note from the client',
+}
+
+_ACCT = re.compile(r'(?:ending(?:\s+in)?\s*#?\s*x?|\bx)(\d{4,})\b', re.I)
+_ONE_YEAR = re.compile(r'^\s*(20\d\d)\b(?!\s*[,&]\s*20)')
+_ENTITY_WORD = re.compile(
+    r'\b(practice|building|personal|wellness clinic|memphis|rental|moonridge|'
+    r'home|hsa)\b', re.I)
+
+
+def short_label(label, satisfied_by=()):
+    """One short line naming what the item asks for."""
+    text = (label or '').strip()
+    base = None
+    for t in (satisfied_by or ()):
+        if t in SHORT_BY_TYPE:
+            base = SHORT_BY_TYPE[t]
+            break
+    if not base:
+        base = re.split(r'\s*[\u2014\u2013(]|,\s*if\b', text)[0].strip(' ,;')
+        base = base[:34] + ('\u2026' if len(base) > 34 else '')
+
+    bits = []
+    y = _ONE_YEAR.search(text)
+    if y:
+        bits.append(y.group(1))
+    acct = _ACCT.search(text)
+    if acct:
+        bits.append('x' + acct.group(1))
+    else:
+        ent = _ENTITY_WORD.search(text)
+        if ent and ent.group(1).lower() not in base.lower():
+            bits.append(ent.group(1).lower())
+    return (' '.join([bits[0], base]) if bits and bits[0].isdigit()
+            else base) + (' \u00b7 ' + ' \u00b7 '.join(
+                b for b in bits if not b.isdigit()) if any(
+                    not b.isdigit() for b in bits) else '')
+
+
+def short_labels(items):
+    """Short labels for a whole list, disambiguated where two collide.
+
+    Oyler asks for QuickBooks twice — practice and building entity. Two rows
+    reading "QuickBooks" is worse than two long ones: you cannot tell which one
+    you are answering.
+    """
+    out = [short_label(lbl, sb) for lbl, sb in items]
+    seen = {}
+    for i, s in enumerate(out):
+        seen.setdefault(s, []).append(i)
+    for s, idx in seen.items():
+        if len(idx) < 2:
+            continue
+        for i in idx:
+            extra = _ENTITY_WORD.findall(items[i][0] or '')
+            extra = [e.lower() for e in extra if e.lower() not in s.lower()]
+            if extra:
+                out[i] = s + ' \u00b7 ' + extra[0]
+    return out
 
 
 def _render_item(a, r, show_why=True, quiet=False):
@@ -1795,17 +2024,26 @@ def _render_item(a, r, show_why=True, quiet=False):
     docs = r.get('docs') or []
     if docs and not quiet:
         a('<div class="ckdocs">')
-        for d in docs[:4]:
-            # The classification, shown only here — on an item you are being
-            # asked about. A chip reading "tax extension.pdf" tells you nothing
-            # about WHY it is attached to a birthdate item; "· client note"
-            # tells you everything.
+        for n, d in enumerate(docs):
+            # openfile as well as ckdoc: the preview binds to .openfile, and
+            # renaming the chip silently killed every preview on the page.
+            #
+            # The classification is shown only here — on an item you are being
+            # asked about. A chip reading "tax extension.pdf" says nothing about
+            # WHY it is attached to a birthdate item; "· client note" says it all.
             lab = DOC_LABELS.get(d.get('doc_type'), d.get('doc_type') or 'unrecognised')
-            a('<button class="ckdoc" data-path="%s" title="classified as %s">%s'
-              '<span class="ckdt">%s</span></button>'
-              % (_e(d.get('path') or ''), _e(lab), _e(d.get('file') or ''), _e(lab)))
+            a('<button class="ckdoc openfile%s" data-path="%s" data-name="%s" '
+              'title="classified as %s">%s<span class="ckdt">%s</span></button>'
+              % (' ckx' if n >= 4 else '', _e(d.get('path') or ''),
+                 _e(d.get('file') or ''), _e(lab),
+                 _e(d.get('file') or ''), _e(lab)))
         if len(docs) > 4:
-            a('<span class="ckmore">+%d more</span>' % (len(docs) - 4))
+            # "+8 more" used to be a dead label, so the eight documents it stood
+            # for could not be looked at — on exactly the items where you most
+            # need to know which ones arrived.
+            a('<button class="ckmore" onclick="this.parentNode.querySelectorAll'
+              '(\'.ckx\').forEach(function(e){e.classList.remove(\'ckx\')});'
+              'this.remove()">show %d more</button>' % (len(docs) - 4))
         a('</div>')
 
     if not quiet:
