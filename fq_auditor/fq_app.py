@@ -1534,16 +1534,16 @@ SAVE_SHIM = r"""
   // page is served here it becomes a status line instead.
   window.__FQ_SAVE__ = function(decisions){
     var el = document.getElementById('dlDec');
-    if(el){ el.textContent = 'Saving\u2026'; el.disabled = true; }
+    if(el){ el.textContent = 'Saving\u2026'; el.className = 'savestate busy'; }
     fetch('/api/decisions', {method:'POST', headers:{'Content-Type':'application/json'},
                              body: JSON.stringify({folder: FOLDER, decisions: decisions})})
       .then(function(r){ if(!r.ok) throw new Error('server said ' + r.status); })
       .then(function(){
-        if(el){ el.textContent = 'Saved \u2713'; }
+        if(el){ el.textContent = 'Saved \u2713'; el.className = 'savestate'; }
       })
       .catch(function(e){
         if(el){ el.textContent = 'NOT SAVED \u2014 ' + (e && e.message || e);
-                el.disabled = false; }
+                el.className = 'savestate bad'; }
         if(window.console) console.error('[fq] autosave failed:', e);
       });
   };

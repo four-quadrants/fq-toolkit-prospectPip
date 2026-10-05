@@ -964,6 +964,10 @@ button{font:inherit;font-size:13px;padding:7px 13px;border-radius:7px;border:1px
        background:#2A3A52;color:#fff;cursor:pointer}
 button:hover{background:#35486380}
 button.primary{background:var(--fq-orange);border-color:var(--fq-orange)}
+.savestate{font-size:12.5px;color:#1E8449;background:#EAF5EE;border:1px solid #BFE0CC;
+  border-radius:8px;padding:5px 11px;white-space:nowrap}
+.savestate.busy{color:#8A5A12;background:#FDF3E4;border-color:#F3D9AE}
+.savestate.bad{color:#A5342A;background:#FBECEA;border-color:#F0C8C2}
 button.primary:hover{background:var(--fq-orange-dk)}
 button:disabled{opacity:.45;cursor:default}
 #undecided{font-size:13px;opacity:.85}
@@ -2190,7 +2194,10 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     a('</div></div>')
     a('<div class="hright">')
     a('<span id="undecided"></span>')
-    a('<button class="primary" id="dlDec" disabled>Save decisions</button>')
+    # Not a button. Decisions save themselves, so a primary-orange control that
+    # lights up and goes dull reads like something you failed to press in time.
+    # This is a status line reporting what already happened.
+    a('<span class="savestate" id="dlDec">Saved \u2713</span>')
     a('<button id="dlMemo" title="Download this writeup as a file">Download</button>')
     a('<button id="cpMemo" title="Copy this writeup, ready to paste into an email">Copy writeup</button>')
     a('</div>')
