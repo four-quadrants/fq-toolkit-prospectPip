@@ -264,7 +264,13 @@ def plan_destination(doc):
         return (REVIEW_DIR, 'classified with low confidence', True)
 
     parts = [DOCS_DIR, SIDE_DIR.get(use_side, use_side), sub]
-    if dtype in ('bank_statement', 'cc_statement', 'brokerage_statement'):
+    # A folder per account for BANKING, flat for investments — which is how the
+    # team files by hand. Rebol's tree has Banking/1362, /9634, /5796, because a
+    # current account brings twelve statements a year and they need to stay
+    # together; his Investments folder is flat, because a 403(b) brings one or
+    # two and the account is already in the filename. Giving investments a
+    # folder each produced "Investments/Principal" holding a single statement.
+    if dtype in ('bank_statement', 'cc_statement'):
         tail, issuer = doc.get('account_tail'), doc.get('issuer')
         if tail:
             parts.append('x%s' % str(tail).lstrip('xX'))
