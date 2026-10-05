@@ -951,7 +951,7 @@ button.primary{background:var(--fq-orange);border-color:var(--fq-orange)}
 button.primary:hover{background:var(--fq-orange-dk)}
 button:disabled{opacity:.45;cursor:default}
 #undecided{font-size:13px;opacity:.85}
-.wrap{max-width:1240px;margin:0 auto;padding:0 30px 80px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 30px 80px}
 .tiles{display:flex;flex-wrap:wrap;gap:11px;margin:20px 0 6px}
 .tile{flex:1 1 122px;background:#fff;border:1px solid #E4E0D8;border-radius:9px;padding:12px 14px}
 .tile b{display:block;font-size:24px;line-height:1.1}
@@ -1027,7 +1027,12 @@ button.openfile:hover{background:#F4F1EA;color:#1B2A41}
       border-bottom:1px solid #E4E0D8;font-size:14px;font-weight:600;color:#1B2A41}
 #pvhead button{margin-left:auto;border:1px solid #C9C3B6;background:#fff;
       color:#1B2A41;border-radius:7px;padding:4px 12px;cursor:pointer}
-#pvimg{max-width:90vw;max-height:78vh;object-fit:contain;display:block}
+/* Fit the WIDTH and scroll, not fit the whole page. A portrait bank statement
+   constrained to 78vh came out a third of the panel wide and unreadable, while
+   a spreadsheet — which scrolls — looked right. Reading the top of a statement
+   at full width beats seeing all of it at none. */
+#pvimg{width:100%;max-width:1000px;height:auto;display:block;margin:0 auto}
+#pvscroll{max-height:80vh;overflow:auto;background:#F2F0EB;border-radius:8px}
 #pvmsg{padding:26px;color:#6b7280;font-size:14px}
 /* A workbook, shown as a workbook. Sticky header row and first column so the
    labels stay put while you scroll a wide schedule — the whole reason for
@@ -1159,7 +1164,7 @@ button.ckdoc:hover{background:var(--fq-baby);border-color:var(--fq-slate)}
 .tiles i{width:17px;height:17px;border-radius:4px;display:block;cursor:default}
 .tok{background:#1D9E75} .tcall{background:var(--fq-orange)} .tmiss{background:#D5D9DE}
 .tiles i:hover{outline:2px solid var(--fq-navy);outline-offset:1px}
-.md{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:14px;margin-top:14px}
+.md{display:grid;grid-template-columns:minmax(260px,0.8fr) minmax(0,1.4fr);gap:16px;margin-top:14px}
 .mdlist{max-height:430px;overflow:auto;border:1px solid #EFEBE3;border-radius:10px;
   background:#fff;padding:4px}
 button.mdrow{display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;
@@ -1250,7 +1255,10 @@ header button.primary:disabled{opacity:.45;cursor:default}
 
 /* ---- two columns ----------------------------------------------------- */
 .wrap{max-width:1180px;margin:0 auto;padding:24px 26px 70px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:26px;align-items:start}
+/* The rail is gone, but its 250px column was not: the content kept to the
+   left two-thirds with an empty strip beside it, which read as a page that
+   had failed to centre. */
+.grid{display:block}
 .main{min-width:0}
 .rail{position:sticky;top:96px;display:flex;flex-direction:column;gap:14px}
 .railcard{background:#fff;border:1px solid #EAE5DC;border-radius:12px;padding:14px 16px;
@@ -1281,7 +1289,6 @@ header button.primary:disabled{opacity:.45;cursor:default}
 .tips h3{color:#9C4A16}
 .tips ol{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#5C4630}
 @media (max-width:900px){
-  .grid{grid-template-columns:1fr}
   .rail{position:static;flex-direction:row;flex-wrap:wrap}
   .railcard{flex:1 1 240px}
 }
@@ -1476,7 +1483,11 @@ function wire(){
       var body = document.getElementById('pvbody');
       var img = new Image();
       img.id = 'pvimg';
-      img.onload  = function(){ body.innerHTML=''; body.appendChild(img); };
+      img.onload  = function(){
+        body.innerHTML='';
+        var sc = document.createElement('div'); sc.id='pvscroll';
+        sc.appendChild(img); body.appendChild(sc);
+      };
       // A spreadsheet or CSV has no page to photograph. Rather than pushing the
       // reviewer into Numbers — which loses their place in the list — show the
       // text the auditor already read out of it. That text is also exactly what
@@ -1800,6 +1811,9 @@ def _doc_labels():
         return {}
 
 
+MONTH_ABBR = ['', 'Jan','Feb','Mar','Apr','May','Jun',
+              'Jul','Aug','Sep','Oct','Nov','Dec']
+
 DOC_LABELS = _doc_labels()
 DOC_LABELS.setdefault('unknown', 'unrecognised')
 DOC_LABELS.setdefault('client_note', 'client note')
@@ -2032,11 +2046,26 @@ def _render_item(a, r, show_why=True, quiet=False):
             # asked about. A chip reading "tax extension.pdf" says nothing about
             # WHY it is attached to a birthdate item; "· client note" says it all.
             lab = DOC_LABELS.get(d.get('doc_type'), d.get('doc_type') or 'unrecognised')
+            # On a statements item the filename answers nothing. WHICH account,
+            # and WHOSE, is the entire question being asked — and it was only
+            # visible by opening each document in turn.
+            facts = []
+            if d.get('account_tail'):
+                facts.append('x' + str(d['account_tail']).lstrip('xX'))
+            if d.get('issuer'):
+                facts.append(str(d['issuer']))
+            if d.get('owner_side'):
+                facts.append(str(d['owner_side']))
+            if d.get('month') and d.get('year'):
+                facts.append('%s %s' % (MONTH_ABBR[d['month']], d['year']))
+            elif d.get('year'):
+                facts.append(str(d['year']))
+            meta = ' · '.join(facts) if facts else lab
             a('<button class="ckdoc openfile%s" data-path="%s" data-name="%s" '
-              'title="classified as %s">%s<span class="ckdt">%s</span></button>'
+              'title="%s — classified as %s">%s<span class="ckdt">%s</span></button>'
               % (' ckx' if n >= 4 else '', _e(d.get('path') or ''),
-                 _e(d.get('file') or ''), _e(lab),
-                 _e(d.get('file') or ''), _e(lab)))
+                 _e(d.get('file') or ''), _e(d.get('file') or ''), _e(lab),
+                 _e(d.get('file') or ''), _e(meta)))
         if len(docs) > 4:
             # "+8 more" used to be a dead label, so the eight documents it stood
             # for could not be looked at — on exactly the items where you most

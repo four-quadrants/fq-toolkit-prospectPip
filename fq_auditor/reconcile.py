@@ -125,6 +125,28 @@ _ACCT_ASK = re.compile(
     r'(?:ending(?:\s+in)?|acct\.?|account)\s*#?\s*x?(\d{4,})\b|\bx(\d{4,})\b', re.I)
 
 
+def _one_slip_apart(a, b):
+    """True when two account numbers differ by a single human slip.
+
+    Oyler's checklist asks for x4782 and every statement reads x4728 — the
+    account really is 4728, and the ask was typed wrong. Reported as a flat
+    mismatch, that reads as "the client sent the wrong account", which sends
+    someone chasing an account that does not exist. Two digits swapped is the
+    commonest typo there is, and saying so turns a dead end into a ten-second
+    check.
+    """
+    a, b = str(a or ''), str(b or '')
+    if a == b or len(a) != len(b) or not a:
+        return False
+    diff = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+    if len(diff) == 1:                      # one digit mistyped
+        return True
+    if len(diff) == 2 and diff[1] == diff[0] + 1:
+        i, j = diff                         # two adjacent digits swapped
+        return a[i] == b[j] and a[j] == b[i]
+    return False
+
+
 def account_asked_for(item):
     """The account number an item names, or None.
 
@@ -217,6 +239,12 @@ def _eval_item(item, found, facts):
         if not same:
             seen = sorted({str(d.get('account_tail')).lstrip('xX')
                            for d in found if d.get('account_tail')})
+            near = [s for s in seen if _one_slip_apart(tail, s)]
+            if near:
+                return 'mismatched', (
+                    'this asks for x%s and x%s arrived — one digit apart, so it '
+                    'is probably the same account and the ask has a typo. Check one '
+                    'statement, then mark this satisfied' % (tail, near[0]))
             return 'mismatched', (
                 'this asks for the account ending %s; what arrived is %s'
                 % (tail, ('for ' + ', '.join('x' + s for s in seen)) if seen

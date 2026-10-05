@@ -397,7 +397,10 @@ def read_sheets(path, kind=None):
 LOCKED = object()
 
 
-def render_first_page(path, max_px=1400):
+# 2000, not 1400. A bank statement is the densest thing clients send and the
+# one most often opened to check an account number; at 1400 the digits were
+# at the edge of legible once the panel scaled the image to fit.
+def render_first_page(path, max_px=2000):
     """PNG bytes of page one, or of the image itself. None if not viewable."""
     import io as _io
     ext = os.path.splitext(path)[1].lower()
