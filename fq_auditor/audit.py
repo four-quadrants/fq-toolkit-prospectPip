@@ -874,7 +874,16 @@ def _politely_correct(ask, r):
         return ask + f" - {note}"
     if 'provided' in note:
         return ask + f" ({note})"
-    return ask + (f" ({note})" if note else "")
+
+    # Anything this function does not recognise is DROPPED, not appended.
+    # The default used to pass the internal note through, so the moment a new
+    # note was written for the reviewer it went out to the client verbatim:
+    # "...account ending in x4782 (this asks for x4782 and x4728 arrived — one
+    # digit apart... Check one statement, then mark this satisfied)". Notes are
+    # written for whoever is working the file; a client email may only carry
+    # sentences composed for a client. Adding a note here is now a deliberate
+    # act, which is the right way round.
+    return ask
 
 
 def render_internal_md(res, client, checklist_source):

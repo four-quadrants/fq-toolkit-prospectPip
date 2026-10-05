@@ -244,7 +244,17 @@ def plan_destination(doc):
 
     mapped = TYPE_MAP.get(dtype)
     if not mapped or mapped[1] is None:
-        return (REVIEW_DIR, 'no folder in the tree for "%s" yet' % dtype, True)
+        # Two different problems were saying the same jargon. "We could not tell
+        # what this is" is a document to open; "we know what it is and have
+        # nowhere to put it" is a gap in the filing tree. Reading 'no folder in
+        # the tree for "unknown" yet' told you neither.
+        if dtype == 'unknown':
+            return (REVIEW_DIR,
+                    'could not tell what this document is — open it and say '
+                    'where it belongs', True)
+        return (REVIEW_DIR,
+                'this is a %s, and there is no folder for that yet — pick one'
+                % DOC_LABELS.get(dtype, dtype).lower(), True)
 
     forced_side, sub = mapped
     use_side = forced_side or side
