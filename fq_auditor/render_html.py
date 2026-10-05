@@ -1357,6 +1357,29 @@ function setUndecided(){
                          && Object.keys(ITEMS).length === 0;
 }
 
+// Autosave lives at top level, NOT inside wire(). It was defined in there
+// while record() sits outside it, so every filing decision threw a
+// ReferenceError the moment it tried to save — which killed the rest of the
+// handler too, so the 'N of M decided' counter never moved either. With the
+// Save button disabled in favour of autosaving, that left no way to save a
+// filing decision at all.
+
+// Autosave sits at TOP LEVEL, not inside wire(). It was defined in there
+// while record() is defined outside it, so every filing decision threw a
+// ReferenceError on save — which killed the rest of that handler too, so the
+// "N of M decided" counter never moved either. With the Save button retired
+// in favour of autosaving, that left no way to save a filing decision at all.
+// Saved as you work. The Save button was a step people forgot, and forgetting
+// it lost everything with no warning — the page looked identical either way.
+var saveTimer = null;
+function autosave(){
+  if(!window.__FQ_SAVE__) return;          // standalone file: no server to save to
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){
+    window.__FQ_SAVE__({files: DEC, accounts: ACCTS, items: ITEMS});
+  }, 600);
+}
+
 function record(sha, dest, note, row){
   setTimeout(autosave, 0);
   if(!dest){ delete DEC[sha]; }
@@ -1601,16 +1624,6 @@ function wire(){
       + '<span><i class="kmiss"></i>' + miss + ' not sent yet</span>';
   }
 
-  // Saved as you work. The Save button was a step people forgot, and forgetting
-  // it lost everything with no warning — the page looked identical either way.
-  var saveTimer = null;
-  function autosave(){
-    if(!window.__FQ_SAVE__) return;          // standalone file: no server to save to
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function(){
-      window.__FQ_SAVE__({files: DEC, accounts: ACCTS, items: ITEMS});
-    }, 600);
-  }
   document.querySelectorAll('select.ckv').forEach(function(sel){
     sel.addEventListener('change', function(){ recordItem(sel.dataset.item); });
   });
