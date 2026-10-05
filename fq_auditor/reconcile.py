@@ -125,6 +125,24 @@ _ACCT_ASK = re.compile(
     r'(?:ending(?:\s+in)?|acct\.?|account)\s*#?\s*x?(\d{4,})\b|\bx(\d{4,})\b', re.I)
 
 
+# Three consecutive months is enough to see a pattern in an account, which is
+# what these statements are for. Asking for four and insisting on four meant a
+# client who sent a clean, unbroken three was chased for a fourth nobody needed.
+MIN_RUN = 3
+
+
+def _longest_run(stamps):
+    """Longest unbroken run of consecutive months in a set of month indexes."""
+    if not stamps:
+        return 0
+    xs = sorted(stamps)
+    best = run = 1
+    for a, b in zip(xs, xs[1:]):
+        run = run + 1 if b == a + 1 else 1
+        best = max(best, run)
+    return best
+
+
 def _one_slip_apart(a, b):
     """True when two account numbers differ by a single human slip.
 
@@ -357,11 +375,30 @@ def _eval_item(item, found, facts):
 
     # ---- "previous N months" depth ------------------------------------
     elif item.get('count') and item.get('granularity') == 'monthly':
-        stamps = {month_index(d['year'], d['month']) for d in found
-                  if d.get('month') and d.get('year')}
-        if len(stamps) < item['count']:
-            problems.append(f"{len(stamps) or len(found)} of the {item['count']} "
-                            f"requested months provided")
+        # An unbroken run is what the analysis needs, not the specific months we
+        # happened to name. Asking for "March, April, May and June" and getting
+        # May, June, July and August is a complete picture; counting distinct
+        # months without checking they join up would equally pass March, May,
+        # July and September, which is not.
+        #
+        # Judged per ACCOUNT. Four statements across four different accounts is
+        # four first months, and adding them up read as a full run.
+        by_acct = defaultdict(set)
+        for d in found:
+            if d.get('month') and d.get('year'):
+                key = d.get('account_tail') or d.get('issuer') or ''
+                by_acct[key].add(month_index(d['year'], d['month']))
+        want = min(int(item['count']), MIN_RUN)
+        short = []
+        for key, stamps in sorted(by_acct.items()):
+            if _longest_run(stamps) < want:
+                short.append((key, _longest_run(stamps)))
+        if not by_acct:
+            problems.append('no month could be read from the statements provided')
+        elif short:
+            problems.append('; '.join(
+                '%s has %d month(s) in a row, we need %d'
+                % (('x' + k) if k else 'one account', n, want) for k, n in short))
 
     # ---- plain count of separate documents ----------------------------
     elif item.get('count'):
