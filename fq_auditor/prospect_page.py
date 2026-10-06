@@ -30,6 +30,8 @@ import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import summary as _summary                                    # noqa: E402
+import intake_form as _ic
+import production as _prod                                     # noqa: E402
 
 GAP = 'NOT YET SENT'
 HUMAN = 'NEEDS A HUMAN'
@@ -67,6 +69,153 @@ ANALYSIS_ROWS = [
     ('Production adjustment %', 'b'),
 ]
 
+PROD_SRC = '<span class="src">Practice Analysis</span>'
+
+# The template's metric names against the figures the Practice Analysis
+# actually prints. Only rows the report can answer are mapped; the rest stay
+# NEEDS A HUMAN rather than being derived from something that nearly means the
+# same thing. "Gross production" is charges before adjustments; "Net" is after.
+PROD_MAP = {
+    'Gross production': lambda v: v.get('charges_uninsured', 0)
+                                 + v.get('charges_insured', 0)
+    if {'charges_uninsured', 'charges_insured'} <= set(v) else None,
+    'Production adjustments': lambda v: v.get('adjustments_add'),
+    'Net production': lambda v: v.get('total_charges'),
+    'Gross collections': lambda v: abs(v['patient_payments'])
+    + v.get('insurance_payments', 0)
+    if 'patient_payments' in v and 'insurance_payments' in v else None,
+    'Collection adjustments': lambda v: v.get('adjustments_less'),
+    'Net collections': lambda v: v.get('total_credits'),
+}
+
+
+def production_rows(folder):
+    """{year: {metric: value}} from the scanned reports, agreed figures only."""
+    rows = {}
+    try:
+        got = _prod.gather(folder)
+    except Exception:
+        return rows
+    for year, rec in got.items():
+        vals = rec.get('values') or {}
+        chk = rec.get('check')
+        if chk and not chk['agrees']:
+            continue          # the report does not add up; report nothing
+        rows[year] = {name: fn(vals) for name, fn in PROD_MAP.items()
+                      if fn(vals) is not None}
+    return rows
+
+
+def notes_from_form(f):
+    """The Initial Notes sentences, written from the client's own answers.
+
+    Each line is composed only from fields the form actually carries. A note
+    with nothing behind it comes back None and prints as a gap, so the page
+    never pads itself out with a sentence that says nothing.
+    """
+    def g(*keys):
+        return [f[k] for k in keys if f.get(k)]
+
+    def money(k):
+        v = _ic.money(f.get(k))
+        return '${:,.0f}'.format(v) if v is not None else None
+
+    practice, personal = [], []
+
+    own = []
+    if f.get('ownership'):
+        own.append(f['ownership'].lower())
+    if f.get('years_owned'):
+        own.append('%s years' % f['years_owned'])
+    if f.get('building'):
+        b = 'owns the building' if f['building'].lower().startswith('own') else 'rents'
+        if f.get('building_sqft'):
+            b += ', %s sq ft' % '{:,}'.format(int(_ic.money('building_sqft') or 0)) \
+                 if False else ', %s sq ft' % f['building_sqft']
+        if money('building_payment'):
+            b += ' at %s/mo' % money('building_payment')
+        own.append(b)
+    practice.append(('Ownership', ', '.join(own) or None))
+
+    growth = []
+    if money('collections_last'):
+        growth.append('%s collected last year' % money('collections_last'))
+    if money('collections_proj'):
+        growth.append('%s projected this year' % money('collections_proj'))
+        a, b = _ic.money(f.get('collections_last')), _ic.money(f.get('collections_proj'))
+        if a and b:
+            growth.append('%+.0f%% on the client\u2019s own forecast' % (100.0 * (b - a) / a))
+    practice.append(('Growth', ', '.join(growth) or None))
+
+    team = []
+    if f.get('chairs_total'):
+        team.append('%s chairs (%s operative, %s hygiene, %s overflow)'
+                    % (f['chairs_total'], f.get('chairs_operative', '?'),
+                       f.get('chairs_hygiene', '?'), f.get('chairs_overflow', '?')))
+    if f.get('has_associates'):
+        t = 'associates: %s' % f['has_associates'].lower()
+        if f.get('associate_comp'):
+            t += ' \u2014 %s' % f['associate_comp']
+        team.append(t)
+    practice.append(('Team', '; '.join(team) or None))
+
+    prod = []
+    for label, key in (('doctor days/wk', 'doctor_days'),
+                       ('hygiene days/wk', 'hygiene_days'),
+                       ('new patients/mo', 'new_patients_mo')):
+        if f.get(key):
+            prod.append('%s %s' % (f[key], label))
+    if f.get('new_patient_wait'):
+        prod.append('next new-patient opening %s' % f['new_patient_wait'])
+    practice.append(('Productivity', ', '.join(prod) or None))
+
+    payer = []
+    if f.get('in_network'):
+        payer.append('in-network: %s' % f['in_network'].lower())
+    if f.get('pms'):
+        payer.append('runs %s' % f['pms'])
+    practice.append(('Payer mix', ', '.join(payer) or None))
+
+    practice.append(('Costs',
+                     ('client states overhead at %s' % f['overhead_stated'])
+                     if f.get('overhead_stated') else None))
+    practice.append(('Transition', None))
+
+    hh = []
+    for k, lab in (('age', 'age %s'), ('marital_status', '%s'),
+                   ('dependents', '%s dependents')):
+        if f.get(k):
+            hh.append(lab % f[k])
+    personal.append(('Household', ', '.join(hh) or None))
+    personal.append(('Spending', None))
+
+    ret = []
+    if f.get('retire_age'):
+        ret.append('target age %s' % f['retire_age'])
+    if f.get('retire_target'):
+        ret.append('believes %s is needed' % f['retire_target'])
+    if f.get('retire_basis'):
+        ret.append('basis: %s' % f['retire_basis'].lower())
+    if f.get('saved_last_year'):
+        ret.append('saved last year: %s' % f['saved_last_year'].lower())
+    personal.append(('Retirement', ', '.join(ret) or None))
+
+    personal.append(('Liquidity',
+                     ('liquid at retirement today: %s' % f['saved_liquid'])
+                     if f.get('saved_liquid') else None))
+    personal.append(('Protection', None))
+    struct = []
+    if money('take_home'):
+        struct.append('take-home %s' % money('take_home'))
+    if f.get('cpa_rating'):
+        struct.append('rates the CPA \u201c%s\u201d' % f['cpa_rating'].lower())
+    if f.get('tax_surprise'):
+        struct.append('tax surprise: %s' % f['tax_surprise'][:120])
+    personal.append(('Structure', '; '.join(struct) or None))
+    personal.append(('Stated goal', None))
+    return practice, personal
+
+
 PRACTICE_NOTES = ['Ownership', 'Growth', 'Team', 'Productivity', 'Payer mix',
                   'Costs', 'Transition']
 PERSONAL_NOTES = ['Household', 'Spending', 'Retirement', 'Liquidity',
@@ -75,6 +224,10 @@ PERSONAL_NOTES = ['Household', 'Spending', 'Retirement', 'Liquidity',
 
 def build(folder, client=None):
     client = client or os.path.basename(folder.rstrip('/'))
+    form = {}
+    src = _ic.find_form(folder) or _ic.find_form(os.path.dirname(folder.rstrip('/')))
+    if src:
+        form = _ic.parse(src)
     pnl = _summary.gather(folder)
     by_year = {p['year']: p for p in pnl if p.get('year')}
     years = sorted(by_year)[-3:]
@@ -89,21 +242,46 @@ def build(folder, client=None):
     a('<div class="hd"><div>')
     a('<div class="kick">PROSPECT SUMMARY &nbsp;\u00b7&nbsp; ONBOARDING &amp; DATA INTAKE</div>')
     a('<h1>%s</h1>' % _e(client))
-    a('<div class="sub">%s</div>' % cell(None, why=HUMAN))
+    bits = [x for x in (form.get('pms') and 'Dentrix' or None,
+                        form.get('ownership'),
+                        form.get('years_owned') and '%s years' % form['years_owned'],
+                        form.get('age') and 'Age %s' % form['age'],
+                        form.get('marital_status'),
+                        form.get('dependents') is not None and
+                        '%s dependents' % form.get('dependents')) if x]
+    a('<div class="sub">%s</div>'
+      % (' \u00b7 '.join(_e(b) for b in bits) if bits else cell(None, why=HUMAN)))
     a('</div><div class="meta">PREPARED %s<br>ADVISOR %s<br>ANALYST %s<br>'
       '<span class="stage">STAGE &nbsp;DATA RECEIVED</span></div></div>'
       % (datetime.date.today().strftime('%d.%m.%Y'), cell(None, why=HUMAN),
          cell(None, why=HUMAN)))
 
+    prod_rows = production_rows(folder)
     latest = by_year.get(years[-1]) if years else None
+    # The headline is the newest P&L that covers a whole year. The newest sheet
+    # of all may be a single month — Oyler's July 2026 — and a month's income
+    # under a yearly label is a wrong number that reads like an ordinary one.
+    full = [y for y in years if (by_year[y].get('months') or 0) >= 12]
+    head_year = full[-1] if full else (years[-1] if years else None)
+    headline = by_year.get(head_year) if head_year else None
+    n = (headline or {}).get('months') or 0
+    inc_label = "NET COLLECTIONS '%s" % (head_year[-2:] if head_year else '--')
+    inc_src = 'P&L'
+    if headline and n and n < 12:
+        inc_label = "COLLECTIONS, %d MONTH%s '%s" % (n, '' if n == 1 else 'S',
+                                                     head_year[-2:])
+        inc_src = 'P&L, part year'
+    latest = headline or latest
     a('<div class="kpis">')
     for label, val, src, why in (
-        ("NET COLLECTIONS '%s" % (years[-1][-2:] if years else '--'),
+        (inc_label,
          ('$' + money(latest['income'])) if latest else None,
-         'P&L' if latest else None, None),
+         inc_src if latest else None, None),
         ('OVERHEAD', ('%.1f%%' % latest['overhead_pct']) if latest else None,
          'P&L' if latest else None, None),
-        ('OWNER COMP', None, None, HUMAN),
+        ('OWNER COMP',
+         ('$' + money(_ic.money(form.get('take_home')))) if form.get('take_home') else None,
+         'IC form' if form.get('take_home') else None, HUMAN),
         ('TOTAL DEBT', None, None, None),
         ('OBSERVED ASSETS', None, None, None)):
         a('<div class="kpi"><div class="kl">%s</div><div class="kv">%s</div></div>'
@@ -115,11 +293,13 @@ def build(folder, client=None):
     # ---- left: initial notes --------------------------------------------
     a('<div class="colL">')
     a('<h2>Initial notes</h2>')
-    for head, items in (('PRACTICE', PRACTICE_NOTES), ('PERSONAL', PERSONAL_NOTES)):
+    prac_notes, pers_notes = notes_from_form(form)
+    for head, items in (('PRACTICE', prac_notes), ('PERSONAL', pers_notes)):
         a('<div class="tag %s">%s</div><ul class="notes">'
           % ('tp' if head == 'PRACTICE' else 'tn', head))
-        for n in items:
-            a('<li><b>%s</b> \u2014 %s</li>' % (_e(n), cell(None, why=HUMAN)))
+        for name, body in items:
+            a('<li><b>%s</b> \u2014 %s</li>'
+              % (_e(name), _e(body) if body else cell(None, why=HUMAN)))
         a('</ul>')
     a('</div>')
 
@@ -127,17 +307,31 @@ def build(folder, client=None):
     a('<div class="colR">')
     a('<h2>Practice analysis<span class="src2">SOURCE: PMS + PRACTICE FINANCIALS</span></h2>')
     a('<table class="an"><tr><th>METRIC</th>')
+    # A part-year column says so in its heading. Without it the year-to-date
+    # column sat beside two full years and its change column read -42%, which
+    # is the arithmetic of a half-finished year, not a falling practice.
+    partial = {y for y in years
+               if 0 < (by_year.get(y, {}).get('months') or 12) < 12}
     for n, y in enumerate(years):
-        a('<th>%s</th>' % y)
+        a('<th>%s%s</th>' % (y, ' YTD' if y in partial else ''))
         if n:
             a('<th class="d">\u0394</th>')
     a('</tr>')
     for name, cls in ANALYSIS_ROWS:
         a('<tr class="%s"><td>%s</td>' % ('b' if cls == 'b' else '', _e(name)))
+        prev = None
         for n, y in enumerate(years):
-            a('<td>%s</td>' % cell(None, why=HUMAN))
+            v = prod_rows.get(y, {}).get(name)
+            a('<td>%s</td>' % (('$' + money(v)) + PROD_SRC if v is not None
+                               else cell(None, why=HUMAN)))
             if n:
-                a('<td class="d"></td>')
+                # The change column only where both years were actually read.
+                d = ''
+                if v is not None and prev and y not in partial \
+                        and years[n - 1] not in partial:
+                    d = '%+.0f%%' % (100.0 * (v - prev) / abs(prev))
+                a('<td class="d">%s</td>' % d)
+            prev = v
         a('</tr>')
     a('</table>')
 
@@ -158,6 +352,12 @@ def build(folder, client=None):
     else:
         a('<td></td>')
     a('<td>&le;60%</td></tr>')
+    a('<tr><td>Client\u2019s own estimate</td>')
+    for y in years:
+        a('<td>%s</td>' % (cell(form['overhead_stated'], 'IC form')
+                           if (form.get('overhead_stated') and y == years[-1])
+                           else '<span class="gap">\u2014</span>'))
+    a('<td></td><td></td></tr>')
     a('<tr class="b"><td>Basis difference</td>')
     for y in years:
         a('<td>%s</td>' % cell(None, why=HUMAN))

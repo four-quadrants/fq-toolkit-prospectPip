@@ -80,6 +80,31 @@ def _num(s):
     return -v if neg else v
 
 
+MONTHS = ('january february march april may june july august september '
+          'october november december').split()
+
+
+def period_months(text):
+    """How many months a P&L covers, read off its own heading.
+
+    Every one of these sheets prints its period under the practice name:
+    "January-December, 2024" or just "July 2026". That line is the only honest
+    statement of what the figures below it add up to — column counts do not
+    survive a summary tab. Returns None when the heading says nothing, because
+    a guessed span turns one month's income into a year's collections.
+    """
+    head = '\n'.join((text or '').split('\n')[:12]).lower()
+    m = re.search(r'(%s)\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*(%s)'
+                  % ('|'.join(MONTHS), '|'.join(MONTHS)), head)
+    if m:
+        a, b = MONTHS.index(m.group(1)), MONTHS.index(m.group(2))
+        return (b - a) % 12 + 1
+    for mon in MONTHS:
+        if re.search(r'\b%s\b[,\s]+20\d\d' % mon, head):
+            return 1
+    return None
+
+
 def read_pnl(text):
     """Income, expense sections and overhead from one Profit & Loss.
 
@@ -140,6 +165,7 @@ def read_pnl(text):
                          if k not in owner and k not in other)
     return {
         'income': round(income, 2),
+        'months': period_months(text),
         'sections': {k: round(v, 2) for k, v in sorted(top.items())},
         'owner_comp': {k: round(v, 2) for k, v in owner.items()},
         'other_expenses': {k: round(v, 2) for k, v in other.items()},
