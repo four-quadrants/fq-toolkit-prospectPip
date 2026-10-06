@@ -1866,6 +1866,18 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
     """
     if not results:
         return
+    # Apply saved verdicts to the STATUS, not just to the dropdown. They were
+    # only applied during an audit run, so a page rebuilt afterwards showed the
+    # dropdown reading "satisfied" while the dot stayed orange and the count
+    # still said "needs you" — the same item disagreeing with itself in two
+    # places, which reads as the click not having worked.
+    if verdicts:
+        try:
+            from reconcile import apply_item_verdicts
+            apply_item_verdicts(results, verdicts)
+        except Exception:
+            pass
+
     for r in results:
         v = (verdicts or {}).get(str(r['item'].get('id'))) or {}
         r['_verdict'], r['_vnote'] = v.get('verdict') or '', v.get('note') or ''

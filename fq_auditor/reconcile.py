@@ -705,11 +705,19 @@ def apply_item_verdicts(results, verdicts, who='reviewer'):
         # auditor's own reading has since moved the other way, that has to be
         # visible, or a stale instruction quietly outlives the situation that
         # produced it.
+        # Only ONE direction is staleness. If you said an item was still missing
+        # and the auditor now finds it answered, documents arrived after you
+        # decided and your instruction has outlived the situation — worth
+        # saying.
+        #
+        # The other direction is not stale, it is the whole point. Marking a
+        # mismatched item satisfied means you opened the documents and know
+        # something the matcher cannot see. Flagging that put the item straight
+        # back into "needs you" the instant it was answered, so overruling the
+        # auditor looked like the click had failed.
         auto = r['auto_status']
         want = rule['status']
-        if auto != want and (
-                (want in ('missing', 'partly satisfied') and auto == 'satisfied')
-                or (want == 'satisfied' and auto in ('missing', 'mismatched'))):
+        if auto == 'satisfied' and want in ('missing', 'partly satisfied'):
             r['verdict_stale'] = {
                 'said': want, 'now': auto, 'docs': len(r.get('docs') or [])}
 
