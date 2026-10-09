@@ -105,17 +105,46 @@ def period_months(text):
     return None
 
 
-def read_pnl(text):
-    """Income, expense sections and overhead from one Profit & Loss.
+def _find_total(rows, *names):
+    """A 'Total for X' figure by name, matched exactly then by prefix."""
+    norm = {re.sub(r'\s+', ' ', k).strip().lower(): v for k, v in rows.items()}
+    for n in names:
+        if n.lower() in norm:
+            return norm[n.lower()]
+    for n in names:
+        for k, v in norm.items():
+            if k.startswith(n.lower()):
+                return v
+    return None
 
-    Returns None when the text does not look like a P&L with usable totals,
-    rather than guessing — a half-read P&L produces an overhead percentage that
-    looks ordinary and is wrong.
+
+def read_pnl(text):
+    """Overhead from one Profit & Loss, on Four Quadrants' own definition.
+
+        income base = Total Income + Total Other Income
+        overhead    = Total Expense + Total Other Expense
+                      - doctor salary - (depreciation + amortisation + s179)
+        overhead %  = overhead / income base
+
+    WHY THIS IS SPELLED OUT
+    An earlier version dropped "Other Expenses" wholesale, on the reasoning
+    that a section called "other" sits below the operating line. On this firm's
+    P&Ls it does not: Other Expenses is where ASSOCIATE EXPENSES and DOCTOR
+    EXPENSES live, and on Oyler that was $1.23m of real cost on a $4.1m
+    practice. Excluding it printed 59.4% against a true 77.0% -- a number that
+    looked healthy, sat conveniently just under the firm's 60% target, and was
+    wrong by eighteen points.
+
+    Each of depreciation, amortisation and section 179 is looked up on its own
+    and contributes zero when absent, because a cash-basis P&L often carries
+    none of them and that is not a mapping failure.
+
+    Returns None when the sheet does not carry the totals this needs, rather
+    than computing a percentage from half a P&L.
     """
-    income = None
-    sections, rows = {}, {}
-    # One sheet only. A workbook holds the summary and a month-by-month tab
-    # carrying the same sections again; reading both counted every section twice.
+    sections, rows, lines = {}, {}, {}
+    # One sheet only. A workbook holds a summary tab and a month-by-month tab
+    # carrying the same sections again; reading both counted everything twice.
     body = text or ''
     sheets = re.split(r'^\[sheet: ', body, flags=re.M)
     body = sheets[1] if len(sheets) > 1 else body
@@ -126,51 +155,55 @@ def read_pnl(text):
             continue
         m = re.match(r'^Total for (.+)$', name, re.I)
         if m:
-            label = m.group(1).strip()
-            if re.fullmatch(r'income', label, re.I):
-                income = val
-            else:
-                sections[label] = val
+            sections[m.group(1).strip()] = val
         elif not name.lower().startswith('total'):
-            rows[name] = val
+            lines.setdefault(name.strip(), val)
+        rows[name] = val
 
+    income = _find_total(sections, 'income')
     if income is None:
-        income = rows.get('Gross Profit') or rows.get('Total for Income')
-    if not income:
+        return None
+    other_income = _find_total(sections, 'other income') or 0.0
+    expenses = _find_total(sections, 'expenses', 'expense')
+    other_exp = _find_total(sections, 'other expenses', 'other expense') or 0.0
+    if expenses is None:
         return None
 
-    # Section totals nest: "Total for Salaries" sits inside "Total for EMPLOYEE
-    # COSTS". Counting both double-counts the wages. Keep only the outermost by
-    # dropping any section whose value is contained in a larger one that also
-    # appears — the P&L's own hierarchy, read off its own arithmetic.
-    top = {}
-    for name, val in sections.items():
-        if any(name != other and abs(val) < abs(oval)
-               and _nested(name, other, text) for other, oval in sections.items()):
-            continue
-        top[name] = val
+    doctor_salary = _find_total(lines, 'doctor wages', 'dr salary',
+                                'doctor salary') or 0.0
+    # Three independent lookups; a missing one contributes zero.
+    da_found, da_total = [], 0.0
+    for label, *aliases in (('Depreciation', 'depreciation expense',
+                             'depreciation'),
+                            ('Amortization', 'amortization expense',
+                             'amortization'),
+                            ('Section 179', 'section 179 expense',
+                             'section 179 depreciation')):
+        hit = None
+        for key, v in lines.items():
+            k = key.strip().lower()
+            if any(k.startswith(a) for a in aliases):
+                hit = v
+                break
+        if hit:
+            da_found.append(label)
+            da_total += hit
 
-    # An income section is not an expense. "Total for INCOME FROM SERVICES" was
-    # being added to the cost side, which put overhead near 190%.
-    top = {k: v for k, v in top.items() if not INCOME_WORDS.search(k)}
-
-    # "Other Expenses" is below the operating line — interest, depreciation,
-    # one-offs. Reported, never folded in: overhead is what it costs to run the
-    # chairs, and burying financing inside it is how one practice ends up with
-    # two different overhead numbers.
-    other = {k: v for k, v in top.items() if OTHER_WORDS.search(k)}
-    owner = {k: v for k, v in top.items()
-             if OWNER_WORDS.search(k) and k not in other}
-    overhead_total = sum(v for k, v in top.items()
-                         if k not in owner and k not in other)
+    base = income + other_income
+    overhead = expenses + other_exp - doctor_salary - da_total
     return {
         'income': round(income, 2),
+        'other_income': round(other_income, 2),
+        'income_base': round(base, 2),
+        'expenses': round(expenses, 2),
+        'other_expenses': round(other_exp, 2),
+        'doctor_salary': round(doctor_salary, 2),
+        'depreciation_amort': round(da_total, 2),
+        'da_found': da_found,
+        'sections': {k: round(v, 2) for k, v in sorted(sections.items())},
+        'overhead': round(overhead, 2),
+        'overhead_pct': round(100.0 * overhead / base, 1) if base else None,
         'months': period_months(text),
-        'sections': {k: round(v, 2) for k, v in sorted(top.items())},
-        'owner_comp': {k: round(v, 2) for k, v in owner.items()},
-        'other_expenses': {k: round(v, 2) for k, v in other.items()},
-        'overhead': round(overhead_total, 2),
-        'overhead_pct': round(100.0 * overhead_total / income, 1) if income else None,
     }
 
 
