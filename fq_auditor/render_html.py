@@ -1867,7 +1867,8 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
     # places, which reads as the click not having worked.
     if verdicts:
         try:
-            from reconcile import apply_item_verdicts
+            from reconcile import apply_item_verdicts, apply_claude_verdicts
+            apply_claude_verdicts(results, load_claude_verdicts(None))
             apply_item_verdicts(results, verdicts)
         except Exception:
             pass
@@ -2163,6 +2164,9 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # Applied here rather than in the page markup so the chase list, the tiles
     # and the client email all see the same answer.
     import reconcile as _rec
+    # Three layers, applied in order. The rules decided already; Claude's
+    # reading goes on next, and a person's decision last so it beats both.
+    _rec.apply_claude_verdicts(results, load_claude_verdicts(res))
     _rec.apply_item_verdicts(results, item_decisions(decisions), who='you')
 
     plan = build_plan(docs, decisions, res.get('mislabeled') or ())

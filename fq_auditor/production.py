@@ -208,11 +208,28 @@ def _settle_by_arithmetic(passes, values, disputed):
     is tried, and a candidate is accepted only if it closes the sum to the
     dollar. One arithmetic identity beats any number of re-reads of a bad line.
     """
-    parts = ('charges_uninsured', 'charges_insured', 'adjustments_add')
-    total = values.get('total_charges')
+    for parts, total_key in (
+            (('charges_uninsured', 'charges_insured', 'adjustments_add'),
+             'total_charges'),
+            # The credits side was never checked. On Oyler's 2024 report the
+            # payments and reductions sum to 3,967,838 and the total reads
+            # 4,467,838 -- a misread "3,9" as "4,4" that made net collections
+            # exceed gross collections and pushed the collection rate over
+            # 100%. Two passes agreed on it, because both misread it the same
+            # way. Only the arithmetic caught it.
+            (('patient_payments', 'insurance_payments', 'adjustments_less'),
+             'total_credits')):
+        values, disputed = _settle_one(passes, values, disputed, parts,
+                                       total_key)
+    return values, disputed
+
+
+def _settle_one(passes, values, disputed, parts, total_key):
+    total = values.get(total_key)
     if not total or not all(k in values for k in parts):
         return values, disputed
-    if abs(sum(values[k] for k in parts) - total) < 1.0:
+    # Payments are negative on these reports; the sum is of magnitudes.
+    if abs(sum(abs(values[k]) for k in parts) - abs(total)) < 1.0:
         return values, disputed
     for key in parts:
         seen = {got.get(key) for got in passes.values()}
@@ -220,11 +237,18 @@ def _settle_by_arithmetic(passes, values, disputed):
         for cand in seen:
             trial = dict(values)
             trial[key] = cand
-            if abs(sum(trial[k] for k in parts) - total) < 1.0:
+            if abs(sum(abs(trial[k]) for k in parts) - abs(total)) < 1.0:
                 values = trial
                 disputed = dict(disputed)
                 disputed.pop(key, None)
                 return values, disputed
+    # Nothing any pass read makes it add up, so the total is derived from its
+    # own parts and said to be derived. A figure that contradicts its own
+    # components is not a figure.
+    derived = sum(abs(values[k]) for k in parts)
+    values = dict(values)
+    values[total_key] = round(derived, 2)
+    values['%s_derived' % total_key] = True
     return values, disputed
 
 

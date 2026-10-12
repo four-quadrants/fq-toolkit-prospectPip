@@ -30,6 +30,7 @@ from extract import extract_folder                                  # noqa: E402
 from classify import classify, describe, MONTH_NAMES                # noqa: E402
 from detectors import scan as scan_pii, summarise as pii_summary    # noqa: E402
 from reconcile import reconcile                                     # noqa: E402
+import reconcile as _reconcile_mod                                  # noqa: E402
 import series                                                       # noqa: E402
 
 
@@ -488,6 +489,26 @@ def propagate_side_within_series(docs, quiet=False):
     return filled
 
 
+def _load_claude_checklist(folder):
+    """checklist_claude.py's verdicts for whichever client this folder is in."""
+    here = os.path.abspath(folder)
+    for _ in range(4):
+        for rel in (os.path.join('_Audit', 'claude_checklist.json'),
+                    'claude_checklist.json'):
+            path = os.path.join(here, rel)
+            if os.path.exists(path):
+                try:
+                    with open(path) as fh:
+                        return json.load(fh)
+                except (OSError, ValueError):
+                    return {}
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return {}
+
+
 def audit_folder(folder, checklist, cache_dir=None, workers=None, quiet=False):
     if not quiet:
         print(f"Reading documents in {folder} ...")
@@ -572,10 +593,29 @@ def audit_folder(folder, checklist, cache_dir=None, workers=None, quiet=False):
 
     cross = series.run_all(docs)
     results, unexpected, facts = reconcile(docs, checklist)
+
+    # Claude's reading of the checklist, applied here rather than at render
+    # time: the counts, the writeup and the client email are all built from
+    # these results, and an overlay applied later reached the page and nothing
+    # else. Absent is normal and leaves the rules' answers standing.
+    _claude = _load_claude_checklist(folder)
+    if _claude:
+        _reconcile_mod.apply_claude_verdicts(results, _claude)
+        if not quiet:
+            moved = sum(1 for r in results if r.get('disagrees_with_rules'))
+            print("  Claude read the checklist: %d of %d items differ from "
+                  "the rules" % (moved, len(results)))
     # Names that contradict their contents drive the rename rules downstream.
     mislabeled = {m['file'] for m in (cross.get('mislabeled') or [])}
+    # The client folder, so anything downstream can find that client's own
+    # files -- Claude's checklist reading among them -- without being told
+    # again where they live.
+    client_folder = os.path.dirname(os.path.abspath(folder)) \
+        if os.path.basename(os.path.abspath(folder)) in (
+            'Original_sourcedocs', 'Documents') else os.path.abspath(folder)
     return dict(docs=docs, leaks=leaks, cross=cross, results=results,
-                unexpected=unexpected, facts=facts, mislabeled=mislabeled)
+                unexpected=unexpected, facts=facts, mislabeled=mislabeled,
+                client_folder=client_folder)
 
 
 def page_list(pages):
@@ -753,13 +793,27 @@ def render_email(results, cross, client, greeting=None):
           "could you send:\n")
 
     for sec in ('Personal', 'Practice'):
-        rows = [r for r in wanted if r['item']['section'] == sec]
+        # An item sits under the section Claude put its ask in, not the one the
+        # checklist filed the item under. The checklist groups by who we are
+        # asking about; the client reads it as where to go and look.
+        rows = []
+        for r in wanted:
+            for a in (r.get('claude_asks') or
+                      [{'section': r['item']['section'], 'text': None}]):
+                if (a.get('section') or r['item']['section']) == sec:
+                    rows.append((r, a.get('text')))
         if not rows:
             continue
         W(sec)
-        for r in rows:
-            ask = r['item']['client_ask']
-            if r['status'] == 'mismatched':
+        for r, _text in rows:
+            # Claude's wording wins when it has read the documents and knows
+            # what is actually outstanding. The checklist's line is what we
+            # asked for originally; after four of the six months have arrived,
+            # repeating it verbatim asks the client to send what they already
+            # sent. "Please send the June statement for the account ending
+            # 4728" is the sentence a person would write at this point.
+            ask = _text or r.get('client_ask_override') or r['item']['client_ask']
+            if not r.get('client_ask_override') and r['status'] == 'mismatched':
                 ask = _politely_correct(ask, r)
             W(f"  - {ask}")
         W("")

@@ -653,7 +653,62 @@ VERDICTS = {
                     'note': "%s marked this not applicable — the client does not have one"},
     'missing':     {'status': 'missing',          'chase': True,
                     'note': '%s checked: what arrived does not answer this'},
+    # Some of it came, not all. The human dropdown never offered this because a
+    # person reviewing an item tends to know which half is outstanding and
+    # picks 'practice' or 'personal'. Claude answers in these terms constantly
+    # -- three of four months, two accounts of three -- and without this entry
+    # ten of its thirty-one verdicts were dropped on the floor.
+    'partly satisfied': {'status': 'partly satisfied', 'chase': True,
+                    'note': '%s checked: some of this arrived, not all'},
 }
+
+
+def apply_claude_verdicts(results, verdicts):
+    """Overlay Claude's reading of the checklist on the rules'.
+
+    Three layers, in order: the rules, then Claude, then a person. Each wins
+    over the one before it, and this must run before apply_item_verdicts so
+    that a person's decision still beats everything.
+
+    Claude is better at this than the rules because the question is whether the
+    evidence is SUFFICIENT, not whether it matches. On Oyler the rules called
+    nineteen items satisfied; Claude called twelve, and the seven it withheld
+    were real: an August statement that belonged to a different account, a
+    year-to-date P&L that covers one month, a pay stub whose own header says
+    "Page 1 of 1" against a request for two.
+
+    The rules' answer is kept beside it. When the two disagree, that is worth
+    showing a person rather than quietly replacing.
+    """
+    if not verdicts:
+        return results
+    for r in results:
+        v = verdicts.get(str(r['item'].get('id')))
+        if not v:
+            continue
+        rule = VERDICTS.get((v or {}).get('verdict'))
+        if not rule:
+            continue
+        r['rule_status'] = r.get('rule_status', r['status'])
+        r['status'] = rule['status']
+        r['claude_verdict'] = v.get('verdict')
+        r['claude_reasoning'] = v.get('reasoning')
+        r['claude_confidence'] = v.get('confidence')
+        # What the client will actually be asked for, written as they will
+        # read it. A list, because one checklist line can be two chases: "last
+        # two years of returns, personal and practice" is one item to us and
+        # two different requests to them, and the personal half kept appearing
+        # under a Practice heading.
+        asks = v.get('asks')
+        if isinstance(asks, list) and asks:
+            r['claude_asks'] = [a for a in asks if (a or {}).get('text')]
+            r['client_ask_override'] = asks[0].get('text')
+        elif v.get('still_needed'):
+            r['claude_asks'] = [{'section': r['item'].get('section'),
+                                 'text': v['still_needed']}]
+            r['client_ask_override'] = v['still_needed']
+        r['disagrees_with_rules'] = (r['rule_status'] != r['status'])
+    return results
 
 
 def apply_item_verdicts(results, verdicts, who='reviewer'):

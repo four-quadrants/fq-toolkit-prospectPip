@@ -33,7 +33,8 @@ import summary as _summary                                    # noqa: E402
 import intake_form as _ic
 import production as _prod
 import tax_basis as _tax
-import practice_facts as _facts                                     # noqa: E402
+import practice_facts as _facts
+import debt as _debt                                     # noqa: E402
 
 GAP = 'NOT YET SENT'
 HUMAN = 'NEEDS A HUMAN'
@@ -92,6 +93,26 @@ PROD_MAP = {
     'Collection adjustments': lambda v: v.get('adjustments_less'),
     'Net collections': lambda v: v.get('total_credits'),
 }
+
+
+def debt_total(debts):
+    """Total debt, said in a way that admits what it leaves out.
+
+    A bare total is the most dangerous figure on this page. Oyler's reads
+    $1.38m, and the building loan alone is $1.8m more -- it arrived as a letter
+    rather than a statement, so nothing has read it. A reader seeing one number
+    assumes it is the number. So the count of obligations behind it travels
+    with it, and anything unread is named.
+    """
+    total = (debts.get('practice_balance') or 0) + (debts.get('personal_balance') or 0)
+    if not total:
+        return None
+    n = len(debts.get('practice') or ()) + len(debts.get('personal') or ())
+    unread = len(debts.get('unread') or ())
+    note = '%d obligations' % n
+    if unread:
+        note += ', %d more not read' % unread
+    return '$' + money(total) + '<span class="src">%s</span>' % note
 
 
 def provider_label(code, role):
@@ -416,6 +437,10 @@ def build(folder, client=None):
         tax = _tax.gather(folder)
     except Exception:
         tax = {}
+    try:
+        debts = _debt.gather(folder)
+    except Exception:
+        debts = {}
     # A part-year column is labelled and never compared. Oyler's newest sheet is
     # a single July, and beside two full years its change column read -42%,
     # which is the arithmetic of an unfinished year, not a falling practice.
@@ -459,10 +484,11 @@ def build(folder, client=None):
         ('OWNER COMP',
          ('$' + money(_ic.money(form.get('take_home'))))
          if _ic.money(form.get('take_home')) else None),
-        ('TOTAL DEBT', None),
+        ('TOTAL DEBT', debt_total(debts)),
         ('OBSERVED ASSETS', None)):
+        rendered = val if (val and '<span' in str(val)) else cell(val)
         a('<div class="kpi"><div class="kl">%s</div><div class="kv">%s</div></div>'
-          % (label, cell(val)))
+          % (label, rendered))
     a('</div>')
 
     a('<div class="cols"><div class="colL">')
