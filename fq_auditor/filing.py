@@ -130,6 +130,42 @@ def plan_moves(plan, client_folder, src_folder, led=None, review_dir='_Needs Rev
     return moves, skipped
 
 
+def apply_rename_plan(plan, csv_path):
+    """Overlay a reviewed rename plan onto the audit's filing plan.
+
+    The audit decides where a document goes from its own classification. Where
+    Claude read the document and proposed a folder and a name, and a person has
+    left that proposal standing, it wins: it was made with the page in front of
+    it rather than from a rule.
+
+    A row whose collision is still unresolved is skipped entirely. Those are
+    the cases where two documents wanted one name and nothing in either
+    filename told them apart, and filing either one would destroy the other.
+    """
+    import csv as _csv
+    try:
+        with open(csv_path) as fh:
+            rows = {r['sha']: r for r in _csv.DictReader(fh) if r.get('sha')}
+    except (OSError, KeyError, ValueError):
+        return plan, 0
+
+    applied = 0
+    for p in plan:
+        row = rows.get(p.get('sha'))
+        if not row:
+            continue
+        if str(row.get('collision', '')).startswith('UNRESOLVED'):
+            continue
+        if row.get('rejected', '').strip():
+            continue                       # a person struck this one out
+        if row.get('proposed_folder'):
+            p['dest'] = row['proposed_folder']
+        if row.get('proposed_name'):
+            p['new_name'] = row['proposed_name']
+        applied += 1
+    return plan, applied
+
+
 def execute(moves, led=None, dry_run=True, client_folder=None):
     """Copy everything that is not blocked. Returns (done, refused).
 

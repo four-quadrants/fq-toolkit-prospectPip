@@ -54,9 +54,15 @@ def find_reviewed_checklist(folder, levels=3):
     """
     here = os.path.abspath(folder)
     for _ in range(levels + 1):
-        cand = os.path.join(here, 'checklist_reviewed.json')
-        if os.path.exists(cand):
-            return cand
+        # _Audit first. These files are the tool's own bookkeeping and sat
+        # loose at the top of the client folder next to the documents, where
+        # they read as something a person might tidy away. They belong in the
+        # working folder; the top level is still checked so a client filed
+        # before the move keeps working.
+        for cand in (os.path.join(here, '_Audit', 'checklist_reviewed.json'),
+                     os.path.join(here, 'checklist_reviewed.json')):
+            if os.path.exists(cand):
+                return cand
         parent = os.path.dirname(here)
         if parent == here:
             break
@@ -72,9 +78,15 @@ def find_tasks_file(folder, levels=3):
     """
     here = os.path.abspath(folder)
     for _ in range(levels + 1):
-        cand = os.path.join(here, 'launchbay_tasks.json')
-        if os.path.exists(cand):
-            return cand
+        # _Audit first. These files are the tool's own bookkeeping and sat
+        # loose at the top of the client folder next to the documents, where
+        # they read as something a person might tidy away. They belong in the
+        # working folder; the top level is still checked so a client filed
+        # before the move keeps working.
+        for cand in (os.path.join(here, '_Audit', 'launchbay_tasks.json'),
+                     os.path.join(here, 'launchbay_tasks.json')):
+            if os.path.exists(cand):
+                return cand
         parent = os.path.dirname(here)
         if parent == here:
             break
@@ -822,10 +834,15 @@ def guard_email(text, docs):
         if len(stem) > 6 and stem.lower() in text.lower():
             problems.append(f"internal filename '{d['file']}' appears in the client email")
 
-    if re.search(r'account (?:ending|number|no\.?|#)\s*[:#]?\s*\d', text, re.I):
-        problems.append("an account number reference appears in the client email")
-    if re.search(r'\bx\d{4}\b', text):
-        problems.append("a masked account tail appears in the client email")
+    # A last-four is fine to send: the client owns the account and naming it is
+    # how a person would ask ("your Civista checking ending 4728"). What is not
+    # fine is a full account number, which they did not need us to repeat back
+    # and which would sit in their inbox forever. So the guard now measures
+    # length rather than refusing every digit near the word "account".
+    for m in re.finditer(r'account\s*(?:ending|number|no\.?|#)?\s*[:#]?\s*'
+                         r'[xX*]?(\d{5,})', text, re.I):
+        problems.append("a full account number (%s...) appears in the client "
+                        "email" % m.group(1)[:3])
     return problems
 
 

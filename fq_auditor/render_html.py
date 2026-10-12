@@ -263,21 +263,15 @@ def plan_destination(doc):
     if conf == 'low':
         return (REVIEW_DIR, 'classified with low confidence', True)
 
+    # Two levels, never three: side, then category. Banking used to get a
+    # folder per account, on the reasoning that twelve statements a year need
+    # to stay together. They do, but the filename is where that belongs now:
+    # "Chk (Civista) x4728 2026-04.pdf" sorts beside its own siblings and still
+    # says which account it is once it has been emailed to somebody or dragged
+    # somewhere else. A folder named x4728 holding a file named "04 Apr 30 2026
+    # Civista Cking Stmt" split the account number and the product across two
+    # places, and neither survived the file leaving the folder.
     parts = [DOCS_DIR, SIDE_DIR.get(use_side, use_side), sub]
-    # A folder per account for BANKING, flat for investments — which is how the
-    # team files by hand. Rebol's tree has Banking/1362, /9634, /5796, because a
-    # current account brings twelve statements a year and they need to stay
-    # together; his Investments folder is flat, because a 403(b) brings one or
-    # two and the account is already in the filename. Giving investments a
-    # folder each produced "Investments/Principal" holding a single statement.
-    if dtype in ('bank_statement', 'cc_statement'):
-        tail, issuer = doc.get('account_tail'), doc.get('issuer')
-        if tail:
-            parts.append('x%s' % str(tail).lstrip('xX'))
-        elif issuer:
-            parts.append(str(issuer))
-        else:
-            return ('/'.join(parts), 'no account number or issuer read — filed at folder level', True)
     return ('/'.join(parts), 'classified %s' % dtype.replace('_', ' '), False)
 
 

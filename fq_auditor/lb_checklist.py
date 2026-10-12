@@ -46,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vocab                                    # noqa: E402
 from checklist_parse import build_item          # noqa: E402  (reuses the semantics)
 
-TASKS = 'launchbay_tasks.json'
-OUT = 'checklist_reviewed.json'
+TASKS = os.path.join('_Audit', 'launchbay_tasks.json')
+OUT = os.path.join('_Audit', 'checklist_reviewed.json')
 
 # Which side of the house an item belongs to. The request tasks do not say, so it
 # is read from the wording — "practice bank statements" is not a personal one.
@@ -295,11 +295,16 @@ def main():
 
     tasks_path = a.tasks or os.path.join(a.folder, TASKS)
     if not os.path.exists(tasks_path):
+        legacy = os.path.join(a.folder, os.path.basename(TASKS))
+        if os.path.exists(legacy):
+            tasks_path = legacy
+    if not os.path.exists(tasks_path):
         sys.exit("No %s in %s — ask Claude to write one for this client."
                  % (TASKS, a.folder))
     items = build(tasks_path)
 
     out = os.path.join(a.folder, OUT)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as fh:
         json.dump(items, fh, indent=2)
     print("\nWrote %s" % out)

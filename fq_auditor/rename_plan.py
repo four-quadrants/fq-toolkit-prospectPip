@@ -47,7 +47,7 @@ FOLDERS = [
     'Business/Production', 'Business/Fees', 'Business/Associate Info',
     'Business/Insurance', 'Business/Valuation', 'Business/Misc',
     'Personal/Banking', 'Personal/Credit Cards', 'Personal/Debt',
-    'Personal/Investments', 'Personal/Retirement', 'Personal/Taxes',
+    'Personal/Investments', 'Personal/Taxes',
     'Personal/Insurance', 'Personal/Pay Info', 'Personal/Credit Reports',
     'Personal/Misc',
 ]
@@ -266,14 +266,19 @@ def main():
         lost = guardrail(existing, proposed)
         if lost:
             flagged += 1
-        row = {'existing': existing,
+        row = {'sha': os.path.basename(doc['cache_file']).split('.')[0],
+               'existing': existing,
                'existing_folder': os.path.relpath(os.path.dirname(src),
                                                   a.folder),
                'proposed_folder': ans.get('folder'),
                'proposed_name': proposed,
                'confidence': ans.get('confidence'),
                'lost_product_word': lost or '',
-               'evidence': str(ans.get('evidence') or '')[:200]}
+               'evidence': str(ans.get('evidence') or '')[:200],
+               # Yours to fill in. Any text here and filing leaves that
+               # document alone, so rejecting one costs a word rather than a
+               # conversation.
+               'rejected': ''}
         plan.append(row)
         mark = '  <-- drops "%s"' % lost if lost else ''
         print('%3d  %-42s\n     -> %s/%s   (%s)%s'
@@ -289,10 +294,19 @@ def main():
             print('  %-42s -> %s' % (r['existing'][:42], r['proposed_name']))
             print('       %s' % r['collision'])
 
+    # Column order is for the person reading it, not for the code. The three
+    # columns a reviewer actually uses sit together on the left: what it was,
+    # what is proposed, and the box to say no in.
+    ORDER = ['existing', 'proposed_folder', 'proposed_name', 'rejected',
+             'confidence', 'existing_folder', 'collision',
+             'lost_product_word', 'evidence', 'sha']
+
     out = a.csv or os.path.join(a.folder, '_Audit', 'rename_plan.csv')
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w', newline='') as fh:
-        w = csv.DictWriter(fh, fieldnames=list(plan[0])) if plan else None
+        fields = ([c for c in ORDER if c in plan[0]] +
+                  [c for c in plan[0] if c not in ORDER]) if plan else []
+        w = csv.DictWriter(fh, fieldnames=fields) if plan else None
         if w:
             w.writeheader()
             w.writerows(plan)

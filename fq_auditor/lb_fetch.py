@@ -36,7 +36,7 @@ import urllib.request
 import urllib.error
 
 FETCHED = '.lb_fetched.json'
-MANIFEST = 'launchbay_manifest.json'
+MANIFEST = os.path.join('_Audit', 'launchbay_manifest.json')
 INTAKE = 'Original_sourcedocs'
 
 # Only these are things the client uploaded. See module docstring.
@@ -111,6 +111,10 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
         if os.path.exists(os.path.join(parent, MANIFEST)):
             client_folder = parent
     manifest_path = manifest_path or os.path.join(client_folder, MANIFEST)
+    if not os.path.exists(manifest_path):
+        legacy = os.path.join(client_folder, os.path.basename(MANIFEST))
+        if os.path.exists(legacy):
+            manifest_path = legacy
     intake = os.path.join(client_folder, INTAKE)
     state_path = os.path.join(client_folder, FETCHED)
 
