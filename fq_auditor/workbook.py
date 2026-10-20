@@ -86,7 +86,14 @@ def _fact_row(ws, row, fact, cols=5):
     ws.cell(row, 1).alignment = WRAP
     cell = ws.cell(row, 2, fact.value)
     cell.font = VALUE if fact.value is not None else LABEL
-    cell.alignment = Alignment(horizontal='right')
+    # A composed value is a sentence and has to wrap. A figure is a figure and
+    # reads better flush right. Deciding by type rather than by column keeps
+    # "Cardosi (left after 2025), days 185 to 132..." readable in the same
+    # column as $720,061.
+    if isinstance(fact.value, str) and len(fact.value) > 24:
+        cell.alignment = Alignment(wrap_text=True, vertical='top')
+    else:
+        cell.alignment = Alignment(horizontal='right', vertical='top')
     if fact.fmt:
         cell.number_format = fact.fmt
     note = fact.note or ''
@@ -99,6 +106,12 @@ def _fact_row(ws, row, fact, cols=5):
     ws.cell(row, 4, fact.as_of or '').font = SRC
     ws.cell(row, 5, fact.source or '').font = SRC
     ws.cell(row, 5).alignment = WRAP
+    longest = max(len(str(fact.value or '')), len(note))
+    if longest > 60:
+        # Roughly two columns' worth of characters per line, and Excel will not
+        # auto-height a wrapped cell that was written by a library.
+        ws.row_dimensions[row].height = min(
+            90, 14 * (1 + longest // 60))
     for c in range(1, cols + 1):
         ws.cell(row, c).border = BOX
         if fact.value is None:
@@ -121,7 +134,7 @@ def write(bundle, out):
         ws, 'Initial notes  —  %s' % bundle.client,
         'Blue is a figure read from a document. Yellow means nobody has '
         'supplied it yet. Every row names where it came from.',
-        [34, 15, 72, 14, 34])
+        [30, 46, 60, 13, 30])
 
     for block in bundle.blocks:
         row = _section(ws, row, block.title, 5)
@@ -141,6 +154,10 @@ def write(bundle, out):
                         'One column per year. Change columns compute '
                         'themselves.',
                         [34] + [15] * (len(bundle.years) * 2))
+        notes_col = 2 + len(bundle.years) * 2
+        ws2.column_dimensions[get_column_letter(notes_col)].width = 70
+        ws2.cell(r, notes_col, 'note').font = HEAD
+        ws2.cell(r, notes_col).fill = F_HEAD
         ws2.cell(r, 1, 'metric').font = HEAD
         ws2.cell(r, 1).fill = F_HEAD
         col = 2
@@ -176,6 +193,16 @@ def write(bundle, out):
                     cc.font = DERIVED
                     col += 1
                 prev_letter = letter
+            got = bundle.series_notes.get(name)
+            if got:
+                text = got.get('note') or ''
+                for extra in (got.get('flags') or ())[:1]:
+                    text += ('  ' if text else '') + 'FLAG: %s' % extra
+                cell = ws2.cell(r, notes_col, text)
+                cell.font = NOTE
+                cell.alignment = WRAP
+                if got.get('flags'):
+                    cell.fill = PatternFill('solid', fgColor='FBEAE6')
             ws2.cell(r, 1).border = BOX
             r += 1
 

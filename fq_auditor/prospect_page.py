@@ -4,7 +4,7 @@
     python3 prospect_page.py "<client folder>"      # writes _Audit/<client> - Prospect Summary.html
 
 WHY EVERY FIELD CARRIES A SOURCE
-Rendering the page is the easy half — it is a layout. The hard half is knowing
+Rendering the page is the easy half, it is a layout. The hard half is knowing
 which numbers are safe to print, and this document is read by an advisor sitting
 in front of a prospect. A figure with no source is worse than a gap: a gap gets
 chased, a wrong number gets quoted.
@@ -58,7 +58,7 @@ def cell(value, source=None, why=None):
     where somebody can act on it.
     """
     if value is None:
-        return '<span class="nil">—</span>'
+        return '<span class="nil">-</span>'
     src = ('<span class="src">%s</span>' % _e(source)) if source else ''
     return '%s%s' % (_e(value), src)
 
@@ -115,12 +115,269 @@ def debt_total(debts):
     return '$' + money(total) + '<span class="src">%s</span>' % note
 
 
+def cashflow_rows(folder):
+    """The cash flow build, or nothing, never a half-built one.
+
+    Wrapped because this page must render for a client whose statements
+    have not arrived. An exception here would take the whole summary down,
+    and the summary's job is to show what is missing.
+
+    Routed through the Assumptions' own accessor rather than calling the
+    cash flow directly, because that one memoises per folder. Building the
+    workbook, this page and the Assumptions in one process then costs one
+    pass over the statements instead of three, and that pass is seventy
+    seconds.
+    """
+    try:
+        import assumptions as _asm
+        return _asm._cash_flow(folder)
+    except Exception:
+        return None
+
+
+def practice_holdings(folder, form, headline, head_year):
+    """The practice and the building he owns it in.
+
+    Both belong on a balance sheet and neither is a bank account, which is
+    why they were missing. They are computed the way sections 6 and 7
+    compute them rather than read off those sections, because building the
+    Assumptions here would mean a second full pass over the folder for two
+    figures.
+
+    The building is listed with no value on purpose. Left off, a reader
+    totals the page and believes it; listed empty, the gap is visible and
+    the note says what would close it.
+    """
+    import assumptions as _asm
+    import compose as _comp
+
+    out = []
+    if headline and headline.get('income'):
+        mult = _asm.FIRM['practice_value_multiple']
+        value = headline['income'] * mult
+        out.append({
+            'name': _comp.entity_name(folder) or 'The practice',
+            'note': '%.0f%% of %s revenues, the firm multiple.'
+                    % (mult * 100, head_year),
+            'amount': '$' + money(value),
+            'value': value})
+
+    sqft = _ic.money(form.get('building_sqft'))
+    addr = _comp.addresses(folder)
+    bits = []
+    if addr:
+        bits.append('%s, %s' % (addr[0][0][1], addr[0][0][2]))
+    if sqft:
+        bits.append('{:,.0f} sq ft'.format(sqft))
+    rent = _ic.money(form.get('building_payment'))
+    if rent:
+        bits.append('practice pays $%s/mo rent' % money(rent))
+    if bits:
+        out.append({
+            'name': 'Practice building, held personally',
+            'note': '%s. Needs a county assessment or an appraisal; the '
+                    'practice books carry leasehold improvements and no '
+                    'building, so no figure in them is its value.'
+                    % '. '.join(bits),
+            'amount': None, 'value': None})
+    return out
+
+
+def observed_assets(folder, cash, practice=()):
+    """Everything observed that the household owns, not just its cash.
+
+    The table was bank accounts only, which made a heading reading "Assets
+    observed" wrong rather than merely incomplete: Oyler's properties and
+    his retirement accounts are both in the file, and a reader seeing four
+    checking accounts under that heading concludes the man owns no house.
+
+    Three groups, each from the source that already owns it, so this table
+    cannot disagree with the Assumptions. Property and retirement come
+    from the input store, the same place sections 3 and 4 read. Bank
+    balances come from the cash flow build, the same place section 5
+    reads. Nothing is counted twice because nothing is read twice.
+    """
+    import inputs as _inputs
+    import assumptions as _asm
+
+    def _stored(key):
+        got = (_inputs.get(folder, key) or {}).get('value') or []
+        out = []
+        for r in got:
+            amount = r.get('amount') or (
+                ('$' + money(r['value'])) if r.get('value') else None)
+            out.append({'name': r.get('label') or '?',
+                        'note': r.get('basis') or '',
+                        'amount': amount,
+                        'value': _asm._amount(amount) if amount else None})
+        return out
+
+    banks = []
+    for r in ((cash or {}).get('accounts') or ()):
+        if r.get('balance') is None:
+            continue
+        banks.append({'name': r['name'], 'note': r.get('bank') or '',
+                      'amount': '$' + money(r['balance']),
+                      'value': r['balance'],
+                      'as_of': r.get('as_of')})
+    banks.sort(key=lambda x: -(x['value'] or 0))
+
+    # The non-qualified list in the store is mostly the same bank accounts
+    # under their typed-in names, plus the holdings that are not banks at
+    # all: Oyler's Reef Capital stake and his bitcoin. Those are the ones
+    # worth taking, and $408,526 of Reef is not a rounding difference.
+    # Accounts are matched on the last four digits, which is the only
+    # token the two namings share ("Personal Savings [US Bank x0393]"
+    # against "Savings (US Bank x0393)").
+    def _last4(text):
+        m = re.findall(r'x(\d{4})', text or '')
+        return set(m)
+    seen = set()
+    for b in banks:
+        seen |= _last4(b['name'])
+    other = [r for r in _stored('nonqualified_accounts')
+             if not (_last4(r['name']) & seen)]
+
+    # Practice first. It is the largest thing the man owns and the reason
+    # he is a client, so a balance sheet that opens with his checking
+    # account has its priorities from the alphabet rather than the file.
+    groups = [('PRACTICE & BUILDING', list(practice)),
+              ('PROPERTY', _stored('properties')),
+              ('RETIREMENT', _stored('qualified_accounts')),
+              ('OTHER INVESTMENTS', other),
+              ('BANK ACCOUNTS', banks)]
+    return [g for g in groups if g[1]]
+
+
+def assets_total(groups):
+    """Observed assets, with what is behind the figure and what is not.
+
+    Same reasoning as the debt tile. This totals what has arrived, not
+    what the household owns, and an asset listed without a value is named
+    in the note rather than quietly treated as a zero. A total that
+    silently swallows an unvalued house is the most misleading figure this
+    page could print.
+    """
+    rows = [r for _g, items in groups for r in items]
+    valued = [r for r in rows if r.get('value')]
+    if not valued:
+        return None
+    note = '%d of %d holdings' % (len(valued), len(rows))
+    blank = len(rows) - len(valued)
+    if blank:
+        note += ', %d not valued' % blank
+    return ('$' + money(sum(r['value'] for r in valued))
+            + '<span class="src">%s</span>' % note)
+
+
+def risk_flags(by_year, tax, debts, cash, form, headline, head_year):
+    """What the documents already prove is worth asking about.
+
+    Every flag is derived from a figure on this page, which is the whole
+    discipline: nothing is flagged that a reader cannot go and check two
+    inches away, and nothing is flagged on a hunch.
+
+    Each one carries the section it belongs under, because that is where
+    it prints. Collected into one block at the foot of page 1 they read as
+    a list of complaints, and the reader has to carry each one back up the
+    page to the table it is about. Under the table, a flag is a footnote
+    to a figure the eye is already on.
+
+    The distinction against Open items: Open items is what has not
+    arrived, a flag is what has arrived and looks wrong.
+    """
+    out = []
+
+    if headline and headline.get('overhead_pct', 0) > 60:
+        out.append(('overhead', 'Overhead above target',
+                    'The P&amp;L puts %s overhead at %.1f%% against a %s target.'
+                    % (head_year, headline['overhead_pct'], '60%')))
+
+    p, t = by_year.get(head_year), tax.get(head_year)
+    if p and t and abs(p['overhead_pct'] - t['overhead_pct']) >= 5:
+        out.append(('overhead', 'Books disagree with the return',
+                    'Overhead for %s reads %.1f%% on the P&amp;L and %.1f%% on '
+                    'the 1120-S. A gap that size is usually a reclassification '
+                    'rather than a difference of opinion.'
+                    % (head_year, p['overhead_pct'], t['overhead_pct'])))
+
+    want = _ic.money(form.get('overhead_stated'))
+    if want and headline and abs(headline['overhead_pct'] - want) >= 10:
+        out.append(('overhead',
+                    'Client’s estimate is well off the documents',
+                    'He puts overhead at %s; the documents put it near %.0f%%. '
+                    'That gap is the first conversation, not a rounding '
+                    'difference.'
+                    % (_e(form.get('overhead_stated')),
+                       headline['overhead_pct'])))
+
+    unread = debts.get('unread') or ()
+    if unread:
+        out.append(('debt', 'Debt nobody has read',
+                    '%d obligation%s stated in prose rather than on a '
+                    'statement, so %s not in the total above.'
+                    % (len(unread), '' if len(unread) == 1 else 's',
+                       'it is' if len(unread) == 1 else 'they are')))
+
+    rows = (cash or {}).get('accounts') or ()
+    # A deficit on one account is housekeeping; a deficit on the household
+    # is the finding. So the personal accounts are judged together.
+    short = [r for r in rows if r.get('readable') and (r.get('surplus') or 0) < 0
+             and r.get('entity') == 'Personal']
+    if short:
+        out.append(('cashflow', 'Personal accounts running a deficit',
+                    '%s. Money is coming from somewhere else, and the plan '
+                    'should say where.'
+                    % ', '.join('%s at -$%s/mo'
+                                % (_e(r['name']), money(abs(r['surplus'])))
+                                for r in short)))
+
+    unreadable = [r for r in rows if not r.get('readable')]
+    if unreadable:
+        out.append(('assets', 'Statements that would not read',
+                    '%d account%s whose transactions could not be extracted, '
+                    'so no transfers were found on %s and the spending figure '
+                    'does not include %s.'
+                    % (len(unreadable), '' if len(unreadable) == 1 else 's',
+                       'it' if len(unreadable) == 1 else 'them',
+                       'it' if len(unreadable) == 1 else 'them')))
+
+    offs = (cash or {}).get('one_offs') or ()
+    if offs:
+        out.append(('cashflow', 'Single outflows held out of the run rate',
+                    '%d movement%s large enough to distort monthly spending, '
+                    'worth $%s in total. Real money, but not a run rate, and '
+                    'an analyst has to rule on each.'
+                    % (len(offs), '' if len(offs) == 1 else 's',
+                       money(sum(abs(x) for x in offs)))))
+
+    return out
+
+
+def flagbox(flags, section):
+    """The flags belonging to one section, or nothing at all.
+
+    Nothing at all is the important half. A heading that prints "no flags"
+    under every clean table trains the reader to skip the place flags
+    appear, which is the one place they must not skip.
+    """
+    mine = [(h, w) for s, h, w in flags if s == section]
+    if not mine:
+        return ''
+    out = ['<div class="flags">']
+    for head, why in mine:
+        out.append('<div class="fl"><div class="flh">%s</div>'
+                   '<div class="flw">%s</div></div>' % (head, why))
+    out.append('</div>')
+    return ''.join(out)
+
+
 def provider_label(code, role):
     """How a producer is named on the page, following the template's wording."""
     name = (role.get('name') or code).replace('Dr. ', '').split()[-1]
     if role.get('role') == 'owner':
-        return 'Production \u2014 Dr. %s' % name
-    return 'Production \u2014 assoc. (%s)' % name
+        return 'Production, Dr. %s' % name
+    return 'Production, assoc. (%s)' % name
 
 
 def production_rows(folder):
@@ -226,8 +483,8 @@ def production_rows(folder):
         # producer lines and hygiene can be read against each other directly.
         if gross:
             for key in list(row):
-                if key.startswith('Production \u2014 '):
-                    who = key.split('\u2014 ', 1)[1]
+                if key.startswith('Production, '):
+                    who = key.split(', ', 1)[1]
                     row['%s %% of production' % who] = round(
                         100.0 * row[key] / gross, 1)
             if row.get('Hygiene production'):
@@ -267,11 +524,11 @@ def analysis_rows(prod_rows):
     producers, shares = [], []
     for row in prod_rows.values():
         for key in row:
-            if key.startswith('Production \u2014 ') and key not in producers:
+            if key.startswith('Production, ') and key not in producers:
                 producers.append(key)
     producers.sort(key=lambda k: ('assoc.' in k, k))
     for key in producers:
-        shares.append('%s %% of production' % key.split('\u2014 ', 1)[1])
+        shares.append('%s %% of production' % key.split(', ', 1)[1])
     out = []
     for name, cls in ANALYSIS_ROWS:
         if name == '__PRODUCERS__':
@@ -282,6 +539,26 @@ def analysis_rows(prod_rows):
             continue
         out.append((name, cls))
     return out
+
+
+_BUNDLE = {}
+
+
+def _bundle(folder, client=None):
+    """The facts for this client, read once per run.
+
+    The page used to assemble its own version of these from the intake form,
+    which meant two outputs describing the same client from two different
+    readings of it. They now share one.
+    """
+    key = os.path.abspath(folder)
+    if key not in _BUNDLE:
+        try:
+            import facts as _facts
+            _BUNDLE[key] = _facts.gather(folder, client=client)
+        except Exception:
+            _BUNDLE[key] = None
+    return _BUNDLE[key]
 
 
 def notes_from_form(f):
@@ -441,6 +718,7 @@ def build(folder, client=None):
         debts = _debt.gather(folder)
     except Exception:
         debts = {}
+    cash = cashflow_rows(folder)
     # A part-year column is labelled and never compared. Oyler's newest sheet is
     # a single July, and beside two full years its change column read -42%,
     # which is the arithmetic of an unfinished year, not a falling practice.
@@ -449,11 +727,17 @@ def build(folder, client=None):
     full = [y for y in years if y not in partial]
     head_year = full[-1] if full else (years[-1] if years else None)
     headline = by_year.get(head_year) if head_year else None
+    holdings = observed_assets(
+        folder, cash, practice_holdings(folder, form, headline, head_year))
+    # Worked out once, printed in four places. Each flag carries the
+    # section it belongs under and prints there, beneath the table whose
+    # figure it is about.
+    flags = risk_flags(by_year, tax, debts, cash, form, headline, head_year)
 
     L = []
     a = L.append
     a('<!doctype html><meta charset="utf-8">'
-      '<title>Prospect summary — %s</title>' % _e(client))
+      '<title>Prospect summary, %s</title>' % _e(client))
     a('<style>%s</style>' % CSS)
 
     # ---------------------------------------------------------------- page 1
@@ -478,14 +762,14 @@ def build(folder, client=None):
 
     a('<div class="kpis">')
     for label, val in (
-        ("NET COLLECTIONS '%s" % (head_year[-2:] if head_year else '—'),
+        ("NET COLLECTIONS '%s" % (head_year[-2:] if head_year else ''),
          ('$' + money(headline['income'])) if headline else None),
         ('OVERHEAD', ('%.1f%%' % headline['overhead_pct']) if headline else None),
         ('OWNER COMP',
          ('$' + money(_ic.money(form.get('take_home'))))
          if _ic.money(form.get('take_home')) else None),
         ('TOTAL DEBT', debt_total(debts)),
-        ('OBSERVED ASSETS', None)):
+        ('OBSERVED ASSETS', assets_total(holdings))):
         rendered = val if (val and '<span' in str(val)) else cell(val)
         a('<div class="kpi"><div class="kl">%s</div><div class="kv">%s</div></div>'
           % (label, rendered))
@@ -493,14 +777,25 @@ def build(folder, client=None):
 
     a('<div class="cols"><div class="colL">')
     a('<h2>Initial notes</h2>')
-    prac_notes, pers_notes = notes_from_form(form)
-    for head, items in (('PRACTICE', prac_notes), ('PERSONAL', pers_notes)):
+    # The same facts the workbook prints. The page used to assemble its own
+    # version of these from the intake form, which meant two outputs describing
+    # one client from two separate readings of it, free to drift apart.
+    bundle = _bundle(folder, client)
+    for head, titles in (('PRACTICE', ('Practice', 'Overhead', 'Practice debt')),
+                         ('PERSONAL', ('Personal', 'Personal debt'))):
         a('<div class="tag %s">%s</div><ul class="notes">'
           % ('tp' if head == 'PRACTICE' else 'tn', head))
-        for nm, body in items:
-            if not body:
-                continue        # a note with nothing behind it is not a note
-            a('<li><b>%s</b> — %s</li>' % (_e(nm), _e(body)))
+        for block in (bundle.blocks if bundle else ()):
+            if block.title not in titles:
+                continue
+            for f in block.facts:
+                # Figures belong in the tables; this column is the prose.
+                if f.value is None or isinstance(f.value, (int, float)):
+                    continue
+                a('<li><b>%s</b>, %s%s</li>'
+                  % (_e(f.label), _e(str(f.value)),
+                     ('<span class="why"> %s</span>' % _e(f.note))
+                     if f.note else ''))
         a('</ul>')
     a('</div>')
 
@@ -581,8 +876,17 @@ def build(folder, client=None):
         a('<p class="note"><b>Reconciliation:</b> %s. Both bases hold out what '
           'the owner pays himself.%s</p>' % ('; '.join(bits), tail))
 
+    a(flagbox(flags, 'overhead'))
+
     a('<div class="two">')
-    a('<div><h3>Fee positioning</h3><p class="small">%s</p></div>' % cell(None))
+    # The fee study the firm already runs. Its output lands in
+    # Documents/Business/Fees with the percentage in the filename, so this
+    # reads the firm's own result rather than recomputing it.
+    import compose as _comp
+    _pct, fee_line = _comp.fee_study(folder)
+    a('<div><h3>Fee positioning</h3><p class="small">%s</p></div>'
+      % (_e(fee_line) if fee_line else cell(
+          None, why='fee study not yet run for this client')))
     a('<div><h3>Open items</h3><ul class="oi">%s</ul></div>'
       % ''.join('<li>%s</li>' % _e(t) for t in open_items(folder, form, by_year)))
     a('</div></div></div>')
@@ -590,7 +894,7 @@ def build(folder, client=None):
     a('<div class="markup">ADVISOR NOTES / MEETING MARKUP'
       '<div class="ruled"><div></div><div></div><div></div></div></div>')
     a('<div class="ft"><span>FOUR QUADRANTS ADVISORY · PROSPECT SUMMARY</span>'
-      '<span>CONFIDENTIAL — INTERNAL USE ONLY</span><span>PAGE 1 OF 2</span></div>')
+      '<span>CONFIDENTIAL, INTERNAL USE ONLY</span><span>PAGE 1 OF 2</span></div>')
     a('</div>')
 
     # ---------------------------------------------------------------- page 2
@@ -601,22 +905,110 @@ def build(folder, client=None):
     a('<h2>Debt schedule</h2>')
     a('<table class="an"><tr><th>OBLIGATION</th><th>TYPE</th><th>ORIGINAL</th>'
       '<th>BALANCE</th><th>RATE</th><th>PAYMENT</th><th>MATURITY</th></tr>')
-    for side in ('PRACTICE', 'PERSONAL'):
+    for side, rows in (('PRACTICE', debts.get('practice') or ()),
+                       ('PERSONAL', debts.get('personal') or ())):
         a('<tr><td colspan="7" class="side">%s</td></tr>' % side)
-        a('<tr><td>%s</td>%s</tr>'
-          % (cell(None), ''.join('<td>%s</td>' % cell(None) for _ in range(6))))
+        if not rows:
+            a('<tr><td colspan="7">%s</td></tr>' % cell(None))
+            continue
+        total = payment = 0
+        for r in rows:
+            rate = r.get('rate')
+            if rate and rate < 1:
+                rate *= 100
+            name = r.get('creditor') or '?'
+            if r.get('account_last4'):
+                name += ' x%s' % r['account_last4']
+            total += r.get('balance') or 0
+            payment += r.get('payment') or 0
+            a('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td>'
+              '<td>%s</td><td>%s</td></tr>'
+              % (_e(name), _e(r.get('description') or ''),
+                 money(r.get('original')) or cell(None),
+                 money(r.get('balance')) or cell(None),
+                 ('%.2f%%' % rate) if rate else cell(None),
+                 (money(r.get('payment')) + '/mo') if r.get('payment')
+                 else cell(None),
+                 _e(str(r.get('maturity'))) if r.get('maturity')
+                 else cell(None)))
+        a('<tr class="b"><td>%s subtotal</td><td></td><td></td><td>%s</td>'
+          '<td></td><td>%s</td><td></td></tr>'
+          % (side.title(), money(total), money(payment) + '/mo'))
+    # An obligation whose terms exist only inside a sentence is listed, not
+    # parsed. Oyler's building loan is the largest single debt in the file and
+    # arrived as a letter.
+    for r in debts.get('unread') or ():
+        a('<tr><td colspan="7">%s</td></tr>'
+          % cell(None, why='stated in prose, needs a person: %s'
+                 % _e(r.get('source') or '')))
     a('</table>')
+    a(flagbox(flags, 'debt'))
 
     a('<h2>Cashflow analysis<span class="src2">MONTHLY SURPLUS / (DEFICIT) BY '
       'ACCOUNT</span></h2>')
     a('<table class="an"><tr><th>ACCOUNT</th><th>AVG</th><th>NEG</th>'
-      '<th>TREND</th></tr><tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'
-      '</table>' % (cell(None), cell(None), cell(None), cell(None)))
+      '<th>TREND</th></tr>')
+    rows = (cash or {}).get('accounts') or ()
+    if not rows:
+        a('<tr><td colspan="4">%s</td></tr>'
+          % cell(None, why='no bank statements read for this client yet'))
+    for r in rows:
+        # An account whose transactions could not be read has no surplus
+        # worth printing: its deposits and expenses still contain money
+        # that only moved between the client's own accounts. Printing the
+        # figure anyway and marking it would be worse than printing the
+        # reason, because the figure is what gets quoted.
+        if not r.get('readable'):
+            a('<tr><td>%s</td><td colspan="3">%s</td></tr>'
+              % (_e(r['name']), cell(None, why=r.get('why') or '')))
+            continue
+        s = r.get('surplus') or 0
+        neg, periods = r.get('negatives') or 0, r.get('periods') or 0
+        a('<tr><td>%s</td><td class="%s">%s%s/mo</td><td>%s</td>'
+          '<td>%s</td></tr>'
+          % (_e(r['name']), 'neg' if s < 0 else '',
+             '-$' if s < 0 else '$', money(abs(s)),
+             ('%d of %d' % (neg, periods)) if periods else cell(None),
+             _e(r.get('trend') or '') or '<span class="src">too few '
+             'periods</span>'))
+    a('</table>')
+    a(flagbox(flags, 'cashflow'))
 
-    a('<h2>Assets observed<span class="src2">STATEMENTS RECEIVED TO DATE</span></h2>')
-    a('<table class="an"><tr><th>ACCOUNT</th><th>INSTITUTION</th><th>BALANCE</th>'
-      '<th>AS OF</th></tr><tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'
-      '</table>' % (cell(None), cell(None), cell(None), cell(None)))
+    a('<h2>Assets observed<span class="src2">PRACTICE, PROPERTY, RETIREMENT '
+      '&amp; BANK, AS DOCUMENTED</span></h2>')
+    a('<table class="an"><tr><th>HOLDING</th><th>BASIS</th><th>VALUE</th>'
+      '<th>AS OF</th></tr>')
+    if not holdings:
+        a('<tr><td colspan="4">%s</td></tr>'
+          % cell(None, why='no property, retirement or bank documents read '
+                           'for this client yet'))
+    total = 0
+    for head, items in holdings:
+        a('<tr><td colspan="4" class="side">%s</td></tr>' % head)
+        for r in items:
+            total += r.get('value') or 0
+            a('<tr><td>%s</td><td class="bs">%s</td><td>%s</td>'
+              '<td>%s</td></tr>'
+              % (_e(r['name']), _e(r['note']),
+                 _e(r['amount']) if r.get('amount')
+                 else cell(None, why='no value yet'),
+                 r['as_of'].strftime('%d %b %Y') if r.get('as_of')
+                 else ''))
+    if holdings:
+        a('<tr class="b"><td>Total observed</td><td></td><td>$%s</td>'
+          '<td></td></tr>' % money(total))
+    a('</table>')
+    # The tile above and this table are the same figure, so they cannot
+    # disagree. What they can both miss is a holding nobody has sent a
+    # document for, which is why the count travels with the total.
+    a('<p class="note">What the documents show, not everything the household '
+      'owns. Against total debt of %s this is a net position of %s, which '
+      'the Assumptions states in full.</p>'
+      % (('$' + money((debts.get('practice_balance') or 0)
+                      + (debts.get('personal_balance') or 0))),
+         ('$' + money(total - (debts.get('practice_balance') or 0)
+                      - (debts.get('personal_balance') or 0)))))
+    a(flagbox(flags, 'assets'))
 
     a('<div class="two">')
     a('<div><h3>Entities &amp; ownership</h3><p class="small">%s</p></div>'
@@ -627,9 +1019,14 @@ def build(folder, client=None):
     a('<div class="markup">ADVISOR NOTES / MEETING MARKUP<div class="ruled">'
       '<div></div><div></div><div></div><div></div></div></div>')
     a('<div class="ft"><span>FOUR QUADRANTS ADVISORY · PROSPECT SUMMARY</span>'
-      '<span>CONFIDENTIAL — INTERNAL USE ONLY</span><span>PAGE 2 OF 2</span></div>')
+      '<span>CONFIDENTIAL, INTERNAL USE ONLY</span><span>PAGE 2 OF 2</span></div>')
     a('</div>')
     return '\n'.join(L)
+
+
+def _fee_done(folder):
+    import compose as _comp
+    return bool(_comp.fee_study(folder)[0])
 
 
 def open_items(folder, form, by_year):
@@ -641,14 +1038,14 @@ def open_items(folder, form, by_year):
     """
     out = []
     if not by_year:
-        out.append('Profit & loss — not yet readable')
+        out.append('Profit & loss, not yet readable')
     if not form:
-        out.append('IC intake form — not in the folder')
-    out.append('Debt schedule — practice sheet is free text; personal not sent')
-    out.append('Personal bank + HSA statements — for the cashflow')
-    out.append('Remaining investment statements — for assets observed')
-    out.append('Fee schedule — for fee positioning')
-    out.append('Tax returns — for the overhead tax basis')
+        out.append('IC intake form, not in the folder')
+    out.append('Debt schedule, practice sheet is free text; personal not sent')
+    out.append('Personal bank + HSA statements, for the cashflow')
+    out.append('Remaining investment statements, for assets observed')
+    out.append('Fee schedule, for fee positioning')
+    out.append('Tax returns, for the overhead tax basis')
     return out
 
 
@@ -708,6 +1105,19 @@ td.d,th.d{font-size:10px}
   font-weight:700;padding:3px 5px}
 .nil{color:#C3C8CE}
 .src{font-size:8.5px;color:#A4ABB4;margin-left:5px}
+/* A deficit is read as a deficit, not as a number with a sign in front
+   of it. The colour is the only thing on the cashflow table doing that
+   work, since the column is otherwise all figures of the same shape. */
+.neg{color:#B3261E;font-weight:600}
+/* Two to a row, so four flags take four lines rather than eight, and a
+   client with none leaves a sentence rather than a hole. */
+.flags{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.fl{border-left:2.5px solid #F08418;background:#FFF8EF;padding:6px 9px}
+.flh{font-size:10px;font-weight:700;color:#8A5218;letter-spacing:.2px}
+.flw{font-size:9.5px;color:#6B5234;line-height:1.45;margin-top:2px}
+/* The basis column is provenance, not a figure. Set quieter so the
+   values stay the thing the eye runs down. */
+.bs{font-size:9px;color:#6C7480;line-height:1.4}
 .note{font-size:10.5px;color:#5D6773;margin:7px 0 0;line-height:1.5}
 .note b{color:#16324F}
 .small{font-size:11px;color:#5D6773}

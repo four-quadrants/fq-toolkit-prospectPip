@@ -49,6 +49,21 @@ def _num(v):
         return None
 
 
+def _year_of(v):
+    """The year a loan matures, from a date cell or a string.
+
+    Only the year is kept. The schedule carries full dates, but what an
+    analyst writes is "3 drop off in the next 2 years", and a day-precise
+    maturity invites a precision the rest of the line does not have.
+    """
+    if v is None:
+        return None
+    if hasattr(v, 'year'):
+        return v.year
+    m = re.search(r'(20\d\d)', str(v))
+    return int(m.group(1)) if m else None
+
+
 def read_schedule(path):
     """The firm's debt schedule template, as the office filled it in."""
     import openpyxl
@@ -85,6 +100,8 @@ def read_schedule(path):
             'balance': balance,
             'rate': get('interest rate'),
             'payment': get('minimum monthly'),
+            'maturity': _year_of(next((r[i] for i in col('maturity')), None)),
+            'available_credit': get('available credit'),
             'side': 'Practice',
             'source': os.path.basename(path),
             'as_of': next((cols[i] for i in reversed(bals)

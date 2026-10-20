@@ -118,6 +118,21 @@ def _find_total(rows, *names):
     return None
 
 
+def _widest_sheet(text):
+    """The sheet of a workbook that covers the most months."""
+    sheets = re.split(r'^\[sheet: ', text, flags=re.M)
+    if len(sheets) < 2:
+        return text
+    best, best_months = sheets[1], -1
+    for chunk in sheets[1:]:
+        months = period_months(chunk) or 0
+        # A tie goes to the earlier sheet, which is the one the bookkeeper put
+        # first and usually the one a person would open.
+        if months > best_months:
+            best, best_months = chunk, months
+    return best
+
+
 def read_pnl(text):
     """Overhead from one Profit & Loss, on Four Quadrants' own definition.
 
@@ -143,11 +158,13 @@ def read_pnl(text):
     than computing a percentage from half a P&L.
     """
     sections, rows, lines = {}, {}, {}
-    # One sheet only. A workbook holds a summary tab and a month-by-month tab
-    # carrying the same sections again; reading both counted everything twice.
-    body = text or ''
-    sheets = re.split(r'^\[sheet: ', body, flags=re.M)
-    body = sheets[1] if len(sheets) > 1 else body
+    # One sheet, but the RIGHT one. A workbook holds a summary tab and a
+    # month-by-month tab carrying the same sections again, and reading both
+    # counts everything twice -- but reading the first blindly was worse. On
+    # Oyler's 2026 file the Summary tab is July alone at $312,810 while the By
+    # Month tab totals $2,169,371 for January to July, and the file is named
+    # "YtD". So the sheet covering the longest period wins.
+    body = _widest_sheet(text or '')
 
     for line in body.split('\n'):
         name, val = split_row(line)
@@ -203,7 +220,10 @@ def read_pnl(text):
         'sections': {k: round(v, 2) for k, v in sorted(sections.items())},
         'overhead': round(overhead, 2),
         'overhead_pct': round(100.0 * overhead / base, 1) if base else None,
-        'months': period_months(text),
+        # Measured on the sheet actually read, not on the file. Reading it
+        # from the whole text picked up the Summary tab's 'July 2026' and
+        # called a seven-month year-to-date a single month.
+        'months': period_months(body),
     }
 
 

@@ -758,6 +758,15 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
 #skipget.ready{background:#1E8449;border-color:#1E8449;color:#fff;font-weight:600}
 #skipget.ready:hover{background:#186B3A}
 #skipget .tick{margin-right:6px}
+/* One row per output: the tick, the name, and what the file actually is.
+   The third part matters more than it looks, because "Assumptions" means
+   nothing to somebody in their first week. */
+label.ck{display:flex;align-items:baseline;gap:8px;padding:7px 2px;
+  border-bottom:1px solid #F0EDE6;cursor:pointer}
+label.ck:last-child{border-bottom:none}
+label.ck b{font-size:13px;color:#16324F;font-weight:600}
+label.ck span{font-size:11.5px;color:#8A9099}
+#buildmade{flex-wrap:wrap;gap:6px}
 .hide{display:none}
 </style></head><body>
 
@@ -767,6 +776,7 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
   <nav>
     <button id="tab-get" class="on">1 &nbsp;Download Files</button>
     <button id="tab-review">3 &nbsp;Review</button>
+    <button id="tab-build">5 &nbsp;Build Outputs</button>
     <button id="tab-redact">4 &nbsp;Redact</button>
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
@@ -852,13 +862,49 @@ pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.
       <button class="primary" id="filethem">Build File Tree</button>
     </div>
   </div>
+
+  <!-- The step that was missing. Everything the toolkit produces was a
+       command line away, which meant one person could run it. Four tick
+       boxes and a button is the whole answer to "what do I click". -->
+  <div class="pane" id="pane-build"><div class="wrap">
+    <h2>Build the outputs</h2>
+    <p class="sub">Runs on the documents already read for this client. The
+       initial notes workbook is the one the team opens first; the rest are
+       built from the same reading, so they cannot disagree with it.</p>
+
+    <div class="card">
+      <div class="crumb" id="buildwho">No client chosen yet</div>
+      <label style="margin-top:10px">What to build</label>
+      <div id="buildwhat">
+        <label class="ck"><input type="checkbox" value="workbook" checked>
+          <b>Initial notes workbook</b>
+          <span>.xlsx, every fact with the document it came from</span></label>
+        <label class="ck"><input type="checkbox" value="cashflow" checked>
+          <b>Cash flow workbook</b>
+          <span>.numbers, on the firm template, with the adjustments block</span></label>
+        <label class="ck"><input type="checkbox" value="summary" checked>
+          <b>Prospect Summary</b>
+          <span>the two-page internal page, with risk flags</span></label>
+        <label class="ck"><input type="checkbox" value="assumptions" checked>
+          <b>Assumptions</b>
+          <span>the plan PDF, printing what is still needed</span></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <span class="sub" style="margin:0;flex:1">About a minute and a half
+          for all four.</span>
+        <button class="primary" id="buildgo" disabled>Pick a client first</button>
+      </div>
+      <pre class="log hide" id="buildlog" style="margin-top:12px"></pre>
+      <div id="buildmade" class="row hide" style="margin-top:10px"></div>
+    </div>
+  </div></div>
 </main>
 
 <script>
 var CUR = null, FOLDER = null, since = 0, poll = null;
 
 function show(name){
-  ['get','redact','review'].forEach(function(n){
+  ['get','redact','review','build'].forEach(function(n){
     document.getElementById('pane-'+n).classList.toggle('on', n===name);
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
   });
@@ -872,6 +918,73 @@ function show(name){
 }
 document.getElementById('tab-get').onclick=function(){show('get');};
 document.getElementById('tab-redact').onclick=function(){show('redact');};
+document.getElementById('tab-build').onclick=function(){show('build');};
+
+// --- Build outputs ----------------------------------------------------
+// The same log the audit and the LaunchBay fetch use, because the page
+// only ever has one job running and one thing to poll.
+var BPOLL=null;
+function buildReady(){
+  var b=document.getElementById('buildgo');
+  b.disabled = !FOLDER;
+  b.textContent = FOLDER ? 'Build them' : 'Pick a client first';
+  document.getElementById('buildwho').textContent =
+    FOLDER ? FOLDER.split('/').pop() : 'No client chosen yet';
+}
+document.getElementById('buildgo').onclick=function(){
+  if(!FOLDER) return;
+  var want=[];
+  document.querySelectorAll('#buildwhat input:checked').forEach(function(i){
+    want.push(i.value);
+  });
+  if(!want.length) return;
+  var log=document.getElementById('buildlog');
+  var made=document.getElementById('buildmade');
+  log.classList.remove('hide'); log.textContent='';
+  made.classList.add('hide'); made.innerHTML='';
+  this.disabled=true; this.textContent='Building…';
+  fetch('/api/build',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER, what:want.join(',')})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(j.error){ log.textContent=j.error; buildReady(); return; }
+      var at=0;
+      BPOLL=setInterval(function(){
+        fetch('/api/log?since='+at).then(function(r){return r.json();})
+          .then(function(s){
+            at=s.total;
+            if(s.lines.length){
+              log.textContent += s.lines.join('\n')+'\n';
+              log.scrollTop=log.scrollHeight;
+            }
+            if(!s.running){
+              clearInterval(BPOLL); BPOLL=null;
+              buildReady();
+              // Each output becomes a button that opens it in whatever
+              // the Mac uses for that file. A path in a log is not a
+              // deliverable; a thing you can click is.
+              var paths=log.textContent.split('\n')
+                .filter(function(l){return l.indexOf('OUTPUT\t')===0;})
+                .map(function(l){return l.slice(7);});
+              if(paths.length){
+                made.classList.remove('hide');
+                paths.forEach(function(p){
+                  var b=document.createElement('button');
+                  b.className='ghost';
+                  b.textContent='Open '+p.split('/').pop();
+                  b.onclick=function(){
+                    fetch('/api/openfile',{method:'POST',
+                      headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({path:p, folder:FOLDER})});
+                  };
+                  made.appendChild(b);
+                });
+              }
+            }
+          });
+      }, 700);
+    });
+};
 document.getElementById('skipget').onclick=function(){
   if(PICKED) startClient(PICKED.path, PICKED.name);
 };
@@ -1039,6 +1152,7 @@ function startClient(path, name){
   CUR = path;
   FOLDER = path;
   document.getElementById('foldernow').textContent = FOLDER;
+  buildReady();
   var crumb = document.getElementById('crumb');
   if(crumb) crumb.textContent = path;
   var st = document.getElementById('golog');
@@ -1439,6 +1553,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_settings(folder, client, greeting, g['checklist'])
             JOB.start(folder, client, greeting, g['checklist'], g['decisions'],
                       g['redacted'], file_them=(p == '/api/file'))
+            return self._send(200, '{"started":true}')
+
+        if p == '/api/build':
+            # The outputs, built in one process so the cash flow pass is
+            # paid once rather than once per output. Streamed through the
+            # same job the audit uses, so the page has one thing to poll.
+            folder = data.get('folder') or ''
+            if not self._guard(folder):
+                return
+            if not os.path.isdir(folder):
+                return self._send(400, '{"error":"not a folder"}')
+            if JOB.running:
+                return self._send(200, json.dumps(
+                    {'error': 'Something is already running. Wait for it to '
+                              'finish, then build.'}))
+            client = data.get('client') or guess_inputs(folder)['client']
+            cmd = [sys.executable, os.path.join(HERE, 'build_outputs.py'),
+                   folder, '--outdir', os.path.join(folder, '_Audit')]
+            if client:
+                cmd += ['--client', client]
+            if data.get('what'):
+                cmd += ['--what', data['what']]
+            JOB.start_cmd(cmd, folder)
             return self._send(200, '{"started":true}')
 
         if p == '/api/openfile':

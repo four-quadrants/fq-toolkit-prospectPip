@@ -56,6 +56,60 @@ def _short(v):
     return str(v)
 
 
+# Documents that are somebody's account of the client rather than a statement
+# of account. A case summary, call notes, a consult-offer write-up. These carry
+# what no financial document does: why the client is here, what they are
+# worried about, what they said on the phone.
+NARRATIVE = ('case summary', 'call notes', 'call summary', 'notes',
+             'transcript', 'consult offer')
+
+
+def narrative_documents(folder, limit=3, chars=4000):
+    """The analyst-written documents in a client folder, as text."""
+    import glob as _glob
+    out = []
+    seen = set()
+    for pattern in ('*.docx', '*.pdf', '*.txt'):
+        for path in _glob.glob(os.path.join(folder, '**', pattern),
+                               recursive=True):
+            name = os.path.basename(path).lower()
+            if not any(w in name for w in NARRATIVE):
+                continue
+            if 'brogan' in name or 'initial notes' in name:
+                continue        # that is the output, not an input
+            key = os.path.basename(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            text = _read_any(path)
+            if text and len(text.strip()) > 200:
+                out.append((key, ' '.join(text.split())[:chars]))
+    return out[:limit]
+
+
+def _read_any(path):
+    if path.lower().endswith('.docx'):
+        try:
+            import docx
+            d = docx.Document(path)
+            return '\n'.join(p.text for p in d.paragraphs)
+        except Exception:
+            return ''
+    if path.lower().endswith('.pdf'):
+        try:
+            import fitz
+            doc = fitz.open(path)
+            text = '\n'.join(p.get_text() for p in doc)
+            doc.close()
+            return text
+        except Exception:
+            return ''
+    try:
+        return open(path, errors='replace').read()
+    except OSError:
+        return ''
+
+
 def picture(bundle):
     """Everything read, as one page a person could scan."""
     lines = []
@@ -68,6 +122,31 @@ def picture(bundle):
                 lines.append('  %-38s %-16s [%s]'
                              % (f.label, _short(f.value),
                                 (f.source or 'no source')[:40]))
+    lines.append('\nWHAT THE DETAIL ROWS SAY')
+    try:
+        import books as _books
+        import debt as _debt
+        folder = getattr(bundle, 'folder', None)
+        if folder:
+            names = [r.get('creditor') or '' for r in
+                     (_debt.gather(folder).get('practice') or ())]
+            found = _books.gather(folder, names)
+            for row in found['unexplained'][:6]:
+                lines.append('  %-34s %s' % (row['line'], '  '.join(
+                    '%s %s' % (y, _short(v))
+                    for y, v in sorted(row['by_year'].items()))))
+            for row in found['profit_gap']:
+                lines.append('  %-34s books %s, return %s, apart %s'
+                             % ('net income %s' % row['year'],
+                                _short(row['books']), _short(row['return']),
+                                _short(row['gap'])))
+            for row in found['unscheduled_debt']:
+                lines.append('  %-34s %s, on the balance sheet but not on the '
+                             'debt schedule' % (row['line'],
+                                                _short(row['balance'])))
+    except Exception:
+        pass
+
     lines.append('\nTHREE-YEAR HISTORY')
     for name, by_year, _fmt in bundle.series:
         vals = {y: v for y, v in by_year.items() if v is not None}
@@ -77,7 +156,7 @@ def picture(bundle):
     return '\n'.join(lines)
 
 
-def build_prompt(bundle):
+def build_prompt(bundle, folder=None):
     return """You are the analyst writing initial notes on a dental practice
 prospect for a financial advisory firm.
 
@@ -87,11 +166,16 @@ an analyst would write beside these figures.
 CLIENT: %s
 
 %s
+%s
 
 Reply with only JSON:
 %s
 
 How to choose what to write on:
+- The narrative documents above are somebody's account of this client, written
+  after talking to them. Use them: they carry why the client is here and what
+  they said, which no statement does. Attribute anything from them to the
+  document, and never let one override a figure read from a financial document.
 - ONLY lines where there is something to say. A figure that speaks for itself
   gets no note. Age, marital status, software, chair counts: no note.
 - An analyst writes roughly ten to fifteen notes on a client like this. If you
@@ -108,7 +192,19 @@ How to write them:
 - Use ONLY the figures above. If a ratio looks not to divide, the denominator
   is probably in the list: check before concluding something is excluded.
 - Never write a sentence the figures do not support. A blank line is fine; a
-  plausible invention is not.""" % (bundle.client, picture(bundle), SCHEMA)
+  plausible invention is not.""" % (bundle.client, picture(bundle), _narrative_block(folder), SCHEMA)
+
+
+def _narrative_block(folder):
+    if not folder:
+        return ''
+    docs = narrative_documents(folder)
+    if not docs:
+        return ''
+    out = ['\n\nWHAT THE TEAM HAS WRITTEN ABOUT THIS CLIENT']
+    for name, text in docs:
+        out.append('\n--- %s\n%s' % (name, text))
+    return '\n'.join(out)
 
 
 def main():
@@ -119,7 +215,7 @@ def main():
     a = ap.parse_args()
 
     bundle = _facts.gather(a.folder, client=a.client)
-    prompt = build_prompt(bundle)
+    prompt = build_prompt(bundle, a.folder)
 
     if not a.run:
         print(prompt)
@@ -140,7 +236,8 @@ def main():
 
     # Keyed by line, because that is how the workbook looks them up.
     out = {}
-    known = {f.label for f in bundle.all_facts()}
+    known = ({f.label for f in bundle.all_facts()} |
+             {name for name, _b, _f in bundle.series})
     unmatched = []
     for row in answer['notes']:
         line = (row.get('line') or '').strip()

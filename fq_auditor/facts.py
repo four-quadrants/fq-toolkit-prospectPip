@@ -30,6 +30,8 @@ import production as _prod                                   # noqa: E402
 import practice_facts as _pf                                 # noqa: E402
 import debt as _debt                                         # noqa: E402
 import intake_form as _ic                                    # noqa: E402
+import compose as _compose                                   # noqa: E402
+import assets as _assets                                     # noqa: E402
 
 MONEY = '$#,##0;($#,##0);-'
 PCT = '0.0%'
@@ -56,9 +58,58 @@ Block = namedtuple('Block', 'title facts')
 
 
 class Bundle(object):
-    def __init__(self, client, blocks, years, series):
+    def __init__(self, client, blocks, years, series, folder=None):
         self.client, self.blocks = client, blocks
+        # So anything downstream can reach the client's own documents without
+        # being told again where they are.
+        self.folder = folder
         self.years, self.series = years, series
+        # How many months each year's P&L actually covers, so anything
+        # downstream can tell a full year from a year to date.
+        self.months_by_year = {}
+        # Notes written about a year-by-year metric rather than a block fact.
+        # The first version dropped these on the floor: six of nine notes
+        # named a series row, which is exactly where a trend observation
+        # belongs, and none of them reached the page.
+        self.series_notes = {}
+
+    @property
+    def forename(self):
+        """The given name, which is what the plan's prose actually uses.
+
+        Every one of the 44 plans reviewed says "We assume that Brian is set
+        to retire", never the surname and never the title. The documents name
+        the client as "Dr. Brian Oyler" or "Oyler, Brian", so the given name
+        is the second word of the former and the second field of the latter.
+        """
+        name = (self.client or '').strip()
+        if not name:
+            return None
+        if ',' in name:
+            tail = name.split(',', 1)[1]
+            parts = tail.split()
+        else:
+            parts = [p for p in name.replace('.', ' ').split()
+                     if p.lower() not in ('dr', 'drs', 'mr', 'mrs', 'ms')]
+            parts = parts[:-1] if len(parts) > 1 else parts
+        return parts[0] if parts else None
+
+    @property
+    def surname(self):
+        """The family name, as the plan's prose uses it ("the Oyler home").
+
+        The client string arrives as "Dr. Brian Oyler" or "Oyler, Brian", so
+        take the last word of the former and the first field of the latter,
+        after dropping a title.
+        """
+        name = (self.client or '').strip()
+        if not name:
+            return None
+        if ',' in name:
+            name = name.split(',')[0]
+        parts = [p for p in name.replace('.', ' ').split()
+                 if p.lower() not in ('dr', 'drs', 'mr', 'mrs', 'ms')]
+        return parts[-1] if parts else None
 
     def all_facts(self):
         for block in self.blocks:
@@ -88,6 +139,12 @@ def attach_notes(bundle, folder):
             fact.note = got['note']
         fact.flags = list(got.get('flags') or ())[:2]
         fact.questions = list(got.get('questions') or ())[:2]
+
+    labels = {f.label for f in bundle.all_facts()}
+    for name, _by_year, _fmt in bundle.series:
+        got = written.get(name)
+        if got and name not in labels:
+            bundle.series_notes[name] = got
     return bundle
 
 
@@ -108,6 +165,14 @@ def gather(folder, client=None):
         prod = _prod.gather(folder)
     except Exception:
         prod = {}
+    # Balances are read by asking, not by pattern: "balance" appears a dozen
+    # times on a statement meaning a dozen things. Absent if assets.py has not
+    # been run, and the lines below simply report that nothing has been read.
+    try:
+        from classify_claude import source_index
+        held = _assets.gather(folder, sources=source_index(folder))
+    except Exception:
+        held = {'accounts': [], 'by_kind': {}, 'total': None}
 
     years = sorted(set(pnl) | set(prod) | set(counts))[-3:]
     full = [y for y in years if (pnl.get(y, {}).get('months') or 0) >= 12]
@@ -117,33 +182,60 @@ def gather(folder, client=None):
 
     # ------------------------------------------------------------- practice
     practice = [
-        Fact('Office location', form.get('building') and
-             'Owns the building' or None, TEXT, ic_name, 'rent or own',
-             needed='Ask on the call', why='Lease terms drive the overhead'),
+        Fact('Office location', _compose.office(form, folder), TEXT,
+             'document letterheads and the IC form', 'composed',
+             needed='Ask on the call',
+             why='Where it is, and on what terms, drives the overhead'),
         Fact('Owned since', form.get('years_owned') and
              '%s years' % form['years_owned'], TEXT, ic_name, 'years owned'),
-        Fact('Collections, stated', _ic.money(form.get('collections_last')),
-             MONEY, ic_name, 'annual collections last year'),
-        Fact('Collections, documented', p.get('income'), MONEY,
-             'P&L %s' % latest if p else None, 'Total for Income'),
-        Fact('Associates', form.get('associate_comp'), TEXT, ic_name,
-             'associate compensation'),
+        Fact('Collections', _compose.collections(
+            _ic.money(form.get('collections_last')), p.get('income'), latest),
+             TEXT, 'P&L %s and IC form' % latest if p else ic_name,
+             'composed'),
+        Fact('Associates', _compose.associates(
+            _prod.load_roles(folder),
+            {y: _providers_for(prod, y) for y in years},
+            (_pf.gather(folder) or {}).get('doctor_days') or {},
+            years, form.get('associate_comp'))
+            or form.get('associate_comp'), TEXT,
+             'Provider Summary, days-worked document, IC form',
+             'composed'),
         Fact('Chairs', form.get('chairs_total') and
              '%s total (%s op, %s hyg)' % (form.get('chairs_total'),
                                            form.get('chairs_operative'),
                                            form.get('chairs_hygiene')),
              TEXT, ic_name, 'chairs'),
-        Fact('In-network', form.get('in_network'), TEXT, ic_name,
+        Fact('Payer mix', _compose.payer_mix(form), TEXT, ic_name,
              'insurances in network'),
+        Fact('Schedule', _compose.schedule(form), TEXT, ic_name,
+             'doctor and hygiene days worked per week',
+             needed='Ask on the call, these go stale fast',
+             why='Capacity is the lever behind most of the production work'),
+        Fact('Booked out', _compose.booked_out(form), TEXT, ic_name,
+             'doctor, hygiene and new patient lead times',
+             needed='Ask on the call, these go stale fast',
+             why='Whether the practice is short of chairs or short of '
+                 'patients, which decides between hiring and marketing'),
+        Fact('New patients', _compose.new_patients(form, counts, years), TEXT,
+             'IC form and the count documents', 'stated against counted'),
+        Fact('Ownership', form.get('ownership'), TEXT, ic_name),
+        Fact('Collections projected', _ic.money(form.get('collections_proj')),
+             MONEY, ic_name, 'projected collections this year'),
         Fact('Practice management software', form.get('pms'), TEXT, ic_name,
              'practice management software'),
-        Fact('Fees off by', None, PCT, None,
-             needed='Fee schedule and the NDAS study',
+        Fact('Fees off by', _compose.fee_study(folder)[1], TEXT,
+             'Documents/Business/Fees', 'the fee study result',
+             needed='Run the fee-comparison skill; its output lands in '
+                    'Documents/Business/Fees and is read from there',
              why='Sizes the single easiest revenue lever'),
     ]
 
     # ------------------------------------------------------------- overhead
     overhead = [
+        Fact('Overhead', _compose.overhead(
+            p.get('overhead_pct'), t.get('overhead_pct'),
+            _ic.money(form.get('overhead_stated')), latest), TEXT,
+             'P&L, 1120-S and IC form', 'composed'),
         Fact('Overhead, client says', _pct(_ic.money(form.get('overhead_stated'))),
              PCT, ic_name, 'approximate overhead percentage'),
         Fact('Overhead, P&L basis', _pct(p.get('overhead_pct')), PCT,
@@ -208,6 +300,25 @@ def gather(folder, client=None):
 
     practice_debt = obligations(debts.get('practice') or (), 'Practice')
     personal_debt = obligations(debts.get('personal') or (), 'Personal')
+
+    # The composed line goes first, because it is the one a reader needs and
+    # the rows beneath it are the working. "Two mature by 2028" cannot be seen
+    # by scanning six balances; it has to be said.
+    head = _compose.practice_debt(debts.get('practice') or (),
+                                  debts.get('unread') or ())
+    if head:
+        practice_debt.insert(0, Fact('Practice debt', head, TEXT,
+                                     'Debt schedule', 'composed from the rows '
+                                     'below'))
+    bank = _compose.bank_accounts(held.get('accounts') or ())
+    if bank:
+        practice.append(Fact('Bank accounts', bank, TEXT, 'bank statements',
+                             'latest balance per account'))
+    head = _compose.personal_debt(debts.get('personal') or ())
+    if head:
+        personal_debt.insert(0, Fact('Personal debt', head, TEXT,
+                                     'mortgage statements',
+                                     'composed from the rows below'))
     for row in debts.get('unread') or ():
         practice_debt.append(Fact('Obligation stated in prose', None, MONEY,
                                   row.get('source'),
@@ -219,6 +330,8 @@ def gather(folder, client=None):
     personal = [
         Fact('Age', _ic.money(form.get('age')), NUM, ic_name, 'age'),
         Fact('Marital status', form.get('marital_status'), TEXT, ic_name),
+        Fact('Residence', _compose.residence(folder), TEXT,
+             'document letterheads', 'the address that is not the practice'),
         Fact('Dependents', _ic.money(form.get('dependents')), NUM, ic_name),
         Fact('Take-home, stated', _ic.money(form.get('take_home')), MONEY,
              ic_name, 'annual take-home pay'),
@@ -229,20 +342,26 @@ def gather(folder, client=None):
              note='Client says this was arrived at by: %s'
                   % (form.get('retire_basis') or 'not stated')),
         Fact('Saved last year', form.get('saved_last_year'), TEXT, ic_name),
-        Fact('Investable assets', None, MONEY, None,
+        Fact('Investable assets', held.get('by_kind', {}).get('Investments'),
+             MONEY, 'investment statements', 'latest balance per account',
              needed='Investment and retirement statements, read',
              why='Half the retirement question is what is already there'),
-        Fact('Personal bank balances', None, MONEY, None,
-             needed='Personal bank statements; none have arrived',
-             why='The personal cashflow cannot start without them'),
         Fact('CPA rating', form.get('cpa_rating'), TEXT, ic_name,
              'how would you rate your CPA'),
+        Fact('Tax surprises', form.get('tax_surprise'), TEXT, ic_name,
+             'owe or being refunded'),
+        Fact('Liquid if they walked away today', form.get('saved_liquid'),
+             TEXT, ic_name, 'if you walked away today'),
+        Fact('Email', form.get('email'), TEXT, ic_name),
     ]
 
+    # Practice side first and complete, then the person. Personal debt sat
+    # between the practice blocks and the personal ones, which split the
+    # household across the sheet.
     blocks = [Block('Practice', practice), Block('Overhead', overhead),
               Block('Practice debt', practice_debt),
-              Block('Personal debt', personal_debt),
-              Block('Personal', personal)]
+              Block('Personal', personal),
+              Block('Personal debt', personal_debt)]
 
     # --------------------------------------------------- the year-by-year
     # The firm's own metric list, in the firm's own order. Anything derived is
@@ -369,7 +488,19 @@ def gather(folder, client=None):
         ('officer compensation (tax return)',
          {y: tax.get(y, {}).get('officer_comp') for y in years}, MONEY),
     ]
-    return attach_notes(Bundle(client, blocks, years, series), folder)
+    bundle = Bundle(client, blocks, years, series, folder)
+    bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0
+                             for y in years}
+    return attach_notes(bundle, folder)
+
+
+def _providers_for(prod, year):
+    """{code: production} for one year, reconciled, or empty."""
+    rec = prod.get(year, {})
+    settled = _prod.reconcile_providers(
+        rec.get('providers') or {}, rec.get('activity') or {},
+        (rec.get('values') or {}).get('total_charges_prov'))
+    return settled['providers'] if settled.get('reconciles') else {}
 
 
 def _fmt(v):

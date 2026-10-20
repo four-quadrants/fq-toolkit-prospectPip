@@ -141,24 +141,50 @@ def passwords_near(path, limit=40):
     IS the password from a sentence like "481920365 should be the password for
     the returns" is not worth the risk of guessing wrong; trying them all costs
     microseconds and cannot be fooled by phrasing.
+
+    The search walks up to the client folder rather than stopping one level
+    above the document. Two levels was enough for a document sitting in
+    Original_sourcedocs and not enough for the same document expanded out of
+    a zip, which is why one copy of Oyler's e-file Activity Report unlocked
+    and an identical copy two folders deeper stayed locked. A locked document
+    reads as an empty one, so the checklist calls it missing and somebody
+    emails the client for a file they already sent.
+
+    Every password file found on the way up is read, nearest first, because a
+    client can send one password with a zip and another later in a comment,
+    and only one of the two will be the right one for any given file.
     """
     here = os.path.dirname(os.path.abspath(path))
-    for folder in (here, os.path.dirname(here)):
-        note = os.path.join(folder, PASSWORD_FILE)
-        if not os.path.exists(note):
-            continue
-        try:
-            text = open(note, errors='ignore').read()
-        except OSError:
-            continue
-        seen, out = set(), []
-        for tok in re.findall(r'[^\s]{4,40}', text):
-            tok = tok.strip('.,;:"\'()[]')
-            if tok and tok.lower() not in seen:
-                seen.add(tok.lower())
-                out.append(tok)
-        return out[:limit]
-    return []
+    seen, out = set(), []
+    # Bounded rather than open ended: walking to the volume root would start
+    # reading other clients' password files, which is worse than failing.
+    for _depth in range(6):
+        # The folder itself, and the intake folder beside it. Walking up
+        # from Documents/Personal/Misc reaches the client folder but never
+        # passes through Original_sourcedocs, which is where the pull skill
+        # writes the passwords. That is exactly where the filed copy of
+        # Oyler's Activity Report sits, and it stayed locked while the
+        # original two folders away opened.
+        for note in (os.path.join(here, PASSWORD_FILE),
+                     os.path.join(here, 'Original_sourcedocs', PASSWORD_FILE)):
+            if not os.path.exists(note):
+                continue
+            try:
+                text = open(note, errors='ignore').read()
+            except OSError:
+                continue
+            for tok in re.findall(r'[^\s]{4,40}', text):
+                tok = tok.strip('.,;:"\'()[]')
+                if tok and tok.lower() not in seen:
+                    seen.add(tok.lower())
+                    out.append(tok)
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+        if len(out) >= limit:
+            break
+    return out[:limit]
 
 
 def open_pdf(path):
@@ -280,6 +306,37 @@ def _cache_paths(cache_dir, digest):
             os.path.join(cache_dir, digest + suffix + '.json'))
 
 
+def _write_cache(txt_p, meta_p, text, meta):
+    """Publish a cache entry, or publish nothing at all.
+
+    Every reader downstream finds documents by globbing the cache for
+    *.txt. Writing straight to that name means a file matches the glob
+    from the instant it is created, so anything reading while a long
+    statement is still being written sees a truncated document and
+    believes it. That is how the first build of a client reported eight
+    bank statements as no readable bank statements: not an error, an empty
+    answer, which is the failure nobody can catch by looking.
+
+    So each file is written beside its destination under a name the glob
+    does not match, then moved onto it. os.replace is atomic, so a reader
+    sees either the previous entry or the finished one and never a
+    half-written one.
+
+    The metadata lands before the text, because the text is what the
+    readers look for and it must not appear without it.
+    """
+    def _put(path, write):
+        tmp = path + '.part'
+        with open(tmp, 'w') as fh:
+            write(fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+
+    _put(meta_p, lambda fh: json.dump(meta, fh))
+    _put(txt_p, lambda fh: fh.write(text))
+
+
 def _extract_one(args):
     path, cache_dir, dpi = args
     name = os.path.basename(path)
@@ -303,10 +360,7 @@ def _extract_one(args):
         meta = dict(n_pages=1, n_ocr_pages=0)
 
     os.makedirs(cache_dir, exist_ok=True)
-    with open(txt_p, 'w') as fh:
-        fh.write(text)
-    with open(meta_p, 'w') as fh:
-        json.dump(meta, fh)
+    _write_cache(txt_p, meta_p, text, meta)
     meta.update(file=name, path=path, sha256=digest, cached=False)
     return meta, text
 
@@ -551,10 +605,8 @@ def extract_folder(folder, cache_dir=None, dpi=OCR_DPI, workers=None, progress=T
         kind = resolve_kind(path)
         if kind != '.pdf':
             text = extract_other(path, kind)
-            with open(txt_p, 'w') as fh:
-                fh.write(text)
-            with open(meta_p, 'w') as fh:
-                json.dump(dict(n_pages=1, n_ocr_pages=0), fh)
+            _write_cache(txt_p, meta_p, text,
+                         dict(n_pages=1, n_ocr_pages=0))
             out.append(dict(file=name, path=path, sha256=digest, n_pages=1,
                             n_ocr_pages=0, cached=False, text=text))
             continue
@@ -614,10 +666,9 @@ def add_page_index(path, cache_dir, dpi=OCR_DPI):
     pages = [t if t is not None else '' for t in texts]
     text = SEP.join(pages)
     starts = page_starts(pages)
-    with open(txt_p, 'w') as fh:
-        fh.write(text)
-    with open(meta_p, 'w') as fh:
-        json.dump(dict(n_pages=len(pages), n_ocr_pages=len(todo), page_starts=starts), fh)
+    _write_cache(txt_p, meta_p, text,
+                 dict(n_pages=len(pages), n_ocr_pages=len(todo),
+                      page_starts=starts))
     return dict(text=text, page_starts=starts, n_pages=len(pages), n_ocr_pages=len(todo))
 
 
@@ -668,12 +719,9 @@ def _finish(pending, path, cache_dir, out):
     pages = [t if t is not None else '' for t in st['texts']]
     text = SEP.join(pages)
     txt_p, meta_p = _cache_paths(cache_dir, st['digest'])
-    with open(txt_p, 'w') as fh:
-        fh.write(text)
     meta = dict(n_pages=len(pages), n_ocr_pages=st['n_ocr'],
                 page_starts=page_starts(pages))
-    with open(meta_p, 'w') as fh:
-        json.dump(meta, fh)
+    _write_cache(txt_p, meta_p, text, meta)
     out.append(dict(file=st['name'], path=path, sha256=st['digest'],
                     n_pages=len(pages), n_ocr_pages=meta['n_ocr_pages'],
                     page_starts=meta['page_starts'],

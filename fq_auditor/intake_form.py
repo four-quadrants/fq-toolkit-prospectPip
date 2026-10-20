@@ -124,14 +124,33 @@ def parse(path):
     return out
 
 
+def _emails(folder):
+    """Every .eml in the folder and one level below it.
+
+    The IC form sits loose in the client folder before filing and inside
+    Original_sourcedocs after it, and a top-level glob alone found it in the
+    first case and not the second -- which printed "NEEDS: the client's target
+    retirement age" for a client who had answered the question.
+    """
+    found = list(glob.glob(os.path.join(folder, '*.eml')))
+    found += glob.glob(os.path.join(folder, '*', '*.eml'))
+    seen, out = set(), []
+    for p in found:
+        key = os.path.realpath(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    return out
+
+
 def find_form(folder):
     """The IC form email in a client folder, if one is there."""
-    for p in glob.glob(os.path.join(folder, '*.eml')):
+    for p in _emails(folder):
         name = os.path.basename(p).lower()
         if 'ic form' in name or 'ic-form' in name:
             return p
     # Fall back to reading them: the file is sometimes named for the client.
-    for p in glob.glob(os.path.join(folder, '*.eml')):
+    for p in _emails(folder):
         try:
             head = open(p, errors='replace').read(4000)
         except OSError:
