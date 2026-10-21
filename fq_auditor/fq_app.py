@@ -978,7 +978,32 @@ function show(name){
     // before the last run could stay on screen, which looks exactly like
     // decisions having been ignored.
     var f=document.getElementById('reviewframe');
-    f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now();
+    var load=function(){
+      f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now(); };
+    // A page drawn by an older version of the toolkit is redrawn first, from
+    // the documents already read, with the decisions already made. Nobody
+    // should have to know that the review is a saved file.
+    fetch('/api/reviewstale?folder='+encodeURIComponent(FOLDER))
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.stale){ load(); return; }
+        f.srcdoc='<body style="font:15px -apple-system,Helvetica;padding:40px;'+
+          'color:#16324F"><h3>Bringing this review up to date…</h3>'+
+          '<p style="color:#6C7480">It was saved by an older version of the '+
+          'toolkit. Redrawing it from the documents already read, with your '+
+          'decisions kept. About a minute.</p></body>';
+        fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({folder:FOLDER})})
+          .then(function(){
+            var at=0, t=setInterval(function(){
+              fetch('/api/log?since='+at).then(function(r){return r.json();})
+                .then(function(s){ at=s.total;
+                  if(!s.running){ clearInterval(t); f.removeAttribute('srcdoc'); load(); }
+                });
+            }, 1000);
+          });
+      })
+      .catch(load);
   }
 }
 document.getElementById('tab-get').onclick=function(){show('get');};
@@ -1604,6 +1629,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
 
+        if p == '/api/reviewstale':
+            # Is the saved review page older than the code that draws it?
+            # The review is a file written when the audit runs, so a layout
+            # change never reached a client until someone re-audited. Now the
+            # Review tab asks, and refreshes the page itself when it is stale.
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            out = os.path.join(folder, '_Audit')
+            pages = sorted((f for f in audit_outputs(folder)
+                            if f.endswith('Intake Review.html')),
+                           key=lambda f: os.path.getmtime(os.path.join(out, f)),
+                           reverse=True)
+            if not pages:
+                return self._send(200, '{"stale":false,"none":true}')
+            page = os.path.join(out, pages[0])
+            code = max(os.path.getmtime(os.path.join(HERE, f))
+                       for f in ('render_html.py', 'audit.py'))
+            try:
+                with open(page, errors='replace') as fh:
+                    tiles = 'class="tiles"' in fh.read()
+            except OSError:
+                tiles = False
+            stale = (not tiles) or os.path.getmtime(page) < code
+            return self._send(200, json.dumps({'stale': stale}))
+
         if p == '/api/consultstatus':
             folder = (q.get('folder') or [''])[0]
             if not self._guard(folder):
@@ -1832,6 +1883,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # image and the page fell back to showing text. curl has no CSP,
             # which is why every test passed while the real thing failed.
             html = html.replace("img-src data:", "img-src data: 'self'", 1)
+
+            # A page saved before the 1 October rebuild has no status tiles.
+            # Served as it is, it looks as if the new review had been lost
+            # (it was not: the page is a file written when the audit last
+            # ran). Say so on the page, with what to do.
+            if 'class="tiles"' not in html:
+                banner = ('<div style="position:sticky;top:0;z-index:99;'
+                          'background:#FFF3E0;color:#8A5218;border-bottom:1px '
+                          'solid #F0D9B5;padding:10px 16px;font:14px '
+                          '-apple-system,Helvetica,sans-serif">This review was '
+                          'saved by an older version of the toolkit, before the '
+                          'status tiles. In step 1, pick this client and press '
+                          '<b>Download and audit</b> to rebuild it in the '
+                          'current layout. Your decisions are kept.</div>')
+                html = re.sub(r'(<body[^>]*>)', r'\1' + banner, html, count=1)
 
             head, sep, tail = html.rpartition('</body>')
             html = (head + SAVE_SHIM % json.dumps(folder) + sep + tail) if sep \
