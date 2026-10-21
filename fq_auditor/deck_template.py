@@ -37,6 +37,7 @@ import os
 import re
 import sys
 import copy
+import math
 import argparse
 import datetime
 
@@ -133,6 +134,7 @@ def figures(folder, client):
     D['overhead'] = N(f.get('Overhead, tax basis')) or \
         N(f.get('Overhead, P&L basis'))
     D['revenue'] = N(f.get('Income base (overhead denominator)'))
+    D['overhead_dollars'] = N(f.get('Total expenses (overhead numerator)'))
     D['debt_total'] = N(f.get('Practice total'))
     D['debt_service'] = N(f.get('Practice debt service'))
 
@@ -403,7 +405,13 @@ def slide_fills(D):
                    'Text 4': 'across the practice loans'}
 
     # 13 cash flow process: the ideal balance, wherever it appears
+    # One month of practice expenses on the most recent reliable overhead,
+    # which is the firm's rule (Austin, 21 October): the overhead numerator
+    # of the newest full-year P&L over twelve, rounded up to the next $10k.
+    # Rebol: $2,098,078 / 12 = $174,840, so $180k, as on his deck.
     bal = N(adv.get('ideal_bank_balance'))
+    if not bal and D.get('overhead_dollars'):
+        bal = math.ceil(D['overhead_dollars'] / 12.0 / 10000.0) * 10000
     b_txt = _k(bal).replace('.0k', 'k') if bal else ask('ideal balance')
     out[13] = {
         'Text 3': b_txt,
@@ -559,7 +567,9 @@ NOTES = {
        'retirement wealth are from savings.py: the current path at 8.5% on '
        'today’s savings, the Four Quadrants path at 9% on the advisor’s '
        'schedule.',
-    9: 'Levers from levers.py (Bryan’s model). Overhead to the goal is '
+    9: 'The overhead goal is 50% (Bryan’s model) unless the advisor sets one. '
+       'The firm has not settled the long-term goal, so check it before '
+       'presenting. Levers from levers.py. Overhead to the goal is '
        'savings, not revenue, so it adds nothing to the revenue column. The '
        'levers overlap; the total is not strictly additive.',
     15: 'Account values from the Assumptions, sections 4 and 5. What is inside '
