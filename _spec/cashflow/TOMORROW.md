@@ -73,6 +73,16 @@ labelled as verification. Oyler's carries only target income and current
 savings, because the years of his savings steps are not written down
 anywhere I could find.
 
+## Consult plan card (Build Outputs tab)
+
+"Work out the plan" shows what the documents and models give: retirement
+income, wealth, the sale, years 1-3 saved, the basics (each worked-out figure
+as the placeholder), the table of savings sources with proposed invested
+amounts, and five concerns. "Save the plan" writes the deck entry in
+_Audit/plan_inputs.json (merged; an emptied box goes back to the worked-out
+figure) and works it out again. The deck is then built from it. The table is
+kept only if the advisor changed it.
+
 ## Next
 
 1. **The advisor form in the app.** It writes the `deck` entry. It is the last

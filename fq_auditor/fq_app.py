@@ -767,6 +767,26 @@ label.ck:last-child{border-bottom:none}
 label.ck b{font-size:13px;color:#16324F;font-weight:600}
 label.ck span{font-size:11.5px;color:#8A9099}
 #buildmade{flex-wrap:wrap;gap:6px}
+/* The Consult plan card: the few choices the advisor still makes, laid over
+   what the documents already work out. A placeholder is the worked-out
+   figure; typing over it is the override. */
+.plan .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 14px}
+.plan .grid input,.plan table input{width:100%}
+.plan table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.plan th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#6C7480;
+  text-align:right;padding:6px 4px;border-bottom:1px solid #E4E0D8}
+.plan th:first-child,.plan td:first-child{text-align:left}
+.plan td{padding:4px;border-bottom:1px solid #F2EFE9;vertical-align:top}
+.plan td input{text-align:right;padding:6px 7px;font-size:13px}
+.plan td:first-child input{text-align:left}
+.plan .basis{font-size:11px;color:#9AA0A8;margin-top:2px}
+.plan .x{background:none;border:0;color:#B0B5BC;cursor:pointer;font-size:15px}
+.plan .sum{display:flex;gap:22px;flex-wrap:wrap;background:#F6F4EF;border-radius:8px;
+  padding:12px 14px;margin:14px 0 4px}
+.plan .sum div{font-size:12px;color:#6C7480}
+.plan .sum b{display:block;font-size:18px;color:#16324F}
+.plan h3{font-size:13px;margin:18px 0 6px;color:#16324F}
+.plan .hint{font-size:11.5px;color:#8A9099;margin-top:3px}
 .hide{display:none}
 </style></head><body>
 
@@ -871,6 +891,16 @@ label.ck span{font-size:11.5px;color:#8A9099}
     <p class="sub">Runs on the documents already read for this client. The
        initial notes workbook is the one the team opens first; the rest are
        built from the same reading, so they cannot disagree with it.</p>
+
+    <div class="card plan" id="plancard">
+      <div class="row">
+        <div style="flex:1"><b style="color:#16324F">Consult plan</b>
+          <div class="sub" style="margin:2px 0 0">What goes into the deck. Every
+            figure is worked out from the documents; fill a box only to change it.</div></div>
+        <button class="ghost" id="planload" disabled>Work out the plan</button>
+      </div>
+      <div id="planbody" class="hide"></div>
+    </div>
 
     <div class="card">
       <div class="crumb" id="buildwho">No client chosen yet</div>
@@ -991,6 +1021,147 @@ document.getElementById('buildgo').onclick=function(){
 document.getElementById('skipget').onclick=function(){
   if(PICKED) startClient(PICKED.path, PICKED.name);
 };
+
+// --- Consult plan -----------------------------------------------------
+// One card, three parts: the basics, the table the savings schedule is built
+// from, and the client's concerns. Nothing here is required: an empty box
+// means "use the worked-out figure", which is shown as the placeholder.
+var PLAN=null;
+function money(v){ return (v===null||v===undefined||v==='')?'':
+  '$'+Math.round(v).toLocaleString('en-US'); }
+function numIn(v){ if(v===null||v===undefined) return ''; var s=String(v).replace(/[$,\s]/g,'');
+  if(s==='') return ''; var n=parseFloat(s); return isNaN(n)?'':n; }
+function esc(s){ return String(s===null||s===undefined?'':s).replace(/[&<>"]/g,
+  function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function planReady(){
+  var b=document.getElementById('planload');
+  b.disabled=!FOLDER;
+  document.getElementById('planbody').classList.add('hide');
+  PLAN=null;
+}
+function field(id,label,val,ph,hint){
+  return '<div><label>'+label+'</label><input type="text" id="'+id+'" value="'+esc(val)+
+    '" placeholder="'+esc(ph)+'">'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>';
+}
+function gainRow(g){
+  var inv=g.invested||['','',''];
+  return '<tr><td><input type="text" class="g-label" value="'+esc(g.label)+'">'+
+    (g.basis?'<div class="basis">'+esc(g.basis)+'</div>':'')+
+    '<input type="hidden" class="g-kind" value="'+esc(g.kind||'cash')+'"></td>'+
+    '<td><input type="text" class="g-gain" value="'+esc(money(g.gain))+'"></td>'+
+    [0,1,2].map(function(i){return '<td><input type="text" class="g-y'+i+'" value="'+
+      esc(money(inv[i]))+'"></td>';}).join('')+
+    '<td><button class="x" title="Remove">&times;</button></td></tr>';
+}
+function renderPlan(d){
+  PLAN=d; var e=d.entry||{};
+  var body=document.getElementById('planbody');
+  var pct=function(v){return (v===null||v===undefined)?'':(v*100).toFixed(1)+'%';};
+  var h='';
+  h+='<div class="sum">'+
+    '<div>Retirement income<b>'+(d.income?money(d.income)+'/yr':'—')+'</b>'+
+      (d.income_derived?'what the schedule pays to 90':'as entered')+'</div>'+
+    '<div>Wealth at retirement<b>'+(d.fq_wealth?money(d.fq_wealth):'—')+'</b>'+
+      (d.current_wealth?'against '+money(d.current_wealth)+' today':'')+'</div>'+
+    '<div>Sale, net<b>'+(d.sale_net?money(d.sale_net):'—')+'</b>'+
+      (d.retire_year?'in '+d.retire_year:'')+'</div>'+
+    '<div>Saved, years 1–3<b>'+(d.schedule||[]).map(function(s){return money(s[1]);}).join(' / ')+'</b></div>'+
+    '</div>';
+  if(d.need && d.need.length) h+='<div class="found miss">Still needed before the '+
+    'projection runs: '+d.need.join(', ')+'.</div>';
+  h+='<h3>Basics</h3><div class="grid">'+
+    field('p-date','Consult date',e.consult_date||'','YYYY-MM-DD')+
+    field('p-save','Current savings / yr',e.current_savings?money(e.current_savings):'',
+      d.current_savings?money(d.current_savings):'401(k) + match + other','Today’s, all accounts')+
+    field('p-bldg','Building value',e.building_value?money(e.building_value):'',
+      d.owns_building?'owns it: enter a value':'rents (IC form)',
+      d.owns_building?'Included in the sale':'Leave empty if they rent')+
+    field('p-age','Retirement age',e.retire_age||'',d.retire_age||'from the IC form')+
+    field('p-bank','Ideal practice bank balance',e.ideal_bank_balance?money(e.ideal_bank_balance):'',
+      money(d.ideal_balance),'One month of overhead')+
+    field('p-oh','Overhead goal',e.target_overhead?pct(e.target_overhead):'',
+      d.overhead_goal?pct(d.overhead_goal):'50.0%','Today '+pct(d.overhead))+
+    field('p-income','Retirement income',e.target_income?money(e.target_income):'',
+      d.income?money(d.income)+' (worked out)':'worked out','Leave empty to use what the plan pays')+
+    field('p-salenet','Sale, net',e.sale_net?money(e.sale_net):'',money(d.sale_net),
+      'Practice'+(d.building?' and building':'')+' at retirement, after tax')+
+    field('p-start','Investable today',e.start_portfolio?money(e.start_portfolio):'',
+      money(d.start),'From the Assumptions')+
+    '</div>';
+  h+='<h3>Where the savings come from</h3>'+
+    '<table id="p-gains"><tr><th>Source</th><th>A year</th><th>Year 1</th><th>Year 2</th>'+
+    '<th>Year 3</th><th></th></tr>'+(d.gains||[]).map(gainRow).join('')+'</table>'+
+    '<div class="row" style="margin-top:8px"><button class="ghost" id="p-add">Add a source</button>'+
+    '<span class="hint">Invested amounts are proposed on the firm’s ramp. One-time items (**) count in year 1 only.</span></div>';
+  var con=e.concerns||[];
+  h+='<h3>Biggest concerns</h3>';
+  for(var i=0;i<5;i++){
+    var c=con[i]||['',''];
+    h+='<div class="row" style="margin-bottom:6px"><input type="text" class="c-head" style="flex:1" '+
+      'placeholder="Heading" value="'+esc(c[0])+'"><input type="text" class="c-body" style="flex:2" '+
+      'placeholder="In the client’s words" value="'+esc(c[1])+'"></div>';
+  }
+  h+='<div class="row" style="margin-top:14px"><span class="sub" id="p-msg" style="margin:0;flex:1"></span>'+
+    '<button class="primary" id="p-save-btn">Save the plan</button></div>';
+  body.innerHTML=h; body.classList.remove('hide');
+  body.querySelectorAll('.x').forEach(function(b){b.onclick=function(){
+    this.closest('tr').remove();};});
+  document.getElementById('p-add').onclick=function(){
+    var t=document.getElementById('p-gains');
+    t.insertAdjacentHTML('beforeend',gainRow({label:'',kind:'cash',invested:['','','']}));
+    var x=t.querySelectorAll('.x'); x[x.length-1].onclick=function(){this.closest('tr').remove();};
+  };
+  document.getElementById('p-save-btn').onclick=savePlan;
+}
+function loadPlan(){
+  var b=document.getElementById('planload');
+  b.disabled=true; b.textContent='Working it out… (about a minute)';
+  fetch('/api/plan?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      b.disabled=false; b.textContent='Work it out again';
+      if(d.error){ var bd=document.getElementById('planbody');
+        bd.innerHTML='<div class="found miss">'+esc(d.error)+'</div>'; bd.classList.remove('hide'); return; }
+      renderPlan(d);
+    });
+}
+function savePlan(){
+  var v=function(id){return document.getElementById(id).value.trim();};
+  var pc=function(s){ s=String(s).replace('%','').trim(); if(!s) return ''; var n=parseFloat(s);
+    return isNaN(n)?'':(n>1?n/100:n); };
+  var rows=[];
+  document.querySelectorAll('#p-gains tr').forEach(function(tr,i){
+    if(i===0) return;
+    var q=function(c){return tr.querySelector(c).value;};
+    var label=q('.g-label').trim(); if(!label) return;
+    rows.push({label:label, kind:q('.g-kind'), gain:numIn(q('.g-gain')),
+      invested:[numIn(q('.g-y0'))||0,numIn(q('.g-y1'))||0,numIn(q('.g-y2'))||0]});
+  });
+  // The table is saved only when it differs from the proposal, so a client
+  // whose figures change still gets a fresh proposal next time.
+  var proposed=JSON.stringify((PLAN.gains||[]).map(function(g){
+    return [g.label,Math.round(g.gain||0)].concat(g.invested.map(function(x){return Math.round(x||0);}));}));
+  var mine=JSON.stringify(rows.map(function(g){
+    return [g.label,Math.round(g.gain||0)].concat(g.invested.map(function(x){return Math.round(x||0);}));}));
+  var con=[];
+  var hs=document.querySelectorAll('.c-head'), bs=document.querySelectorAll('.c-body');
+  for(var i=0;i<hs.length;i++){ if(hs[i].value.trim()) con.push([hs[i].value.trim(), bs[i].value.trim()]); }
+  var entry={
+    consult_date:v('p-date'), current_savings:numIn(v('p-save')),
+    building_value:numIn(v('p-bldg')), retire_age:numIn(v('p-age')),
+    ideal_bank_balance:numIn(v('p-bank')), target_overhead:pc(v('p-oh')),
+    target_income:numIn(v('p-income')), sale_net:numIn(v('p-salenet')),
+    start_portfolio:numIn(v('p-start')),
+    gains_table:(mine!==proposed)?rows:'', concerns:con.length?con:''
+  };
+  var m=document.getElementById('p-msg'); m.textContent='Saving…';
+  fetch('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER, entry:entry})})
+    .then(function(r){return r.json();})
+    .then(function(j){ m.textContent=j.saved?'Saved. Working the plan out again…':'Not saved.';
+      if(j.saved) loadPlan(); });
+}
+document.getElementById('planload').onclick=loadPlan;
 
 // --- Get documents ----------------------------------------------------
 // Reads the manifest the scheduled refresh left in the client folder. There is
@@ -1155,7 +1326,7 @@ function startClient(path, name){
   CUR = path;
   FOLDER = path;
   document.getElementById('foldernow').textContent = FOLDER;
-  buildReady();
+  buildReady(); planReady();
   var crumb = document.getElementById('crumb');
   if(crumb) crumb.textContent = path;
   var st = document.getElementById('golog');
@@ -1261,6 +1432,54 @@ refreshRoot().then(function(root){ if(root){ browse(''); } });
 
 # ---------------------------------------------------------------- server
 
+
+def plan_payload(folder):
+    """Everything the Consult plan card shows: what the documents and the
+    models work out, and what the advisor has already entered.
+
+    Built by the same code the deck uses (deck_template.figures), so the card
+    and the deck cannot disagree.
+    """
+    import deck_template as _dt
+    import plan as _plan
+    client = guess_inputs(folder).get('client')
+    D = _dt.figures(folder, client)
+    p = D.get('proj')
+
+    def num(v):
+        return None if v is None else round(float(v), 2)
+    rows = []
+    for g in D['gains']:
+        rows.append({'key': g.get('key'), 'label': g['label'],
+                     'gain': num(g['gain']), 'kind': g.get('kind'),
+                     'basis': g.get('basis'),
+                     'invested': [num(_plan.invested(g, i)) for i in range(3)]})
+    lv = D['lever_inputs']
+    return {
+        'client': client,
+        'first': D['first'],
+        'entry': D['adv'],
+        'age': D['age'], 'retire_age': D['retire_age'],
+        'owns_building': D['owns_building'], 'building': D.get('building'),
+        'collections': num(D.get('collections')),
+        'sale_gross': num(D.get('sale_gross')), 'sale_net': num(D.get('sale')),
+        'ideal_balance': D.get('ideal_balance'),
+        'overhead': D.get('overhead'),
+        'overhead_goal': lv.get('target_overhead'),
+        'start': num(D.get('start')), 'spend': num(D.get('spend')),
+        'current_savings': D.get('current_savings'),
+        'gains': rows,
+        'schedule': [[y, num(a)] for y, a in (D.get('schedule') or [])],
+        'income': D.get('income'),
+        'income_derived': D.get('income_derived'),
+        'need': D.get('need_proj'),
+        'retire_year': p and p['retire_year'],
+        'fq_wealth': num(p and p['fq_at_retirement']),
+        'current_wealth': num(p and p['current_at_retirement']),
+        'runout_year': p and p['runout_year'],
+    }
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass                                   # keep the console clean for the operator
@@ -1325,6 +1544,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   'text/html; charset=utf-8')
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
+
+        if p == '/api/plan':
+            # The Consult plan card. Slow on first open (the cash flow is read
+            # in full), so the page shows that it is working.
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            try:
+                return self._send(200, json.dumps(plan_payload(folder),
+                                                  default=str))
+            except Exception as e:                        # noqa: BLE001
+                return self._send(200, json.dumps(
+                    {'error': 'Could not work out the plan: %s' % e}))
 
         if p == '/api/sheet':
             # Spreadsheets, shown as spreadsheets.
@@ -1557,6 +1789,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             JOB.start(folder, client, greeting, g['checklist'], g['decisions'],
                       g['redacted'], file_them=(p == '/api/file'))
             return self._send(200, '{"started":true}')
+
+        if p == '/api/plan':
+            # The advisor's choices, kept beside the client's other typed
+            # figures (_Audit/plan_inputs.json, key 'deck'). Merged, so a
+            # field the card does not show is never wiped.
+            folder = data.get('folder') or ''
+            if not self._guard(folder):
+                return
+            import inputs as _inputs
+            got = (_inputs.get(folder, 'deck') or {}).get('value') or {}
+            for k, v in (data.get('entry') or {}).items():
+                if v in (None, '', []):
+                    got.pop(k, None)
+                else:
+                    got[k] = v
+            _inputs.put(folder, 'deck', got, by='FQ Toolkit app',
+                        note='Entered on the Consult plan card.')
+            return self._send(200, '{"saved":true}')
 
         if p == '/api/build':
             # The outputs, built in one process so the cash flow pass is

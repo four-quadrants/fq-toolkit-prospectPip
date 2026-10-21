@@ -167,14 +167,28 @@ def figures(folder, client):
     D['levers'] = _lev.compute(lx)
 
     excl = (cash['monthly_excluding'] if read else None)
-    D['gains'] = _plan.gains(
+    D['gains_proposed'] = _plan.gains(
         collections=D['collections'], current_savings=D['current_savings'],
         cash=D['cash'], ideal_balance=bal, spend_excl_monthly=excl,
         levers={k: v for k, v in D['levers'].items() if k != 'overhead'},
         extra=adv.get('gains'))
+    # The table as the advisor left it in the app replaces the proposal
+    # outright: rows they deleted stay deleted.
+    if adv.get('gains_table'):
+        D['gains'] = [dict(g, gain=N(g.get('gain')) or 0,
+                           kind=g.get('kind') or 'cash',
+                           invested=[N(x) or 0 for x in
+                                     (g.get('invested') or [0, 0, 0])])
+                      for g in adv['gains_table'] if g.get('label')]
+    else:
+        D['gains'] = D['gains_proposed']
     consult = adv.get('consult_date') or datetime.date.today().isoformat()
     f0 = _sav.first_year_fraction(datetime.date.fromisoformat(consult))
     first_plan_year = int(consult[:4]) + (1 if f0 == 0 else 0)
+    # A table edited on the Consult plan card is the advisor's newest word,
+    # so it rebuilds the schedule even over an older typed one.
+    if adv.get('gains_table'):
+        D['schedule'] = []
     D['schedule_derived'] = not D['schedule']
     if not D['schedule'] and D['current_savings']:
         D['schedule'] = _plan.schedule(D['gains'], first_plan_year)
