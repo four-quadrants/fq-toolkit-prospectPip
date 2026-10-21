@@ -75,6 +75,14 @@ def build(folder):
     # created it on another account.
     _tx.match_across(moves)
     entities = {}
+    # The analyst's review of the last workbook, read back before building
+    # (cashflow_review.py) and applied at the end, so nothing downstream
+    # uses the unreviewed reading.
+    try:
+        import cashflow_review as _review
+        _review.harvest(folder)
+    except Exception:                                        # noqa: BLE001
+        _review = None
 
     for (side, key), rows in sorted(found.items()):
         # A decomposed statement is a real month and belongs in the
@@ -207,7 +215,13 @@ def build(folder):
 
     order = ['Personal', 'Practice']
     rest = sorted(k for k in entities if k not in order)
-    return [entities[k] for k in order + rest if k in entities]
+    built = [entities[k] for k in order + rest if k in entities]
+    if _review:
+        try:
+            _review.apply(folder, built)
+        except Exception:                                    # noqa: BLE001
+            pass
+    return built
 
 
 def _bank_of(rows):

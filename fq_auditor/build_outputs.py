@@ -74,6 +74,16 @@ def step_cashflow(folder, client, outdir):
     out = os.path.join(outdir, 'Cash flow - %s.numbers'
                        % _surname(folder, client))
     path, overflow, _spare = _cwb.write(entities, out)
+    # The baseline the analyst's changes are read against next time.
+    try:
+        import cashflow_review as _review
+        _review.snapshot(folder, path)
+        n = len(_review.load_decisions(folder))
+        if n:
+            print('   %d of the analyst\u2019s changes from the last review '
+                  'carried into it.' % n)
+    except Exception as e:                                   # noqa: BLE001
+        print('   could not record the review baseline: %s' % e)
     if overflow:
         print('   %d entit%s did not fit: the template holds four sheets.'
               % (overflow, 'y' if overflow == 1 else 'ies'))

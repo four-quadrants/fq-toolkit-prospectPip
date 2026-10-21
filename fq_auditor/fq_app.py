@@ -794,10 +794,15 @@ label.ck span{font-size:11.5px;color:#8A9099}
   {{LOGO}}
   <h1>FQ Toolkit</h1>
   <nav>
-    <button id="tab-get" class="on">1 &nbsp;Download Files</button>
-    <button id="tab-review">3 &nbsp;Review</button>
-    <button id="tab-build">5 &nbsp;Build Outputs</button>
-    <button id="tab-redact">4 &nbsp;Redact</button>
+    <!-- In the order the job is done. The numbers used to run 1, 3, 5, 4
+         with no 2, and the plan card sat above the workbooks it depends on;
+         nobody could tell what came first. Redact is a tool used whenever,
+         not a step, so it stands apart. -->
+    <button id="tab-get" class="on">1 &nbsp;Client</button>
+    <button id="tab-review">2 &nbsp;Review &amp; file</button>
+    <button id="tab-build">3 &nbsp;Workbooks</button>
+    <button id="tab-consult">4 &nbsp;Consult</button>
+    <button id="tab-redact" style="margin-left:18px;opacity:.75">Redact tool</button>
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
 </header>
@@ -883,25 +888,14 @@ label.ck span{font-size:11.5px;color:#8A9099}
     </div>
   </div>
 
-  <!-- The step that was missing. Everything the toolkit produces was a
-       command line away, which meant one person could run it. Four tick
-       boxes and a button is the whole answer to "what do I click". -->
+  <!-- Step 3. The workbooks are built from the documents read in step 1 and
+       the filing done in step 2. The cash flow workbook is then REVIEWED by a
+       person, and what they change in it is read back by every later step. -->
   <div class="pane" id="pane-build"><div class="wrap">
-    <h2>Build the outputs</h2>
-    <p class="sub">Runs on the documents already read for this client. The
-       initial notes workbook is the one the team opens first; the rest are
-       built from the same reading, so they cannot disagree with it.</p>
-
-    <div class="card plan" id="plancard">
-      <div class="row">
-        <div style="flex:1"><b style="color:#16324F">Consult plan</b>
-          <div class="sub" style="margin:2px 0 0">What goes into the deck. Every
-            figure is worked out from the documents; fill a box only to change it.</div></div>
-        <button class="ghost" id="planload" disabled>Work out the plan</button>
-      </div>
-      <div id="planbody" class="hide"></div>
-    </div>
-
+    <h2>3 &nbsp;Build the workbooks</h2>
+    <p class="sub">Built from the documents read and filed in steps 1 and 2.
+       Then review the cash flow workbook: anything you change there and save
+       is read back by step 4.</p>
     <div class="card">
       <div class="crumb" id="buildwho">No client chosen yet</div>
       <label style="margin-top:10px">What to build</label>
@@ -911,24 +905,61 @@ label.ck span{font-size:11.5px;color:#8A9099}
           <span>.xlsx, every fact with the document it came from</span></label>
         <label class="ck"><input type="checkbox" value="cashflow" checked>
           <b>Cash flow workbook</b>
-          <span>.numbers, on the firm template, with the adjustments block</span></label>
+          <span>.numbers, on the firm template. Review it, change what is wrong, save it.</span></label>
         <label class="ck"><input type="checkbox" value="summary" checked>
           <b>Prospect Summary</b>
           <span>the two-page internal page, with risk flags</span></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <span class="sub" style="margin:0;flex:1">About a minute and a half.</span>
+        <button class="primary" id="buildgo" disabled>Pick a client first</button>
+      </div>
+      <pre class="log hide" id="buildlog" style="margin-top:12px"></pre>
+      <div id="buildmade" class="row hide" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <div class="step"><b>&#10003;</b><div><b style="color:#16324F">Then review the
+        cash flow workbook.</b> Fix any transfer, adjustment or account that is wrong,
+        directly in its period column, and save it in Numbers. Step 4 reads those
+        changes back; a rebuild keeps them.</div></div>
+    </div>
+  </div></div>
+
+  <!-- Step 4. The plan the consult is built on, then the two documents built
+       from it. Comes after the cash flow review because every figure here
+       rests on the reviewed cash flow. -->
+  <div class="pane" id="pane-consult"><div class="wrap">
+    <h2>4 &nbsp;Consult</h2>
+    <p class="sub">Work out the plan, adjust what the advisor wants to change,
+       then build the Assumptions and the consultation deck from it.</p>
+    <div id="consultstatus" class="found hide" style="margin-bottom:14px"></div>
+
+    <div class="card plan" id="plancard">
+      <div class="row">
+        <div style="flex:1"><b style="color:#16324F">Consult plan</b>
+          <div class="sub" style="margin:2px 0 0">Every figure is worked out from
+            the documents and the reviewed cash flow; fill a box only to change it.</div></div>
+        <button class="ghost" id="planload" disabled>Work out the plan</button>
+      </div>
+      <div id="planbody" class="hide"></div>
+    </div>
+
+    <div class="card">
+      <label>Build from the plan</label>
+      <div id="consultwhat">
         <label class="ck"><input type="checkbox" value="assumptions" checked>
           <b>Assumptions</b>
           <span>the plan PDF, printing what is still needed</span></label>
         <label class="ck"><input type="checkbox" value="deck" checked>
           <b>Consultation deck</b>
-          <span>.pptx (opens in Keynote), with what the advisor still has to decide</span></label>
+          <span>.pptx (opens in Keynote), on the firm design</span></label>
       </div>
       <div class="row" style="margin-top:12px">
-        <span class="sub" style="margin:0;flex:1">About two minutes
-          for all five.</span>
-        <button class="primary" id="buildgo" disabled>Pick a client first</button>
+        <span class="sub" style="margin:0;flex:1">About thirty seconds.</span>
+        <button class="primary" id="consultgo" disabled>Pick a client first</button>
       </div>
-      <pre class="log hide" id="buildlog" style="margin-top:12px"></pre>
-      <div id="buildmade" class="row hide" style="margin-top:10px"></div>
+      <pre class="log hide" id="consultlog" style="margin-top:12px"></pre>
+      <div id="consultmade" class="row hide" style="margin-top:10px"></div>
     </div>
   </div></div>
 </main>
@@ -937,10 +968,11 @@ label.ck span{font-size:11.5px;color:#8A9099}
 var CUR = null, FOLDER = null, since = 0, poll = null;
 
 function show(name){
-  ['get','redact','review','build'].forEach(function(n){
+  ['get','redact','review','build','consult'].forEach(function(n){
     document.getElementById('pane-'+n).classList.toggle('on', n===name);
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
   });
+  if(name==='consult' && FOLDER) consultStatus();
   if(name==='review' && FOLDER){
     // Always reload. Relying on src==='about:blank' to decide meant a page built
     // before the last run could stay on screen, which looks exactly like
@@ -952,30 +984,35 @@ function show(name){
 document.getElementById('tab-get').onclick=function(){show('get');};
 document.getElementById('tab-redact').onclick=function(){show('redact');};
 document.getElementById('tab-build').onclick=function(){show('build');};
+document.getElementById('tab-consult').onclick=function(){show('consult');};
 
 // --- Build outputs ----------------------------------------------------
 // The same log the audit and the LaunchBay fetch use, because the page
 // only ever has one job running and one thing to poll.
 var BPOLL=null;
 function buildReady(){
-  var b=document.getElementById('buildgo');
-  b.disabled = !FOLDER;
-  b.textContent = FOLDER ? 'Build them' : 'Pick a client first';
+  [['buildgo','Build them'],['consultgo','Build them']].forEach(function(x){
+    var b=document.getElementById(x[0]);
+    b.disabled = !FOLDER;
+    b.textContent = FOLDER ? x[1] : 'Pick a client first';
+  });
   document.getElementById('buildwho').textContent =
     FOLDER ? FOLDER.split('/').pop() : 'No client chosen yet';
 }
-document.getElementById('buildgo').onclick=function(){
+// One runner for both build buttons: the same job, the same log, the
+// outputs turned into buttons that open them.
+function runBuild(boxId, logId, madeId, btn){
   if(!FOLDER) return;
   var want=[];
-  document.querySelectorAll('#buildwhat input:checked').forEach(function(i){
+  document.querySelectorAll('#'+boxId+' input:checked').forEach(function(i){
     want.push(i.value);
   });
   if(!want.length) return;
-  var log=document.getElementById('buildlog');
-  var made=document.getElementById('buildmade');
+  var log=document.getElementById(logId);
+  var made=document.getElementById(madeId);
   log.classList.remove('hide'); log.textContent='';
   made.classList.add('hide'); made.innerHTML='';
-  this.disabled=true; this.textContent='Building…';
+  btn.disabled=true; btn.textContent='Building…';
   fetch('/api/build',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({folder:FOLDER, what:want.join(',')})})
     .then(function(r){return r.json();})
@@ -993,9 +1030,6 @@ document.getElementById('buildgo').onclick=function(){
             if(!s.running){
               clearInterval(BPOLL); BPOLL=null;
               buildReady();
-              // Each output becomes a button that opens it in whatever
-              // the Mac uses for that file. A path in a log is not a
-              // deliverable; a thing you can click is.
               var paths=log.textContent.split('\n')
                 .filter(function(l){return l.indexOf('OUTPUT\t')===0;})
                 .map(function(l){return l.slice(7);});
@@ -1017,7 +1051,31 @@ document.getElementById('buildgo').onclick=function(){
           });
       }, 700);
     });
+}
+document.getElementById('buildgo').onclick=function(){
+  runBuild('buildwhat','buildlog','buildmade',this);
 };
+document.getElementById('consultgo').onclick=function(){
+  runBuild('consultwhat','consultlog','consultmade',this);
+};
+// Where this client stands before the plan is worked out: filed or not, the
+// cash flow built or not, and how many of the analyst's changes were read.
+function consultStatus(){
+  var el=document.getElementById('consultstatus');
+  fetch('/api/consultstatus?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.error){ el.className='found miss'; el.textContent=d.error; return; }
+      var bits=[], warn=false;
+      if(!d.filed){ bits.push('Not filed yet: run step 2 first, or personal and business accounts are only guessed.'); warn=true; }
+      if(!d.cashflow){ bits.push('No cash flow workbook yet: build it in step 3 and review it.'); warn=true; }
+      else bits.push('Cash flow workbook built '+d.cashflow+'. '+
+        (d.changes?d.changes+' of your changes in it are being used.':'No changes made in it yet.'));
+      el.className='found'+(warn?' miss':'');
+      el.textContent=bits.join(' ');
+    });
+}
+
 document.getElementById('skipget').onclick=function(){
   if(PICKED) startClient(PICKED.path, PICKED.name);
 };
@@ -1327,6 +1385,7 @@ function startClient(path, name){
   FOLDER = path;
   document.getElementById('foldernow').textContent = FOLDER;
   buildReady(); planReady();
+  document.getElementById('consultstatus').classList.remove('hide');
   var crumb = document.getElementById('crumb');
   if(crumb) crumb.textContent = path;
   var st = document.getElementById('golog');
@@ -1545,6 +1604,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
 
+        if p == '/api/consultstatus':
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            out = {'filed': os.path.isdir(os.path.join(folder, 'Documents')),
+                   'cashflow': None, 'changes': 0}
+            try:
+                import cashflow_review as _review
+                path = _review.workbook_path(folder)
+                if path:
+                    import datetime as _dt
+                    out['cashflow'] = _dt.datetime.fromtimestamp(
+                        os.path.getmtime(path)).strftime('%-d %b, %-I:%M %p')
+                    _review.harvest(folder)
+                    out['changes'] = len(_review.load_decisions(folder))
+            except Exception as e:                        # noqa: BLE001
+                out['error'] = 'Could not read the cash flow workbook: %s' % e
+            return self._send(200, json.dumps(out))
+
         if p == '/api/plan':
             # The Consult plan card. Slow on first open (the cash flow is read
             # in full), so the page shows that it is working.
@@ -1715,7 +1793,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._guard(folder):
                 return
             out = os.path.join(folder, '_Audit')
-            hit = [f for f in audit_outputs(folder) if f.endswith('Intake Review.html')]
+            # The NEWEST review, not the first in alphabetical order. A folder
+            # renamed between runs leaves two ("Oyler - ..." and "Oyler Brian -
+            # TEST - ..."), and sorting by name served an August page with the
+            # layout from before the October rebuild, as if the rebuild had
+            # been lost.
+            hit = sorted((f for f in audit_outputs(folder)
+                          if f.endswith('Intake Review.html')),
+                         key=lambda f: os.path.getmtime(os.path.join(out, f)),
+                         reverse=True)
             if not hit:
                 return self._send(200, '<body style="font:15px -apple-system;padding:40px">'
                                        '<h3>No review yet</h3><p>Run the audit first.</p></body>',
