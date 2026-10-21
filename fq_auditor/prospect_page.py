@@ -703,7 +703,7 @@ def _delta(cur, prev, pt=False):
 def build(folder, client=None):
     client = client or os.path.basename(folder.rstrip('/'))
     form = {}
-    src = _ic.find_form(folder) or _ic.find_form(os.path.dirname(folder.rstrip('/')))
+    src = _ic.find_form_near(folder)
     if src:
         form = _ic.parse(src)
     pnl = _summary.gather(folder)
@@ -830,7 +830,8 @@ def build(folder, client=None):
         t = tax.get(y)
         a('<td>%s</td>' % ('%.1f%%' % t['overhead_pct'] if t else cell(None)))
     tmv = ''
-    if tax.get(years[0]) and tax.get(years[-1]):
+    # No P&L read at all leaves no years, and the page still has to build.
+    if years and tax.get(years[0]) and tax.get(years[-1]):
         tmv = _delta(tax[years[-1]]['overhead_pct'],
                      tax[years[0]]['overhead_pct'], pt=True)
     a('<td class="d">%s</td><td>&le;60%%</td></tr>' % tmv)

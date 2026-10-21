@@ -356,7 +356,7 @@ def build(bundle, folder):
     # in the practice's books is the building's value, and nobody should go
     # looking for one.
     import intake_form as _ic
-    _f = _ic.find_form(folder)
+    _f = _ic.find_form_near(folder)
     form = _ic.parse(_f) if _f else {}
     addr = _compose.addresses(folder)
     bits = []
@@ -376,13 +376,15 @@ def build(bundle, folder):
     out.append(Section(7,
         text=lead,
         needed='a current value for the practice building',
-        why='Brian owns it personally, so it sits in the plan alongside the '
-            'practice and is usually sold with it or leased on afterwards. '
-            'The practice is a tenant: its asset schedule carries leasehold '
-            'improvements and no building, and its Form 8825 rental totals '
-            'are zero, so no figure in the practice books is the building’s '
-            'value. A county assessment or an appraisal is the source; '
-            'Zillow has no record of the parcel.',
+        # This used to be Oyler's own findings, word for word, printed on
+        # every client's plan: "Brian owns it personally ... Form 8825 rental
+        # totals are zero ... Zillow has no record of the parcel." Rebol's
+        # plan said Brian. Only what holds for any client belongs here.
+        why='Held outside the practice, so it sits in the plan alongside it '
+            'and is usually sold with it or leased on afterwards. A building '
+            'the practice rents is not on the practice’s books at its value, '
+            'so a county assessment, an appraisal or a Zillow estimate is the '
+            'source.',
         flag=_flag(folder, 7)))
 
     # 8 and 9 ---------------------------------------------------------------

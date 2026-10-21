@@ -72,7 +72,10 @@ TRANSFER = re.compile(
     r'transfer\s+(from|to)\s+X+\s*([\d\s]{2,12}?)\s+(?:to|from)\s+X+\s*'
     r'([\d\s]{2,12}?)\s*[:,]', re.I)
 # Arvest writes "Transfer to Checking * 5647"; Civista writes "XXX5647".
-ANY_ACCT = re.compile(r'(?:X{2,}|\*)\s*([\d\s]{2,12}?)(?=[\s:,.]|$)', re.I)
+# USAA writes "FUNDS TRANSFER DB TO Katherine Rebol CHECKING #0407". Only
+# read inside a description that already says it is a movement, so a
+# "CHECK # 3290" is never taken for an account.
+ANY_ACCT = re.compile(r'(?:X{2,}|\*|#)\s*([\d\s]{2,12}?)(?=[\s:,.]|$)', re.I)
 # "From Account 104729386001" -- U.S. Bank writes the whole number out.
 FULL_ACCT = re.compile(r'(?:to|from)\s+account\s+(\d{6,})', re.I)
 
@@ -81,6 +84,16 @@ MOVE_WORDS = ('transfer', 'xfer', 'zelle', 'wire', 'online banking',
               'to checking')
 BORROW_WORDS = ('loan', 'advance', 'draw', 'line of credit', 'heloc',
                 'cash advance', 'policy loan', 'mortgage proceeds')
+# "LOC TRANSFER" is USAA's line of credit: a $49,000 draw on Rebol's x9634
+# that would otherwise have been income.
+#
+# Note that 'draw' above also matches "Withdrawal". That is wrong as a
+# reading, and was tried as a whole word on 21 October, but it moved Oyler's
+# verified figure from $13,892 to $12,973: his "Electronic Withdrawal ... To
+# U.S. BANK ... WEB PYMT" lines then fell through to the card-payment
+# smoothing. Borrowing on a debit has no effect on the figures, so the
+# substring stays until the card rule is settled against Brogan's workbook.
+BORROW_RE = re.compile(r'\bloc\b', re.I)
 
 
 def _digits(raw):
@@ -390,7 +403,7 @@ def classify(desc, this_account=None, holder=None):
         out['kind'] = 'debt'
         return out
 
-    if any(w in low for w in BORROW_WORDS):
+    if any(w in low for w in BORROW_WORDS) or BORROW_RE.search(low):
         out['kind'] = 'borrowing'
         return out
 
@@ -413,7 +426,13 @@ def classify(desc, this_account=None, holder=None):
             out['counterparty'] = _digits(full.group(1))
             out['stated'] = True
             return out
-        found = ANY_ACCT.findall(desc or '')
+        # Not a confirmation or reference number: USAA ends every transfer
+        # with a ten-digit "CONF# ...5009", and taking the last number found made
+        # the counterparty x5009, an account that does not exist.
+        found = [m.group(1) for m in ANY_ACCT.finditer(desc or '')
+                 if not re.search(r'(conf|ref|seq|trace|id)\w*\s*$',
+                                  (desc or '')[max(0, m.start() - 14):m.start()],
+                                  re.I)]
         if found:
             out['counterparty'] = _digits(found[-1])
             out['stated'] = True
@@ -430,13 +449,29 @@ def gather(folder):
     out = {}
     for key, rows in found.items():
         for row in rows:
-            text = _text_for(folder, row['file'])
+            text = _text_for(folder, row['file'], row.get('text_path'))
             if text is None:
                 continue
             year = row['ends'].year if row['ends'] else None
             got = read(text, year, row.get('account') or key[1],
                        row.get('holder'))
+            # Same fallback as the balances: where the cached text is in
+            # drawing order and yields nothing, rebuild it from the page.
+            if not got and row.get('source') and _st._is_pdf(row['source']):
+                again = _st.layout_text(row['source'])
+                if again:
+                    got = read(again, year, row.get('account') or key[1],
+                               row.get('holder'))
             for t in got:
+                # A statement running 17 December to 16 January dates its
+                # December lines with January's year. Anything landing well
+                # after the statement closed belongs to the year before.
+                if t.get('date') and row['ends'] and \
+                        t['date'] > row['ends'] + datetime.timedelta(days=7):
+                    try:
+                        t['date'] = t['date'].replace(year=t['date'].year - 1)
+                    except ValueError:
+                        pass
                 t['account'] = row.get('account') or key[1]
                 t['side'] = row.get('side')
                 t['statement'] = row['file']
@@ -461,7 +496,9 @@ def gather(folder):
     return out
 
 
-def _text_for(folder, name):
+def _text_for(folder, name, path=None):
+    if path and os.path.exists(path):
+        return open(path, errors='replace').read()
     for cache in _st._caches(folder):
         path = os.path.join(cache, name + '.txt')
         if os.path.exists(path):
@@ -687,11 +724,13 @@ FIXED_KINDS = (
                            r'contribution|deferral', re.I)),
     ('Insurance', re.compile(r'ins\s*prem|insurance|premium|massmutual|'
                              r'mass\s*mutual|\balic\b|augustar|'
-                             r'northwestern\s*mut|guardian|principal\s*life',
+                             r'northwestern\s*mu|guardian|principal\s*life',
                              re.I)),
+    # HELOC added for Rebol's "USAA FSB HELOC ACH HELOC", which is on the
+    # firm's liability table for him.
     ('Liability', re.compile(r'\bmtge?\b|mortgage|\bmort\b|\bloan\b|'
                              r'student\s*ln|auto\s*pay|truist|lending|'
-                             r'\bnote\b', re.I)),
+                             r'\bnote\b|heloc', re.I)),
 )
 
 
@@ -716,7 +755,11 @@ def find_fixed(rows, periods):
         return []
     by_payee = {}
     for row in rows:
-        if row.get('direction') != 'debit' or row.get('kind'):
+        # A debit tagged borrowing is still a payment out. USAA prints every
+        # one as "ACH WITHDRAWAL", which the borrowing words catch, and that
+        # hid Rebol's Northwestern Mutual premium and HELOC payments here.
+        if row.get('direction') != 'debit' or \
+                row.get('kind') not in (None, 'borrowing'):
             continue
         kind = None
         for name, pattern in FIXED_KINDS:
@@ -725,8 +768,12 @@ def find_fixed(rows, periods):
                 break
         if not kind:
             continue
+        # USAA puts the payee after "ACH WITHDRAWAL 010626 ", so cutting at
+        # the first long number left every payee named "ACH WITHDRAWAL".
+        desc = re.sub(r'^ach\s+(withdrawal|debit|pmt|payment)\s+\d{4,8}\s+',
+                      '', row.get('description') or '', flags=re.I)
         payee = re.sub(r'\s*(co#|id\s*#|trace\s*#|ref=).*', '',
-                       row.get('description') or '', flags=re.I)
+                       desc, flags=re.I)
         payee = re.sub(r'\s+\d[\d/]{5,}.*', '', payee).strip()[:46]
         by_payee.setdefault((kind, payee), []).append(row)
 

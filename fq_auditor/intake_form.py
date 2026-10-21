@@ -160,6 +160,31 @@ def find_form(folder):
     return None
 
 
+def find_form_near(folder):
+    """The client's IC form: in its own folder, or loose in the folder above
+    it only when the file names this client.
+
+    The fallback used to be find_form(parent), and find_form reads one level
+    down, so from any client folder it searched every OTHER client's folder.
+    On 21 October Rebol's and Spaulding's plans were built from Oyler's IC
+    form: age 58, retiring at 68, $800,000 take-home, 16 chairs, and his
+    email address, all printed as theirs.
+    """
+    got = find_form(folder)
+    if got:
+        return got
+    parent = os.path.dirname(folder.rstrip('/'))
+    base = os.path.basename(folder.rstrip('/')).lower()
+    surname = re.split(r'[,\s]+', base.strip())[0] if base.strip() else ''
+    if not surname:
+        return None
+    for p in glob.glob(os.path.join(parent, '*.eml')):
+        name = os.path.basename(p).lower()
+        if surname in name and ('ic form' in name or 'ic-form' in name):
+            return p
+    return None
+
+
 def money(v):
     """'3,900,000' or '22500.00' as a number, or None."""
     if not v:

@@ -37,6 +37,7 @@ import transactions as _tx                                   # noqa: E402
 import cashflow_workbook as _wb                              # noqa: E402
 
 MONTHS = ('Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec').split()
+WINDOW = 4          # statement periods per account, as the template holds
 
 
 def _period(row):
@@ -84,6 +85,13 @@ def build(folder):
         if not usable:
             continue
         dropped = len(rows) - len(usable)
+        # The four most recent periods, which is what the firm's template
+        # holds and what every one of its workbooks uses. Rebol sent five and
+        # six per account; the oldest of x9634's runs 17 December to 16
+        # January and carries a $49,000 Amex payoff funded by a line of
+        # credit, which on its own adds $11,000 a month to the average.
+        older = usable[:-WINDOW] if len(usable) > WINDOW else []
+        usable = usable[-WINDOW:]
         # Flag the one-offs before the account is assembled: the account
         # carries their total, and an earlier version detected them after
         # building it, so the list was always empty.
@@ -182,6 +190,13 @@ def build(folder):
                 ent['adjustments'].append(
                     (_label(key, rows), _period(r), 'Note', 0, note,
                      'For review'))
+        if older:
+            ent['adjustments'].append(
+                (_label(key, rows), 'All', 'Note', 0,
+                 '%d older statement%s (%s) left out: the averages use the '
+                 'four most recent periods.'
+                 % (len(older), '' if len(older) == 1 else 's',
+                    ', '.join(_period(r) for r in older)), 'By rule'))
         if dropped:
             ent['adjustments'].append(
                 (_label(key, rows), 'All', 'Note', 0,

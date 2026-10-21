@@ -2,7 +2,7 @@
 """Build a client's analysis outputs, in one pass over the documents.
 
     python3 build_outputs.py "<client folder>" --client "Dr. Brian Oyler" \
-            --what workbook,summary,cashflow,assumptions
+            --what workbook,summary,cashflow,assumptions,deck
 
 WHY ONE SCRIPT RATHER THAN FOUR
 Because three of the four need the cash flow, and the cash flow is seventy
@@ -34,13 +34,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # The order matters: the cheap ones first, so an operator watching the log
 # has something openable within a few seconds, and the cash flow pass is
 # paid once by whichever of the later three runs first.
-STEPS = ('workbook', 'cashflow', 'summary', 'assumptions')
+STEPS = ('workbook', 'cashflow', 'summary', 'assumptions', 'deck')
 
 TITLES = {
     'workbook': 'Initial notes workbook',
     'cashflow': 'Cash flow workbook',
     'summary': 'Prospect Summary',
     'assumptions': 'Assumptions',
+    'deck': 'Consultation deck',
 }
 
 
@@ -105,7 +106,23 @@ def step_assumptions(folder, client, outdir):
     return out
 
 
+def step_deck(folder, client, outdir):
+    # Last, because it draws on everything above it: the cash flow, the
+    # Assumptions store, and the two models.
+    # Built on the firm's redesigned deck (assets/consult_template.pptx),
+    # so it opens and edits in Keynote like a hand-made one.
+    import deck_template as _dt
+    out = os.path.join(outdir, 'Consult deck - %s.pptx'
+                       % _surname(folder, client))
+    path, n, prompts, dropped = _dt.render(folder, client, out)
+    print('   %d slides, %d places marked for the advisor%s'
+          % (n, prompts, ('; left out slides %s of the template'
+                          % ', '.join(map(str, dropped))) if dropped else ''))
+    return path
+
+
 RUNNERS = {
+    'deck': step_deck,
     'workbook': step_workbook,
     'cashflow': step_cashflow,
     'summary': step_summary,

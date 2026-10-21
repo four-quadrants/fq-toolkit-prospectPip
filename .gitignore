@@ -82,3 +82,9 @@ _Audit/
 __pycache__/
 *.pyc
 .DS_Store
+
+# 5. the one binary that is code, not client data: the consult deck template,
+#    scrubbed of its source client by _spec/build_template.py, which refuses
+#    to write it while any of that client survives. Named exactly, so no other
+#    .pptx can ride in on this line.
+!fq_auditor/assets/consult_template.pptx

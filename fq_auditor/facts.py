@@ -152,7 +152,7 @@ def gather(folder, client=None):
     client = client or os.path.basename(folder.rstrip('/'))
 
     form = {}
-    src = _ic.find_form(folder) or _ic.find_form(os.path.dirname(folder.rstrip('/')))
+    src = _ic.find_form_near(folder)
     if src:
         form = _ic.parse(src)
     ic_name = os.path.basename(src) if src else None

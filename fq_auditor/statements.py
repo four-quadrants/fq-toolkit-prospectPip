@@ -50,7 +50,9 @@ ACCT_LONG = re.compile(r'account\s*(?:number|#)?\s*:?\s*([\d][\d-]{6,})', re.I)
 
 DATE_PATS = (
     re.compile(r'\b(\d{1,2})/(\d{1,2})/(\d{2,4})\b'),
-    re.compile(r'\b([A-Z][a-z]{2})\s+(\d{1,2}),?\s+(\d{4})\b'),
+    # "Feb 1, 2026", and Citizens' "February 1 , 2026": the full month name,
+    # with a space before the comma. Only the first three letters are kept.
+    re.compile(r'\b([A-Z][a-z]{2})[a-z]*\.?\s+(\d{1,2})\s*,?\s+(\d{4})\b'),
 )
 MONTHS = {m: i + 1 for i, m in enumerate(
     'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split())}
@@ -206,6 +208,18 @@ def read(text, name=''):
                     break
         if got['additions'] is not None:
             break
+    # Citizens splits what came in across two summary lines, "0 Deposits"
+    # and "2 Other Credits", each with its own count. Only when the deposits
+    # line was the one taken, and only a counted Other Credits line, so a
+    # transaction column headed "Other Credits" is never added in.
+    if got['additions'] is not None and any(
+            re.match(r'^\d+\s+deposits?\b', l, re.I) for l in lines):
+        for i, line in enumerate(lines):
+            if re.match(r'^\d+\s+other\s+credits?\b', line, re.I):
+                extra = _money_after(lines, i, window=1)
+                if extra:
+                    got['additions'] = round(got['additions'] + extra, 2)
+                break
 
     head = '\n'.join(lines[:60])
     # The period can sit below the account block, and on US Bank's layout
@@ -254,8 +268,9 @@ def read(text, name=''):
         for m in re.finditer(r'statement\s+(?:dates?|period)\s*:?(.{0,160})',
                              wide, re.I | re.S):
             found = [d for d in (_date_in(p) for p in
+                                 # Citizens capitalises it: "Thru".
                                  re.split(r'thru|through|\bto\b|\n|-',
-                                          m.group(1))) if d]
+                                          m.group(1), flags=re.I)) if d]
             if len(found) >= 2:
                 got['begins'] = got['begins'] or found[0]
                 got['ends'] = got['ends'] or found[-1]
@@ -363,6 +378,165 @@ def _caches(folder):
     return [d for d in (nested, direct) if os.path.isdir(d)]
 
 
+def _filed_names(folder):
+    """{content hash: "Business - Banking - x3354 - <file>"} for every
+    statement filed under Documents/<Side>/Banking/<account>/.
+
+    The filing is the best evidence there is of which side of the house an
+    account is on and which account a statement belongs to, and it is the
+    one thing the hash-named cache throws away.
+    """
+    try:
+        from extract import file_hash
+    except Exception:                                        # pragma: no cover
+        return {}
+    out = {}
+    # Statements still sitting unfiled in Original_sourcedocs, named the way
+    # the bank's portal names them: "20260131_BANK_USAA SAVINGS_1332". No
+    # side can be read off these, so they take the default (personal), and
+    # any that were also filed are overwritten by their filed name below.
+    raw = os.path.join(folder, 'Original_sourcedocs')
+    if os.path.isdir(raw):
+        for f in sorted(os.listdir(raw)):
+            p = os.path.join(raw, f)
+            if f.startswith('.') or not os.path.isfile(p):
+                continue
+            stem = os.path.splitext(f)[0]
+            if not BANKISH.search(stem) or NOT_BANK.search(stem):
+                continue
+            # A trailing four digits is the account ("..._SAVINGS_1332"). A
+            # year is not, and "Statment_01_31_2026" has no account in its
+            # name at all; those get '?' and take the number printed on the
+            # statement instead, in gather().
+            m = re.search(r'(?<!\d)(\d{4})$', stem)
+            acct = m.group(1) if m and not re.match(r'(19|20)\d\d$',
+                                                    m.group(1)) else None
+            try:
+                digest = file_hash(p)
+            except OSError:
+                continue
+            side = 'Business' if BUSINESSY.search(stem) else 'Personal'
+            out[digest] = ('%s - Banking - %s - %s'
+                           % (side, 'x' + acct if acct else '?', stem), p)
+    docs = os.path.join(folder, 'Documents')
+    for side in ('Business', 'Personal'):
+        bank = os.path.join(docs, side, 'Banking')
+        if not os.path.isdir(bank):
+            continue
+        for root, _dirs, files in os.walk(bank):
+            rel = os.path.relpath(root, bank)
+            account = rel.split(os.sep)[0] if rel != '.' else None
+            for f in files:
+                if f.startswith('.'):
+                    continue
+                p = os.path.join(root, f)
+                try:
+                    digest = file_hash(p)
+                except OSError:
+                    continue
+                out[digest] = ('%s - Banking - %s - %s' % (
+                    side, account or '?', os.path.splitext(f)[0]), p)
+    return out
+
+
+BANKISH = re.compile(r'bank|statement|statment|stmt|checking|savings|'
+                     r'\bchk\b|\bsav\b', re.I)
+# Investment and retirement statements also say "statement". They are read
+# by the assets side, not here.
+NOT_BANK = re.compile(r'\bira\b|schwab|401k|403b|brokerage|fidelity|vanguard|'
+                      r'\broth\b|\bsep\b|edward jones|-edj-|'
+                      r'mortgage|loan|credit card|visa|amex|tax return',
+                      re.I)
+# An unfiled statement's side, from its name. Only a guess, and said so on
+# the sheet: "DDS Income Acct", "Op Reserves", "Hidden Hollow Rentals",
+# "69 McDowell St" are Rebol's practice and LLC accounts, sitting unfiled.
+BUSINESSY = re.compile(r'\bdds\b|\bllc\b|\bpllc\b|\bpa\b|\binc\b|rentals?\b|'
+                       r'reserves?\b|payroll|operating|\bop\b|practice|'
+                       r'income acct', re.I)
+
+
+def layout_text(pdf):
+    """The statement's text rebuilt line by line from word positions.
+
+    The cached text is in the PDF's drawing order, which on some banks'
+    layouts puts every label in one run and every figure in another:
+    Rebol's Citizens statements read "Beginning Balance / Ending Balance /
+    ... / 47,888.05 / 35,988.38", so no figure sits near its label. Grouping
+    words by their height on the page puts "Beginning Balance 47,888.05"
+    back on one line, which is what read() expects.
+    """
+    try:
+        import pymupdf
+    except ImportError:                                      # pragma: no cover
+        try:
+            import fitz as pymupdf
+        except ImportError:
+            return None
+    try:
+        doc = pymupdf.open(pdf)
+    except Exception:                                        # noqa: BLE001
+        return None
+    pages = []
+    for page in doc:
+        rows = {}
+        for x0, y0, x1, y1, w, *_ in page.get_text('words'):
+            rows.setdefault(round((y0 + y1) / 6.0), []).append((x0, w))
+        pages.append('\n'.join(' '.join(w for _, w in sorted(rows[k]))
+                               for k in sorted(rows)))
+    return '\n'.join(pages)
+
+
+def _period_from_name(got, name):
+    """Place a statement in time from its file name, when its own dates did
+    not read.
+
+    Rebol's Citizens statements are scans, and the OCR turns "Thru May 31"
+    into "Thru May 34", which is no date at all. The portal named the file
+    "..._05_31_2026", which is. Only used when the statement's own end date
+    is missing, and said so on the sheet. A start date is inferred only when
+    the end is the last day of a month, as the first of that month.
+    """
+    if got.get('ends'):
+        return
+    stem = re.sub(r'\.(pdf|txt)$', '', name, flags=re.I)
+    m = (re.search(r'(?<!\d)(\d{2})_(\d{2})_(20\d\d)(?!\d)', stem)
+         or re.search(r'(?<!\d)(20\d\d)(\d{2})(\d{2})(?!\d)', stem))
+    if not m:
+        return
+    a, b, c = m.groups()
+    try:
+        if len(a) == 4:
+            end = datetime.date(int(a), int(b), int(c))
+        else:
+            end = datetime.date(int(c), int(a), int(b))
+    except ValueError:
+        return
+    got['ends'] = end
+    nxt = end + datetime.timedelta(days=1)
+    if not got.get('begins') and nxt.day == 1:
+        got['begins'] = end.replace(day=1)
+    if got.get('begins'):
+        got['days'] = (got['ends'] - got['begins']).days
+        got['notes'] = [n for n in got['notes']
+                        if not n.startswith('No statement period found')]
+    got['notes'].append('Period taken from the file name; the dates on the '
+                        'statement itself did not read.')
+
+
+def _is_pdf(path):
+    """Spaulding's Huntington statements are PDFs with no extension."""
+    try:
+        with open(path, 'rb') as fh:
+            return fh.read(5) == b'%PDF-'
+    except OSError:
+        return False
+
+
+def _complete(got):
+    return bool(got and got.get('ending') is not None
+                and got.get('beginning') is not None and got.get('ends'))
+
+
 def gather(folder):
     """Every bank statement in a client's cache, grouped by account.
 
@@ -382,15 +556,46 @@ def gather(folder):
     # alphabetically the bare one wins, takes the slot, and the account
     # silently becomes personal.
     paths.sort(key=lambda p: (0 if ' - Banking - ' in p else 1, p))
+    filed = _filed_names(folder)
     for path in paths:
         name = os.path.basename(path)[:-4]
+        # The audit cache names a file by its content hash. Where that hash
+        # is a statement filed under Documents, take the name its filing
+        # gives it, which carries the side and the account. Without this
+        # only a folder with Oyler's descriptive extraction cache had any
+        # statements at all: Rebol and Spaulding came back with none.
+        digest = name.split('.')[0]
+        source = None
+        if digest in filed:
+            name, source = filed[digest]
         low = name.lower()
         if 'banking' not in low and 'stmt' not in low and \
                 'statement' not in low:
             continue
+        # Spaulding's Edward Jones Roth and SEP were filed under Banking.
+        # They are investment accounts; counting them here would put their
+        # contributions into the household's spending.
+        if NOT_BANK.search(name.split(' - ')[-1]):
+            continue
         got = read(open(path, errors='replace').read(), name)
+        if not _complete(got) and source and _is_pdf(source):
+            again = read(layout_text(source) or '', name)
+            if again and (not got or sum(again.get(k) is not None for k in
+                                         ('beginning', 'ending', 'ends',
+                                          'additions'))
+                          > sum(got.get(k) is not None for k in
+                                ('beginning', 'ending', 'ends', 'additions'))):
+                again['notes'].append('Read from the page layout; the cached '
+                                      'text had its figures out of order.')
+                got = again
         if not got:
             continue
+        # Where the text came from, so the transaction reader opens the same
+        # document. It used to look the file up by name, and a statement
+        # named from its filing has no cache file by that name.
+        got['text_path'] = path
+        got['source'] = source
+        _period_from_name(got, name)
         # The same statement reaches us from both caches under two names.
         # Identify it by what is printed on it, not by the file.
         # Identified by the closing date and closing balance, not by every
@@ -400,6 +605,10 @@ def gather(folder):
         # that are always legible and together are unique per account.
         stamp = (got['ends'], None if got['ending'] is None
                  else round(got['ending'], 0))
+        # With neither figure read, the stamp says nothing, and every such
+        # statement would collapse into the first one. Fall back to the file.
+        if stamp == (None, None):
+            stamp = digest
         if stamp in seen_doc:
             continue
         seen_doc.add(stamp)
@@ -408,8 +617,32 @@ def gather(folder):
         bits = [b.strip() for b in name.split(' - ')]
         got['side'] = 'Business' if low.startswith('business') else 'Personal'
         folder_key = bits[2] if len(bits) > 2 else (got['account'] or '?')
+        if folder_key == '?' and got['account']:
+            folder_key = 'x' + got['account']
+        if source and os.sep + 'Original_sourcedocs' + os.sep in source:
+            got['notes'].append('Not filed yet, so personal or business was '
+                                'guessed from the file name. Check the side.')
         key = (got['side'], folder_key)
         out.setdefault(key, []).append(got)
+
+    # One account, two sides. An unfiled statement's side is a guess from its
+    # name; where the same account number was also filed, the filing wins and
+    # the guessed statements join it. Rebol's 69 McDowell account came back
+    # as two accounts, February and April filed as business, January, March
+    # and May unfiled and guessed personal.
+    def _guessed(rows):
+        return all(any('guessed from the file name' in n for n in r['notes'])
+                   for r in rows)
+    for key in list(out):
+        side, acct = key
+        other = ('Business' if side == 'Personal' else 'Personal', acct)
+        if acct != '?' and other in out and _guessed(out[key]) \
+                and not _guessed(out[other]):
+            for r in out.pop(key):
+                r['side'] = other[0]
+                if not any((r['ends'], r['ending']) == (o['ends'], o['ending'])
+                           for o in out[other]):
+                    out[other].append(r)
 
     for key, rows in out.items():
         # Ordered by whichever date is known. Sorting on the end date

@@ -888,10 +888,13 @@ label.ck span{font-size:11.5px;color:#8A9099}
         <label class="ck"><input type="checkbox" value="assumptions" checked>
           <b>Assumptions</b>
           <span>the plan PDF, printing what is still needed</span></label>
+        <label class="ck"><input type="checkbox" value="deck" checked>
+          <b>Consultation deck</b>
+          <span>.pptx (opens in Keynote), with what the advisor still has to decide</span></label>
       </div>
       <div class="row" style="margin-top:12px">
-        <span class="sub" style="margin:0;flex:1">About a minute and a half
-          for all four.</span>
+        <span class="sub" style="margin:0;flex:1">About two minutes
+          for all five.</span>
         <button class="primary" id="buildgo" disabled>Pick a client first</button>
       </div>
       <pre class="log hide" id="buildlog" style="margin-top:12px"></pre>

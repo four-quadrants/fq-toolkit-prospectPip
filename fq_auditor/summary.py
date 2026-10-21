@@ -45,12 +45,29 @@ CACHE = '.fq_cache'
 # the label is everything before the first bar. Matching "label | number" alone
 # read a twelve-column row as a label containing bars and a number that was
 # January — and produced an overhead of 1998%.
+#
+# Two more layouts, found on the second and third clients:
+#   QuickBooks Desktop to Excel (Spaulding) indents by leading empty cells,
+#   " |  | Total Income |  |  | 58368.99 | ... | 575874.2", so the label is the
+#   first cell with words in it, not the first cell.
+#   QuickBooks Online to PDF (Rebol) has no bars at all,
+#   "Total for Income $2,678,845.79", so the figure is the money at the end.
+TRAILING_MONEY = re.compile(
+    r'^(.*?[A-Za-z].*?)\s+(\(?-?\$?\s*[\d,]+\.\d{2}\)?)\s*$')
+
+
 def split_row(line):
     if '|' not in line:
-        return None, None
+        m = TRAILING_MONEY.match(line.strip())
+        if not m:
+            return None, None
+        return m.group(1).strip(), _num(m.group(2).replace('$', ''))
     parts = [c.strip() for c in line.split('|')]
-    name = parts[0].strip()
-    for cell in reversed(parts[1:]):
+    lead = 0
+    while lead < len(parts) - 1 and not parts[lead]:
+        lead += 1
+    name = parts[lead].strip()
+    for cell in reversed(parts[lead + 1:]):
         v = _num(cell)
         if v is not None:
             return name, v
@@ -94,7 +111,9 @@ def period_months(text):
     a guessed span turns one month's income into a year's collections.
     """
     head = '\n'.join((text or '').split('\n')[:12]).lower()
-    m = re.search(r'(%s)\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*(%s)'
+    # "January-December, 2024", and QuickBooks Online's
+    # "January 1-December 31, 2024", with a day after each month.
+    m = re.search(r'(%s)(?:\s+\d{1,2})?\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*(%s)'
                   % ('|'.join(MONTHS), '|'.join(MONTHS)), head)
     if m:
         a, b = MONTHS.index(m.group(1)), MONTHS.index(m.group(2))
@@ -166,11 +185,28 @@ def read_pnl(text):
     # "YtD". So the sheet covering the longest period wins.
     body = _widest_sheet(text or '')
 
+    pending = None
     for line in body.split('\n'):
         name, val = split_row(line)
+        # A PDF page can break a total from its figure: "Total for Expenses"
+        # on one line and "$1,931,224.10" on the next (Rebol 2024).
+        if name is None and pending and re.match(
+                r'^\(?-?\$?\s*[\d,]+\.\d{2}\)?$', line.strip()):
+            name, val = pending, _num(line.strip().replace('$', ''))
+        if not line.strip():
+            continue                     # a blank line does not end the wait
+        pending = None
+        if name is None and re.match(r'^Total (?:for )?\S', line.strip(), re.I):
+            pending = line.strip()
+            continue
         if not name or val is None:
             continue
-        m = re.match(r'^Total for (.+)$', name, re.I)
+        # QuickBooks Online numbers its accounts: "71100 Depreciation
+        # Expense", "70055 Owner Wages". The number is not part of the name.
+        name = re.sub(r'^(Total (?:for )?)?\d{3,6}\s+', r'\1', name,
+                      flags=re.I)
+        # "Total for Income" (QuickBooks Online), "Total Income" (Desktop).
+        m = re.match(r'^Total (?:for )?(.+)$', name, re.I)
         if m:
             sections[m.group(1).strip()] = val
         elif not name.lower().startswith('total'):
@@ -186,8 +222,12 @@ def read_pnl(text):
     if expenses is None:
         return None
 
+    # Rebol's books call it "Owner Wages", under an Owner section that also
+    # holds his auto, health insurance and payroll taxes. Only the wages come
+    # out: that reproduces the 78.3% on his consult deck, and taking the
+    # whole Owner section out would print 76.0%.
     doctor_salary = _find_total(lines, 'doctor wages', 'dr salary',
-                                'doctor salary') or 0.0
+                                'doctor salary', 'owner wages') or 0.0
     # Three independent lookups; a missing one contributes zero.
     da_found, da_total = [], 0.0
     for label, *aliases in (('Depreciation', 'depreciation expense',
@@ -257,7 +297,13 @@ def gather(folder):
             got['year'] = doc.get('year')
             got['period'] = doc.get('period') or doc.get('granularity')
             out.append(got)
-    out.sort(key=lambda d: (d.get('year') or ''), reverse=True)
+    # Newest year first, and within a year the largest income LAST. Every
+    # reader builds {year: pnl} from this list, so the last one of a year is
+    # the one kept, and it has to be the practice. Rebol's folder also holds
+    # the P&L of his building LLC ($113,000 of rent against the practice's
+    # $2.68m), and in file order the LLC was the one kept.
+    out.sort(key=lambda d: ((d.get('year') or ''), -(d.get('income_base') or 0)),
+             reverse=True)
     return out
 
 

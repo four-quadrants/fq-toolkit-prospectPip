@@ -37,6 +37,11 @@ LIBS = [
     ('openpyxl',   'openpyxl',    'reading spreadsheets and the preview grid',    True),
     ('docx',       'python-docx', 'writing the internal audit report',            True),
     ('pytesseract', 'pytesseract', 'reading scanned documents (OCR)',             True),
+    # The Build Outputs tab. Missing from this list until 21 October, so a
+    # new Mac passed the check and then failed on its first build.
+    ('numbers_parser', 'numbers-parser', 'writing the cash flow workbook',      True),
+    ('reportlab',  'reportlab',   'writing the Assumptions PDF',                  True),
+    ('pptx',       'python-pptx', 'writing the consultation deck',                True),
 ]
 
 PORT = int(os.environ.get('FQ_PORT', '8765'))
@@ -85,10 +90,15 @@ def check_libs(rep):
                     fatal=fatal)
     if missing:
         # One command that fixes all of them, rather than making someone run
-        # five. --break-system-packages is what Homebrew's Python requires.
+        # five. --break-system-packages is what Homebrew's Python requires,
+        # and Apple's own Python 3.9 rejects it as an unknown option: the new
+        # iMac on 20 October. --user is what Apple's needs.
+        apple = sys.executable.startswith(('/usr/bin/', '/Library/Developer/',
+                                           '/Applications/Xcode'))
+        flag = '--user' if apple else '--break-system-packages'
         rep.rows.append({'ok': False, 'name': 'install them all', 'fatal': False,
                          'detail': 'run this once',
-                         'fix': 'python3 -m pip install --break-system-packages '
+                         'fix': 'python3 -m pip install %s ' % flag
                                 + ' '.join(missing)})
 
 
