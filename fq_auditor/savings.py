@@ -131,6 +131,32 @@ def sustainable_expense(start, f, deposits, retire_year, y0, end, step=1000):
     return lo
 
 
+def solve_income(start, f, deposits, retire_year, y0, end, r1=None,
+                 step=1000):
+    """The retirement income the Four Quadrants path pays to the horizon: the
+    largest first-year figure, in $1,000s, that leaves the portfolio at or
+    above zero. Not typed by the advisor: this reproduces Brogan's target on
+    Rebol ($466,000), Spaulding ($571,000), Kinsler ($564,000) and Bassett
+    ($324,000) exactly."""
+    r1 = FIRST_YEAR_FQ_RETURN if r1 is None else r1
+
+    def ok(inc):
+        return fq_path(start, f, deposits, retire_year, inc, y0, end,
+                       r1=r1)[end] >= 0
+    lo, hi = 0, step
+    while ok(hi):
+        lo, hi = hi, hi * 2
+    while hi - lo > step:
+        mid = (lo + hi) // 2 // step * step
+        if mid in (lo, hi):
+            break
+        if ok(mid):
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
 def step_schedule(steps, first, last):
     """{year: amount} from a step list like [(2026, 73900), (2028, 101900)],
     each amount holding until the next step. The advisor's savings schedule is

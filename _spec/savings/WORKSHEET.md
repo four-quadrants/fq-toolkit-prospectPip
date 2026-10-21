@@ -66,3 +66,29 @@ table to review instead of a worksheet to build.
 - Oyler's current savings is 47,500 at the top and 47,800 in the list.
 - Oyler's current path grows the first year at 8.25%; his Four Quadrants path
   starts the following January.
+
+## Wired in (fq_auditor/plan.py), 21 October
+
+The deck now works these out when the advisor has not entered them: the sale
+(the building only when the IC form says the client owns it and a value is
+entered), the list of gains, a proposed invested amount per gain per year, the
+schedule summed from them, and the retirement income that schedule pays
+(savings.solve_income). Slide 16 is filled from the same gains, and only when
+the schedule came from them.
+
+Oyler, fed only the documents plus current savings ($47,500) and a building
+value ($4.5m), against Brogan:
+
+| | Toolkit | Brogan |
+|---|---|---|
+| Sale, gross | $9.07m (10 years at 3% and 2%) | $9.515m on the deck; his formula reads a fixed row, not the retirement year |
+| Sale, net | $6.35m, no debt deducted | $5.563m, less the stale $1.19m debt block |
+| Year 1 saved | $124,500 | $120,800 |
+| Year 2 / 3 | $101,500 / $116,500 | $148,800 / $169,800 |
+| Retirement income | $594,000 | $599,000 |
+| Wealth at retirement | $10.72m | $10.79m |
+
+Year 2 and 3 run low because his later years add things only the advisor knows
+(the refinance, cashing out the AuguStar policies, better tax management).
+Those go in the deck entry under `gains`, each with its own invested amounts,
+and they flow into the schedule, slide 16 and the income.

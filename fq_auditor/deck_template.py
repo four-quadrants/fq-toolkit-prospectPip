@@ -45,6 +45,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pptx import Presentation                                # noqa: E402
 
+import plan as _plan                                         # noqa: E402
 import deck as _deck                                         # noqa: E402
 import savings as _sav                                       # noqa: E402
 import levers as _lev                                        # noqa: E402
@@ -138,16 +139,55 @@ def figures(folder, client):
     D['debt_total'] = N(f.get('Practice total'))
     D['debt_service'] = N(f.get('Practice debt service'))
 
-    # The two retirement paths, and the larger-practice scenario if entered.
+    # ---- what the plan works out instead of asking for -------------------
+    # (_spec/savings/WORKSHEET.md; the advisor's entry wins wherever given)
+    other = N(f.get('Other income')) or 0
+    D['collections'] = (D['revenue'] - other) if D['revenue'] else None
+    D['owns_building'] = 'owns the building' in str(f.get('Office location')
+                                                     or '').lower()
+    D['building'] = N(adv.get('building_value')) if (
+        D['owns_building'] or adv.get('building_value')) else None
+    years_to = (D['retire_age'] - D['age']) if (D['age'] and
+                                                 D['retire_age']) else None
+    gross, net = _plan.sale(D['collections'], years_to, D['building'],
+                            N(adv.get('debt_at_sale')) or 0)
+    D['sale_gross'], D['sale_derived'] = gross, net
+    D['sale_needs_building'] = D['owns_building'] and not D['building']
+    bal = N(adv.get('ideal_bank_balance'))
+    if not bal and D.get('overhead_dollars'):
+        bal = math.ceil(D['overhead_dollars'] / 12.0 / 10000.0) * 10000
+    D['ideal_balance'] = bal
+
+    # Practice opportunities, needed by the gains.
+    lx = {'overhead': D['overhead'], 'net_collections': D['revenue'],
+          'target_overhead': N(adv.get('target_overhead'))}
+    lx.update(_deck._production_inputs(folder))
+    lx.update(adv.get('levers') or {})
+    D['lever_inputs'] = lx
+    D['levers'] = _lev.compute(lx)
+
+    excl = (cash['monthly_excluding'] if read else None)
+    D['gains'] = _plan.gains(
+        collections=D['collections'], current_savings=D['current_savings'],
+        cash=D['cash'], ideal_balance=bal, spend_excl_monthly=excl,
+        levers={k: v for k, v in D['levers'].items() if k != 'overhead'},
+        extra=adv.get('gains'))
+    consult = adv.get('consult_date') or datetime.date.today().isoformat()
+    f0 = _sav.first_year_fraction(datetime.date.fromisoformat(consult))
+    first_plan_year = int(consult[:4]) + (1 if f0 == 0 else 0)
+    D['schedule_derived'] = not D['schedule']
+    if not D['schedule'] and D['current_savings']:
+        D['schedule'] = _plan.schedule(D['gains'], first_plan_year)
+
+    # ---- the two retirement paths -----------------------------------------
     D['proj'] = D['proj2'] = None
     need = [n for n, v in (('age', D['age']), ('retirement age',
             D['retire_age']), ('investable accounts', D['start']),
             ('current savings', D['current_savings']),
-            ('personal spending', spend), ('target income', D['income']),
+            ('personal spending', spend),
             ('savings schedule', D['schedule'])) if not v]
     D['need_proj'] = need
     if not need:
-        consult = adv.get('consult_date') or datetime.date.today().isoformat()
         kw = dict(start=D['start'], consult_date=consult,
                   age_now=int(D['age']), retire_age=int(D['retire_age']),
                   current_savings=D['current_savings'],
@@ -155,40 +195,48 @@ def figures(folder, client):
                   horizon_age=int(N(adv.get('horizon_age')) or
                                   _sav.HORIZON_AGE),
                   r1=N(adv.get('fq_first_year_rate')))
-        sale = N(adv.get('sale_net')) or 0
-        D['proj'] = _sav.project(fq_income=D['income'], sale_net=sale, **kw)
-        # The Four Quadrants path can sell for more (Spaulding: $0.937m on
-        # the current path, $1.254m on ours).
-        if adv.get('sale_net_fq') is not None:
-            fq = _sav.project(fq_income=D['income'],
-                              sale_net=N(adv['sale_net_fq']), **kw)
+        sale = N(adv.get('sale_net'))
+        if sale is None:
+            sale = net or 0
+        sale_fq = N(adv.get('sale_net_fq'))
+        sale_fq = sale if sale_fq is None else sale_fq
+
+        def run(income, sale_net):
+            return _sav.project(fq_income=income, sale_net=sale_net, **kw)
+
+        # Retirement income: the advisor's, or what the schedule pays.
+        D['income_derived'] = not D['income']
+        if not D['income']:
+            p = run(1.0, sale_fq)
+            D['income'] = _sav.solve_income(
+                D['start'], p['f'], p['fq_deposits'], p['retire_year'],
+                p['first_year'], p['end_year'],
+                r1=N(adv.get('fq_first_year_rate')))
+        D['proj'] = run(D['income'], sale)
+        if sale_fq != sale:
+            fq = run(D['income'], sale_fq)
             for k in ('fq', 'fq_deposits', 'fq_at_retirement'):
                 D['proj'][k] = fq[k]
-            sale = N(adv['sale_net_fq'])
-        # The current path can carry its own, lower sale figure.
         if adv.get('sale_net_current') is not None:
-            cur = _sav.project(fq_income=D['income'],
-                               sale_net=N(adv['sale_net_current']), **kw)
+            cur = run(D['income'], N(adv['sale_net_current']))
             for k in ('current', 'current_deposits', 'runout_year',
                       'years_before_runout', 'on_pace_for', 'on_pace_share',
                       'current_at_retirement'):
                 D['proj'][k] = cur[k]
-        D['sale'] = sale
+        D['sale'] = sale_fq
         big = adv.get('larger_scenario') or {}
-        if big.get('sale_net') and big.get('target_income'):
-            D['proj2'] = _sav.project(fq_income=N(big['target_income']),
-                                      sale_net=N(big['sale_net']), **kw)
-            D['income2'] = N(big['target_income'])
+        if big.get('sale_net'):
+            p2 = run(1.0, N(big['sale_net']))
+            inc2 = N(big.get('target_income')) or _sav.solve_income(
+                D['start'], p2['f'], p2['fq_deposits'], p2['retire_year'],
+                p2['first_year'], p2['end_year'],
+                r1=N(adv.get('fq_first_year_rate')))
+            D['proj2'] = run(inc2, N(big['sale_net']))
+            D['income2'] = inc2
             D['sale2'] = N(big['sale_net'])
-
-    # Practice opportunities.
-    lx = {'overhead': D['overhead'], 'net_collections': D['revenue'],
-          'target_overhead': N(adv.get('target_overhead'))}
-    lx.update(_deck._production_inputs(folder))
-    lx.update(adv.get('levers') or {})
-    D['lever_inputs'] = lx
-    D['levers'] = _lev.compute(lx)
     return D
+
+
 
 
 # --------------------------------------------------------------------------
@@ -409,9 +457,7 @@ def slide_fills(D):
     # which is the firm's rule (Austin, 21 October): the overhead numerator
     # of the newest full-year P&L over twelve, rounded up to the next $10k.
     # Rebol: $2,098,078 / 12 = $174,840, so $180k, as on his deck.
-    bal = N(adv.get('ideal_bank_balance'))
-    if not bal and D.get('overhead_dollars'):
-        bal = math.ceil(D['overhead_dollars'] / 12.0 / 10000.0) * 10000
+    bal = D.get('ideal_balance')
     b_txt = _k(bal).replace('.0k', 'k') if bal else ask('ideal balance')
     out[13] = {
         'Text 3': b_txt,
@@ -438,10 +484,47 @@ def slide_fills(D):
                 out[15][lab], out[15][val] = '[TBD]', '[TBD]'
 
     # 16 savings projection: the advisor's sources; totals from the schedule
-    # 16 is left entirely to the advisor, totals included: a total beside
-    # rows still marked [TBD] reads as a figure nobody can account for
-    # (Austin's test edit, 21 October).
+    # 16 the savings projection, from the gains: what each is worth a year
+    # and the proposed share of it invested. Rows the gains do not fill stay
+    # [TBD] for the advisor, and the totals are only printed when every row
+    # behind them is filled (Austin's test edit: a total beside [TBD] rows
+    # reads as a figure nobody can account for).
     sch = sorted(D['schedule'])
+    # Only when the schedule came from these gains: beside an advisor's own
+    # schedule they would describe a plan nobody chose.
+    gl = [g for g in D['gains']] if D.get('schedule_derived') else []
+    if gl:
+        y1 = [('Text 10', 'Text 12', 'Text 14'), ('Text 16', 'Text 18', 'Text 20'),
+              ('Text 22', 'Text 24', 'Text 26'), ('Text 28', 'Text 30', 'Text 32'),
+              ('Text 34', 'Text 36', 'Text 38'), ('Text 40', 'Text 42', 'Text 44')]
+        out[16] = {}
+        for i, cells in enumerate(y1):
+            if i < len(gl):
+                g = gl[i]
+                vals = [g['label'], M(g['gain']), M(_plan.invested(g, 0))]
+            else:
+                vals = [ask('another source'), '[TBD]', '[TBD]']
+            for n, v in zip(cells, vals):
+                out[16][n] = v
+        full = len(gl) <= len(y1)
+        out[16]['Text 54'] = M(sum(g['gain'] for g in gl)) if full else '[TBD]'
+        out[16]['Text 56'] = M(sum(_plan.invested(g, 0) for g in gl)) \
+            if full else '[TBD]'
+        rec = [g for g in gl if g['kind'] != 'once']
+        y2 = [('Text 63', 'Text 65', 'Text 67'), ('Text 69', 'Text 71', 'Text 73'),
+              ('Text 75', 'Text 77', 'Text 79'), ('Text 81', 'Text 83', 'Text 85')]
+        same = sum(_plan.invested(g, 0) for g in rec)
+        step = sum(_plan.invested(g, 1) - _plan.invested(g, 0) for g in rec)
+        rows2 = [('Same as year 1 (minus one-timers **)',
+                  M(sum(g['gain'] for g in rec)), M(same)),
+                 ('Practice improvements, second year', '\u2013', M(step))]
+        for i, cells in enumerate(y2):
+            vals = rows2[i] if i < len(rows2) else (
+                ask('another source'), '[TBD]', '[TBD]')
+            for n, v in zip(cells, vals):
+                out[16][n] = v
+        out[16]['Text 89'] = M(sum(g['gain'] for g in rec)) if full else '[TBD]'
+        out[16]['Text 91'] = M(same + step) if full else '[TBD]'
 
     # 17 and 18 the Four Quadrants future
     for slide, which, inc_key in ((17, 'proj', 'income'), (18, 'proj2',
@@ -489,15 +572,20 @@ def slide_fills(D):
             'Text 59': str(age_at(ry)), 'Text 62': str(ry),
             'Text 65': M(p['fq_deposits'].get(ry, 0)), 'Text 68': M(q[ry]),
             'Text 71': M(exp_at(ry)),
-            'Text 74': '*practice & bldg sell, %s net' % _k(sale),
+            'Text 74': ('*practice%s sell, %s net' % (
+                ' & bldg' if D.get('building') else '', _k(sale))) +
+            (' (building not valued)' if D.get('sale_needs_building')
+             else ''),
             'Text 75': str(age_at(ey)), 'Text 76': str(ey), 'Text 77': '$0',
             'Text 78': M(q[ey]), 'Text 79': M(exp_at(ey)),
             'Text 81': ('Funded to %d at %s/yr.' % (age_at(ey), M(inc)))
             if q[ey] > -1000 else
             ('Runs short in %s at %s/yr.' % (_sav.runout_year(
                 {k: v for k, v in q.items() if k > ry}) or ey, M(inc))),
-            'Text 82': ('Retire at %d, practice and building sell in %d.'
-                        % (ra, ry)) if slide == 17 else
+            'Text 82': ('Retire at %d, practice%s sell%s in %d.'
+                        % (ra, ' and building' if D.get('building') else '',
+                           '' if D.get('building') else 's', ry))
+            if slide == 17 else
                        'Same savings path, a higher sale price.',
         })
         out[slide] = fill
