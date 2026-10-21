@@ -73,6 +73,41 @@ labelled as verification. Oyler's carries only target income and current
 savings, because the years of his savings steps are not written down
 anywhere I could find.
 
+## FIXED: the review page layout (21 October, evening)
+
+Cause found: render_html.py called load_claude_verdicts() and nothing defined
+it, so every audit on the iMac printed "(html render failed: ...)", wrote the
+memo and email but no review page, and the app kept showing the August page.
+Defined it; a test audit of Oyler TEST now writes the page with the tiles and
+no second logo. pyflakes finds no other undefined names. The Review tab
+redraws stale pages itself, so opening each TEST client brings it current.
+
+Then, in Austin's order: the sequence of steps in the app, then the
+calculations tying together end to end.
+
+## (history) the review page layout
+
+Austin re-ran the audit on the new iMac and still saw the old review layout.
+What is known:
+
+- Austin's re-run wrote no new review page. Searched all of 2026 at 15:16:
+  the newest Intake Review.html is still Oyler RERUN - Sep30 (12 Oct). Every
+  other one dates from Aug or early Sep. So that run failed or stopped before
+  drawing the page; its progress log will say where.
+- The 12 Oct RERUN page is the newest layout in git: a donut, small green /
+  orange / grey status squares, collapsible checklist groups, no second logo
+  (render_html.py, commits 3cf7e19 and later). A copy is in the session
+  outputs as review_oct12_layout.html.
+- SETTLED: Austin confirmed that IS the layout he means (progress ring,
+  small tiles, collapsible checklist). It is in the code. The only problem is
+  that the audit run on the iMac did not get as far as writing the page.
+  First job: get his progress log, find where the run stops, fix it, then
+  re-audit the TEST clients so each has the current page.
+- (Earlier question, now answered:) is that the layout Austin means? If not, the newer one may
+  have lived only on the old Mac, uncommitted or in a file outside git's
+  allowlist (it only keeps .py and .md). Check the old Mac's
+  FQ_Toolkit/prospectPip for anything newer than 12 Oct.
+
 ## Consult plan card (Build Outputs tab)
 
 "Work out the plan" shows what the documents and models give: retirement

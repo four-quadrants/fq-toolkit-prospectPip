@@ -1846,6 +1846,30 @@ DOC_LABELS.setdefault('unknown', 'unrecognised')
 DOC_LABELS.setdefault('client_note', 'client note')
 
 
+def load_claude_verdicts(where):
+    """Claude's checklist verdicts for this client, or {}.
+
+    `where` is the review page being written (it sits in _Audit, beside
+    claude_checklist.json, which checklist_claude.py writes), or None.
+
+    This was called in two places and defined in neither, so every audit on
+    the new iMac stopped drawing the review with "name 'load_claude_verdicts'
+    is not defined", and the app kept showing the last page it had: the old
+    August layout. Found 21 October.
+    """
+    import json as _json
+    if not where:
+        return {}
+    audit_dir = where if os.path.isdir(where) else os.path.dirname(where)
+    path = os.path.join(audit_dir, 'claude_checklist.json')
+    try:
+        with open(path) as fh:
+            got = _json.load(fh)
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
     """The whole point of the page, answering two questions and nothing else.
 
@@ -2166,7 +2190,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     import reconcile as _rec
     # Three layers, applied in order. The rules decided already; Claude's
     # reading goes on next, and a person's decision last so it beats both.
-    _rec.apply_claude_verdicts(results, load_claude_verdicts(res))
+    _rec.apply_claude_verdicts(results, load_claude_verdicts(path))
     _rec.apply_item_verdicts(results, item_decisions(decisions), who='you')
 
     plan = build_plan(docs, decisions, res.get('mislabeled') or ())
