@@ -296,6 +296,17 @@ def plan_destination(doc):
     # Oyler's 66 were decks, savings worksheets, the Assumptions drafts, the
     # Otter call summaries, the IC form and the answers to Brogan's questions.
     # They go back to the two folders the firm already keeps them in.
+    # ACH forms sit flat in Documents/, beside Business and Personal, not
+    # inside either (Austin, 22 October): one authorises payments for both.
+    if re.search(r'\bach\b', fname, re.I) or dtype == 'ach_form':
+        return (DOCS_DIR, 'ACH form, kept flat in Documents beside Business '
+                          'and Personal', False)
+
+    # Legal papers about the household: Personal/Misc (Austin, 22 October).
+    if re.search(r'divorce|decree|separation agreement|prenup', fname, re.I):
+        return ('/'.join((DOCS_DIR, 'Personal', 'Misc')),
+                'a legal document about the household', False)
+
     home = firm_folder(fname)
     if home:
         return (home, 'the firm\u2019s own file or a call note, kept with the '
@@ -927,6 +938,23 @@ def build_clarification(res, plan, client):
              'or Build File Tree,')
     L.append('which re-runs it for you.')
     return '\n'.join(L)
+
+
+CHASE_HEADS = ('PARTLY PROVIDED', 'NOT PROVIDED', 'WRONG SCOPE',
+               'MISSING MONTHS', 'POSSIBLY ALREADY HERE')
+
+
+def chase_only(memo):
+    """The writeup cut down to what the client still owes.
+
+    The "What to chase" panel used to print the whole internal writeup:
+    renames, collisions, filing decisions and the rest, most of which is not
+    something to chase. Keeps only the asks, the missing months, and the
+    "may already be here" check that should happen before asking.
+    """
+    blocks = [b for b in (memo or '').split('\n\n') if b.strip()]
+    keep = [b for b in blocks if b.strip().startswith(CHASE_HEADS)]
+    return '\n\n'.join(keep) if keep else 'Nothing to chase: everything asked for is here.'
 
 
 def write_clarification_docx(memo, client, path):
@@ -1842,6 +1870,23 @@ LIKELY_FOR = {
 ALWAYS = ['Personal/Misc', 'Business/Misc', REVIEW_DIR]
 
 
+def dest_label(d):
+    """How a destination reads on the page.
+
+    The tree lives under Documents/, but every destination printed with that
+    prefix read as if "Documents" were one more folder to choose. Shown as
+    Business/Banking, Personal/Misc, and the top level by what it is.
+    """
+    d = (d or '').strip('/')
+    if d == DOCS_DIR:
+        return 'Top level, beside Business and Personal'
+    if d.startswith(DOCS_DIR + '/'):
+        d = d[len(DOCS_DIR) + 1:]
+    if d == '_Needs Review':
+        return 'Not sure yet (set aside)'
+    return d
+
+
 def _dest_options_for(doc, plan, selected=None):
     """A short list of likely destinations, with everything else still reachable.
 
@@ -1871,14 +1916,14 @@ def _dest_options_for(doc, plan, selected=None):
         out.append('<optgroup label="Likely">')
         for d in likely:
             sel = ' selected' if d == selected else ''
-            out.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(d)))
+            out.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(dest_label(d))))
         out.append('</optgroup>')
     rest = [d for d in sorted(all_dests) if d not in likely]
     if rest:
         out.append('<optgroup label="Anywhere else">')
         for d in rest:
             sel = ' selected' if d == selected else ''
-            out.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(d)))
+            out.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(dest_label(d))))
         out.append('</optgroup>')
     return ''.join(out)
 
@@ -1891,7 +1936,7 @@ def _dest_options(plan, selected=None):
     opts = ['<option value="">— choose —</option>']
     for d in sorted(seen):
         sel = ' selected' if d == selected else ''
-        opts.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(d)))
+        opts.append('<option value="%s"%s>%s</option>' % (_e(d), sel, _e(dest_label(d))))
     opts.append('<option value="%s">%s (leave for later)</option>' % (_e(REVIEW_DIR), _e(REVIEW_DIR)))
     return ''.join(opts)
 
@@ -2471,7 +2516,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
         a('<tr class="%s"><td>%s</td><td>%s</td><td>%s</td>'
           '<td><code class="destnow">%s</code></td><td>%s</td></tr>'
           % (cls, namecell, newname, _e((p['doc_type'] or '').replace('_', ' ')),
-             _e(p['dest']), why))
+             _e(dest_label(p['dest'])), why))
     a('</tbody></table>')
 
     a('</div></details>')
@@ -2479,9 +2524,10 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     # ---- the writeup -------------------------------------------------------
     a('<details class="panel"><summary>What to chase'
       '<span class="n">the client still owes you things</span></summary><div class="pbody">')
-    a('<p class="hint">Internal. No account numbers, no PII. Copy it into an email '
-      'or hand it to whoever chases the client.</p>')
-    a('<pre class="memo" id="memo">%s</pre>' % _e(memo))
+    a('<p class="hint">Only what the client still owes. Copy it into an email '
+      'or hand it to whoever chases the client. The full internal writeup '
+      '(renames, filing calls, duplicates) is in the Needs Clarification file.</p>')
+    a('<pre class="memo" id="memo">%s</pre>' % _e(chase_only(memo)))
 
     # ---- checklist ---------------------------------------------------------
     a('</div></details>')
@@ -2569,32 +2615,9 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
 
     a('</div></details>')
 
-    a('<details class="pii"><summary>Residual PII — INTERNAL ONLY — %d file(s). '
-      'Never send this section, or anything derived from it, to a client.</summary>'
-      '<div class="piibody">' % len(leaks))
-    a('<p class="hint">Values are masked to the last four digits. A finding only fires on six '
-      'or more digits, so it always means the document holds more than a last-four. This is '
-      'the gate on anything leaving the machine.</p>')
-    for fname in sorted(leaks.keys()):
-        findings = [f for f in leaks[fname] if f.get('confidence') == 'high']
-        lower = len(leaks[fname]) - len(findings)
-        if not findings and not lower:
-            continue
-        a('<div class="leakfile">%s</div><ul>' % _e(fname))
-        for f in findings:
-            pages = f.get('pages') or ([f['page']] if f.get('page') else [])
-            where = ('pages %s of %s' % (', '.join(str(p) for p in pages), f.get('n_pages'))) \
-                    if pages else 'page not recorded'
-            a('<li><b>%s</b> <code>%s</code> (%s digits) — %s <span class="pill p-rev">%s</span>'
-              % (_e(f.get('kind')), _e(f.get('masked')), _e(f.get('digits_seen')),
-                 _e(f.get('why')), _e(where)))
-            if f.get('context'):
-                a('<div class="ctx">%s</div>' % _e(f['context']))
-            a('</li>')
-        if lower:
-            a('<li>%d lower-confidence match(es) not listed</li>' % lower)
-        a('</ul>')
-    a('</div></details>')
+    # The residual PII panel is gone from the page (Austin, 22 October:
+    # unnecessary at this stage and distracting). The scan still runs and still
+    # gates the client email; it just no longer takes a panel of the review.
 
     a('</div>')                                    # .main
 
