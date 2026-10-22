@@ -1548,8 +1548,13 @@ function goDone(st){
           st.textContent += '\nApplying Claude\u2019s reading to the review…\n';
           goAudit(st);
         } else {
-          if(/cannot ask/.test(said)) st.textContent +=
-            '\nClaude Code is not available on this Mac, so the checklist is the rules\u2019 reading only.\n';
+          // Installed is not the same as signed in: a Mac with Claude Code
+          // but no login ran every question, got nothing back, and said
+          // nothing (Oyler, 22 October). Both cases are said out loud now.
+          if(/Not logged in|\/login/.test(said)) st.textContent +=
+            '\nClaude Code is installed but not signed in on this Mac. In Terminal, run claude, type /login and sign in. Until then the checklist is the rules\u2019 reading only.\n';
+          else if(/cannot ask|stopped:/.test(said)) st.textContent +=
+            '\nClaude could not be asked ('+(said.match(/(cannot ask|stopped): ?([^\n]*)/)||['','',''])[2]+'), so the checklist is the rules\u2019 reading only.\n';
           goOpen(st);
         }
       }); }, 700);

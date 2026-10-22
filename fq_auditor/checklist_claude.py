@@ -244,6 +244,12 @@ def main():
         if ans.get('reasoning'):
             print('     %s' % str(ans['reasoning'])[:110])
 
+    # Nothing answered is a failure, not a result: writing an empty file and
+    # saying "written to" looked like success on a Mac that was not signed
+    # in (22 October). Leave any earlier answers where they are.
+    if not out:
+        print('No answers came back, so nothing was written.')
+        return
     path = os.path.join(a.folder, VERDICTS)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as fh:
