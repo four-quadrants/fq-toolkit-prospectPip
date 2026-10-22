@@ -788,21 +788,25 @@ label.ck span{font-size:11.5px;color:#8A9099}
 .plan h3{font-size:13px;margin:18px 0 6px;color:#16324F}
 .plan .hint{font-size:11.5px;color:#8A9099;margin-top:3px}
 .hide{display:none}
+.subtabs{display:inline-flex;border:1px solid #D8D4CA;border-radius:8px;overflow:hidden;margin-bottom:14px}
+.subtabs button{background:#fff;border:0;font:inherit;font-size:13px;padding:7px 14px;cursor:pointer;color:#5A6270}
+.subtabs button.on{background:#16324F;color:#fff}
 </style></head><body>
 
 <header>
   {{LOGO}}
   <h1>FQ Toolkit</h1>
   <nav>
-    <!-- In the order the job is done. The numbers used to run 1, 3, 5, 4
-         with no 2, and the plan card sat above the workbooks it depends on;
-         nobody could tell what came first. Redact is a tool used whenever,
-         not a step, so it stands apart. -->
-    <button id="tab-get" class="on">1 &nbsp;Client</button>
-    <button id="tab-review">2 &nbsp;Review &amp; file</button>
-    <button id="tab-build">3 &nbsp;Workbooks</button>
-    <button id="tab-consult">4 &nbsp;Consult</button>
-    <button id="tab-redact" style="margin-left:18px;opacity:.75">Redact tool</button>
+    <!-- The firm's own order (_spec/SEQUENCE.md, 22 October): intake runs
+         twice, once per document list; the initial notes go to the consult
+         offer call; the Assumptions follow the expanded list; due diligence
+         holds the judgement calls and the questions; the deck comes last.
+         Intake has two views, the client and its review, under one tab. -->
+    <button id="tab-get" class="on">1 &nbsp;Intake</button>
+    <button id="tab-build">2 &nbsp;Initial notes</button>
+    <button id="tab-assume">3 &nbsp;Assumptions</button>
+    <button id="tab-consult">4 &nbsp;Due diligence</button>
+    <button id="tab-deck">5 &nbsp;Consult deck</button>
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
 </header>
@@ -813,6 +817,7 @@ label.ck span{font-size:11.5px;color:#8A9099}
   </div>
 
   <div class="pane on" id="pane-get"><div class="wrap">
+    <div class="subtabs"><button class="st-get">Client &amp; documents</button><button class="st-review">Review &amp; file</button></div>
     <h2>Choose a client</h2>
     <p class="sub">Click a client and the whole job runs: anything they have
        uploaded is downloaded, the documents are read, and the review opens with
@@ -880,6 +885,7 @@ label.ck span{font-size:11.5px;color:#8A9099}
   </div></div>
 
   <div class="pane" id="pane-review">
+    <div style="padding:8px 18px 0"><div class="subtabs"><button class="st-get">Client &amp; documents</button><button class="st-review">Review &amp; file</button></div></div>
     <iframe id="reviewframe" src="about:blank"></iframe>
     <div id="filebar">
       <span class="sub" id="filestatus" style="margin:0">Copies every document into
@@ -888,76 +894,100 @@ label.ck span{font-size:11.5px;color:#8A9099}
     </div>
   </div>
 
-  <!-- Step 3. The workbooks are built from the documents read in step 1 and
-       the filing done in step 2. The cash flow workbook is then REVIEWED by a
-       person, and what they change in it is read back by every later step. -->
+  <!-- 2. Initial notes: what the consult offer call is made on. The Prospect
+       Summary is built beside it every time, quietly, for anyone who wants
+       the visual. -->
   <div class="pane" id="pane-build"><div class="wrap">
-    <h2>3 &nbsp;Build the workbooks</h2>
-    <p class="sub">Built from the documents read and filed in steps 1 and 2.
-       Then review the cash flow workbook: anything you change there and save
-       is read back by step 4.</p>
+    <h2>2 &nbsp;Initial notes</h2>
+    <p class="sub">The basic analysis for the consult offer call: annual production,
+       overhead per the taxes and per the P&amp;L, the call notes and the IC form.
+       The Prospect Summary is rebuilt alongside it.</p>
     <div class="card">
       <div class="crumb" id="buildwho">No client chosen yet</div>
-      <label style="margin-top:10px">What to build</label>
-      <div id="buildwhat">
-        <label class="ck"><input type="checkbox" value="workbook" checked>
-          <b>Initial notes workbook</b>
-          <span>.xlsx, every fact with the document it came from</span></label>
-        <label class="ck"><input type="checkbox" value="cashflow" checked>
-          <b>Cash flow workbook</b>
-          <span>.numbers, on the firm template. Review it, change what is wrong, save it.</span></label>
-        <label class="ck"><input type="checkbox" value="summary" checked>
-          <b>Prospect Summary</b>
-          <span>the two-page internal page, with risk flags</span></label>
+      <div id="buildwhat" class="hide">
+        <input type="checkbox" value="workbook" checked>
+        <input type="checkbox" value="summary" checked>
       </div>
-      <div class="row" style="margin-top:12px">
-        <span class="sub" style="margin:0;flex:1">About a minute and a half.</span>
+      <div class="row" style="margin-top:6px">
+        <span class="sub" style="margin:0;flex:1">About thirty seconds.</span>
         <button class="primary" id="buildgo" disabled>Pick a client first</button>
       </div>
       <pre class="log hide" id="buildlog" style="margin-top:12px"></pre>
       <div id="buildmade" class="row hide" style="margin-top:10px"></div>
     </div>
+  </div></div>
+
+  <!-- 3. Assumptions: after the expanded list. The cash flow workbook is built
+       and REVIEWED by a person first; what they change is read back. -->
+  <div class="pane" id="pane-assume"><div class="wrap">
+    <h2>3 &nbsp;Assumptions</h2>
+    <p class="sub">After the expanded list is in. Build the cash flow workbook, review
+       it in Numbers, then build the Assumptions from everything on file.</p>
     <div class="card">
-      <div class="step"><b>&#10003;</b><div><b style="color:#16324F">Then review the
-        cash flow workbook.</b> Fix any transfer, adjustment or account that is wrong,
-        directly in its period column, and save it in Numbers. Step 4 reads those
-        changes back; a rebuild keeps them.</div></div>
+      <div class="step"><b>1</b><div><b style="color:#16324F">Build the cash flow workbook</b>
+        <div class="sub" style="margin:2px 0 0">Every account, transfers netted, on the firm template.</div></div></div>
+      <div id="cfwhat" class="hide"><input type="checkbox" value="cashflow" checked></div>
+      <div class="row"><span style="flex:1"></span>
+        <button class="primary" id="cfgo" disabled>Pick a client first</button></div>
+      <pre class="log hide" id="cflog" style="margin-top:12px"></pre>
+      <div id="cfmade" class="row hide" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <div class="step"><b>2</b><div><b style="color:#16324F">Review it in Numbers</b>
+        <div class="sub" style="margin:2px 0 0">Fix any transfer, adjustment or account that
+          is wrong, in its period column, and save. Those changes are read back
+          everywhere from here on, and a rebuild keeps them.</div></div></div>
+      <div id="cfstatus" class="found hide"></div>
+    </div>
+    <div class="card">
+      <div class="step"><b>3</b><div><b style="color:#16324F">Build the Assumptions</b>
+        <div class="sub" style="margin:2px 0 0">The base plan, every figure with its source;
+          what is missing is printed where it belongs.</div></div></div>
+      <div id="aswhat" class="hide"><input type="checkbox" value="assumptions" checked></div>
+      <div class="row"><span style="flex:1"></span>
+        <button class="primary" id="asgo" disabled>Pick a client first</button></div>
+      <pre class="log hide" id="aslog" style="margin-top:12px"></pre>
+      <div id="asmade" class="row hide" style="margin-top:10px"></div>
     </div>
   </div></div>
 
-  <!-- Step 4. The plan the consult is built on, then the two documents built
-       from it. Comes after the cash flow review because every figure here
-       rests on the reviewed cash flow. -->
+  <!-- 4. Due diligence: the judgement calls, each traceable to its document
+       and its arithmetic, and the questions still open. -->
   <div class="pane" id="pane-consult"><div class="wrap">
-    <h2>4 &nbsp;Consult</h2>
-    <p class="sub">Work out the plan, adjust what the advisor wants to change,
-       then build the Assumptions and the consultation deck from it.</p>
+    <h2>4 &nbsp;Due diligence</h2>
+    <p class="sub">The judgement calls behind the plan, each with the document it came
+       from and the sum that produced it. Anything that cannot be shown that way is a
+       question: for the analyst first, then, if it cannot be settled from the file,
+       for the prospect.</p>
     <div id="consultstatus" class="found hide" style="margin-bottom:14px"></div>
 
     <div class="card plan" id="plancard">
       <div class="row">
-        <div style="flex:1"><b style="color:#16324F">Consult plan</b>
-          <div class="sub" style="margin:2px 0 0">Every figure is worked out from
-            the documents and the reviewed cash flow; fill a box only to change it.</div></div>
+        <div style="flex:1"><b style="color:#16324F">The plan</b>
+          <div class="sub" style="margin:2px 0 0">Every figure is worked out from the
+            documents and the reviewed cash flow; fill a box only to change it.</div></div>
         <button class="ghost" id="planload" disabled>Work out the plan</button>
       </div>
       <div id="planbody" class="hide"></div>
     </div>
 
     <div class="card">
-      <label>Build from the plan</label>
-      <div id="consultwhat">
-        <label class="ck"><input type="checkbox" value="assumptions" checked>
-          <b>Assumptions</b>
-          <span>the plan PDF, printing what is still needed</span></label>
-        <label class="ck"><input type="checkbox" value="deck" checked>
-          <b>Consultation deck</b>
-          <span>.pptx (opens in Keynote), on the firm design</span></label>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <span class="sub" style="margin:0;flex:1">About thirty seconds.</span>
-        <button class="primary" id="consultgo" disabled>Pick a client first</button>
-      </div>
+      <b style="color:#16324F">Questions for the prospect</b>
+      <div class="sub" style="margin:2px 0 0">Drafted from what the documents show, in
+        Brogan's follow-up format, for the analyst to strike or answer before it goes
+        to the prospect. Being built next.</div>
+    </div>
+  </div></div>
+
+  <!-- 5. The consult deck, from the finished plan. -->
+  <div class="pane" id="pane-deck"><div class="wrap">
+    <h2>5 &nbsp;Consult deck</h2>
+    <p class="sub">Built on the firm's design from the plan saved in step 4. Opens in
+       Keynote. Anything the advisor still has to write is marked on the slide.</p>
+    <div class="card">
+      <div id="consultwhat" class="hide"><input type="checkbox" value="deck" checked></div>
+      <div class="row"><span style="flex:1"></span>
+        <button class="primary" id="consultgo" disabled>Pick a client first</button></div>
       <pre class="log hide" id="consultlog" style="margin-top:12px"></pre>
       <div id="consultmade" class="row hide" style="margin-top:10px"></div>
     </div>
@@ -968,10 +998,16 @@ label.ck span{font-size:11.5px;color:#8A9099}
 var CUR = null, FOLDER = null, since = 0, poll = null;
 
 function show(name){
-  ['get','redact','review','build','consult'].forEach(function(n){
-    document.getElementById('pane-'+n).classList.toggle('on', n===name);
-    document.getElementById('tab-'+n).classList.toggle('on', n===name);
+  ['get','redact','review','build','assume','consult','deck'].forEach(function(n){
+    var p=document.getElementById('pane-'+n); if(p) p.classList.toggle('on', n===name);
   });
+  var tabOf={get:'get',review:'get',build:'build',assume:'assume',consult:'consult',deck:'deck'};
+  ['get','build','assume','consult','deck'].forEach(function(n){
+    document.getElementById('tab-'+n).classList.toggle('on', tabOf[name]===n);
+  });
+  document.querySelectorAll('.st-get').forEach(function(b){b.classList.toggle('on',name==='get');});
+  document.querySelectorAll('.st-review').forEach(function(b){b.classList.toggle('on',name==='review');});
+  if(name==='assume' && FOLDER) cfStatus();
   if(name==='consult' && FOLDER) consultStatus();
   if(name==='review' && FOLDER){
     // Always reload. Relying on src==='about:blank' to decide meant a page built
@@ -1007,7 +1043,10 @@ function show(name){
   }
 }
 document.getElementById('tab-get').onclick=function(){show('get');};
-document.getElementById('tab-redact').onclick=function(){show('redact');};
+document.getElementById('tab-assume').onclick=function(){show('assume');};
+document.getElementById('tab-deck').onclick=function(){show('deck');};
+document.querySelectorAll('.st-get').forEach(function(b){b.onclick=function(){show('get');};});
+document.querySelectorAll('.st-review').forEach(function(b){b.onclick=function(){show('review');};});
 document.getElementById('tab-build').onclick=function(){show('build');};
 document.getElementById('tab-consult').onclick=function(){show('consult');};
 
@@ -1016,7 +1055,8 @@ document.getElementById('tab-consult').onclick=function(){show('consult');};
 // only ever has one job running and one thing to poll.
 var BPOLL=null;
 function buildReady(){
-  [['buildgo','Build them'],['consultgo','Build them']].forEach(function(x){
+  [['buildgo','Build the initial notes'],['cfgo','Build the cash flow workbook'],
+   ['asgo','Build the Assumptions'],['consultgo','Build the deck']].forEach(function(x){
     var b=document.getElementById(x[0]);
     b.disabled = !FOLDER;
     b.textContent = FOLDER ? x[1] : 'Pick a client first';
@@ -1083,6 +1123,27 @@ document.getElementById('buildgo').onclick=function(){
 document.getElementById('consultgo').onclick=function(){
   runBuild('consultwhat','consultlog','consultmade',this);
 };
+document.getElementById('cfgo').onclick=function(){
+  runBuild('cfwhat','cflog','cfmade',this);
+};
+document.getElementById('asgo').onclick=function(){
+  runBuild('aswhat','aslog','asmade',this);
+};
+// The cash flow review, as step 3 sees it.
+function cfStatus(){
+  var el=document.getElementById('cfstatus');
+  fetch('/api/consultstatus?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      el.classList.remove('hide');
+      if(d.error){ el.className='found miss'; el.textContent=d.error; return; }
+      el.className='found'+(d.cashflow?'':' miss');
+      el.textContent = d.cashflow ? 'Cash flow workbook built '+d.cashflow+'. '+
+        (d.changes ? d.changes+' of your changes in it are being used.' :
+                     'No changes made in it yet.')
+        : 'Not built yet.';
+    });
+}
 // Where this client stands before the plan is worked out: filed or not, the
 // cash flow built or not, and how many of the analyst's changes were read.
 function consultStatus(){
@@ -1322,7 +1383,7 @@ function lbTick(){
     if(!d.running){ clearInterval(poll); lbRefresh(); }
   });
 }
-document.getElementById('tab-review').onclick=function(){show('review');};
+
 
 function refreshRoot(){
   return fetch('/api/root').then(function(r){return r.json();}).then(function(d){
@@ -1455,6 +1516,35 @@ function goAudit(st){
     .then(function(){ poll=setInterval(function(){ goTick(st, goDone); }, 700); });
 }
 function goDone(st){
+  // Then Claude reads the checklist against what was just read, and the audit
+  // runs once more (from the cache, quickly) so its verdicts reach the tiles,
+  // the counts and the client email. Where Claude and the rules disagree the
+  // item is flagged for you rather than settled quietly.
+  if(st._claudeDone){ return goOpen(st); }
+  st._claudeDone = true;
+  st.textContent += '\nAsking Claude whether each checklist item is really satisfied…\n';
+  since = 0;
+  fetch('/api/claudecheck',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(j.error){ return goOpen(st); }
+      var before = st.textContent.length;
+      poll=setInterval(function(){ goTick(st, function(st){
+        var said = st.textContent.slice(before);
+        if(/written to/.test(said)){
+          st.textContent += '\nApplying Claude\u2019s reading to the review…\n';
+          goAudit(st);
+        } else {
+          if(/cannot ask/.test(said)) st.textContent +=
+            '\nClaude Code is not available on this Mac, so the checklist is the rules\u2019 reading only.\n';
+          goOpen(st);
+        }
+      }); }, 700);
+    });
+}
+function goOpen(st){
+  st._claudeDone = false;
   st.textContent += '\nDone. Opening the review.\n';
   lbRefresh();
   show('review');
@@ -1959,6 +2049,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             _inputs.put(folder, 'deck', got, by='FQ Toolkit app',
                         note='Entered on the Consult plan card.')
             return self._send(200, '{"saved":true}')
+
+        if p == '/api/claudecheck':
+            # Claude's reading of the checklist (checklist_claude.py): whether
+            # the documents on file actually satisfy each ask. Part of every
+            # intake now; it used to run only when someone remembered to.
+            # Answers are cached per item, so a re-run only asks about what
+            # changed.
+            folder = data.get('folder') or ''
+            if not self._guard(folder):
+                return
+            if JOB.running:
+                return self._send(200, '{"error":"busy"}')
+            JOB.start_cmd([sys.executable, os.path.join(HERE, 'checklist_claude.py'),
+                           folder, '--run'], folder)
+            return self._send(200, '{"started":true}')
 
         if p == '/api/build':
             # The outputs, built in one process so the cash flow pass is
