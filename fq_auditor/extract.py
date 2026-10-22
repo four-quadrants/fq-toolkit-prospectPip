@@ -496,6 +496,13 @@ def readable(path):
     name = os.path.basename(path)
     if name.startswith('.') or is_own_output(name):
         return False
+    # Not documents at all: what the share and Numbers leave behind. A file
+    # being deleted over SMB becomes ".smbdeleteAAA..."; Numbers autosave
+    # leaves "<name>.numbers.sb-3b8059d9-kOi". Once an earlier filing pass had
+    # prefixed them ("Z.)Planning Team Info - .smbdelete..."), they no longer
+    # started with a dot, and seven of them were being asked about.
+    if '.smbdelete' in name.lower() or re.search(r'\.sb-[0-9a-f]{6,}', name):
+        return False
     if name.lower().endswith(SUPPORTED):
         return True
     return sniff_type(path) is not None

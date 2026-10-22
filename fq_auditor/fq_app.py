@@ -454,11 +454,18 @@ def lb_status(folder):
     import lb_fetch
     folder = os.path.abspath(folder)
     # The manifest belongs to the client folder; the documents land one level in.
-    for base in (folder, os.path.dirname(folder)):
-        man_path = os.path.join(base, lb_fetch.MANIFEST)
-        if os.path.exists(man_path):
+    # Both places a list has lived: _Audit/ (now) and the client folder itself
+    # (the older layout, which every TEST folder still uses). lb_fetch already
+    # read both; this check read only the first, so "Check for new uploads"
+    # stayed grey on folders whose downloads worked.
+    man_path = None
+    for cand in (os.path.join(folder, lb_fetch.MANIFEST),
+                 os.path.join(folder, os.path.basename(lb_fetch.MANIFEST)),
+                 os.path.join(os.path.dirname(folder), lb_fetch.MANIFEST)):
+        if os.path.exists(cand):
+            man_path = cand
             break
-    else:
+    if not man_path:
         return {'error': "No document list in this folder yet. Ask Austin to run "
                          "the LaunchBay refresh for this client."}
 
@@ -567,6 +574,8 @@ def guess_inputs(folder):
         import lb_fetch as _lb
         for base in (folder, os.path.dirname(folder.rstrip('/'))):
             man = os.path.join(base, _lb.MANIFEST)
+            if not os.path.exists(man):
+                man = os.path.join(base, os.path.basename(_lb.MANIFEST))
             if os.path.exists(man):
                 project = (_lb.load_json(man, {}) or {}).get('project') or ''
                 break
@@ -1318,9 +1327,12 @@ function setReady(ok){
   var b=document.getElementById('skipget');
   if(!b) return;
   b.classList.toggle('ready', !!ok);
-  b.innerHTML = ok ? '<span class="tick">\u2713</span>Audit' : 'Audit';
-  b.title = ok ? 'Every document on the list is already downloaded — go ahead.'
-               : 'Some documents may still be missing. You can still audit what is here.';
+  // "Audit" meant nothing to anyone who had not built this. It reads the
+  // documents already downloaded again and rebuilds the review, without
+  // going to LaunchBay.
+  b.innerHTML = ok ? '<span class="tick">\u2713</span>Re-read and review' : 'Re-read and review';
+  b.title = ok ? 'Everything on the LaunchBay list is downloaded. Reads the documents again and rebuilds the review.'
+               : 'Some documents may still be missing. This reads what is here and rebuilds the review.';
 }
 
 function lbRefresh(){

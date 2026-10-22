@@ -231,6 +231,54 @@ def under_documents(dest):
     return d
 
 
+# The categories the firm's own file names use, to the folder each means.
+NAME_CATEGORIES = {
+    'banking': 'Banking', 'debt': 'Debt', 'insurance': 'Insurance',
+    'taxes': 'Taxes', 'financials': 'Financials', 'fees': 'Fees',
+    'credit reports': 'Credit Reports', 'investments': 'Investments',
+    'payroll summaries': 'Payroll Summaries', 'production': 'Production',
+    'assets': 'Assets', 'associate info': 'Associate Info',
+    'logistics': 'Logistics', 'credit cards': 'Credit Cards',
+    'pay info:w2s': 'Pay Info:W2s', 'misc': 'Misc',
+}
+
+
+def folder_from_name(fname):
+    """'Business - Financials - KR - ...' -> 'Documents/Business/Financials'."""
+    m = re.match(r'(personal|business)\s+-\s+([^-]+?)\s+-\s', fname or '', re.I)
+    if not m:
+        return None
+    cat = NAME_CATEGORIES.get(m.group(2).strip().lower())
+    if not cat:
+        return None
+    side = 'Personal' if m.group(1).lower() == 'personal' else 'Business'
+    return '/'.join((DOCS_DIR, side, cat))
+
+
+CONSULT_DIR = 'Consult info'
+PLANNING_DIR = 'Z.)Planning Team Info'
+
+
+def firm_folder(fname):
+    """Where a firm working file or call note belongs, or None.
+
+    By name only, and only for the firm's own conventions: these files are
+    written by the team, so their names are reliable in a way a client's are
+    not.
+    """
+    low = (fname or '').lower()
+    if low.startswith(('consult info', 'consult offer', 'initial call')) or \
+            'otter' in low or low.startswith('ic form') or \
+            low.endswith('.key'):
+        return CONSULT_DIR
+    if low.startswith(('z.)planning team info', 'planning team info')) or \
+            'intial notes' in low or 'initial notes' in low or \
+            low.startswith('expanded list') or low.startswith('initial list') or \
+            'privacy principles' in low:
+        return PLANNING_DIR
+    return None
+
+
 def plan_destination(doc):
     """Where this document should go, and whether a human must decide.
 
@@ -241,8 +289,29 @@ def plan_destination(doc):
     dtype = doc.get('doc_type') or 'unknown'
     side = doc.get('owner_side')
     conf = doc.get('confidence')
+    fname = os.path.basename(doc.get('file') or '')
+
+    # The firm's own working files and the call notes are not the client's
+    # documents, and they were the largest share of "decide these": 37 of
+    # Oyler's 66 were decks, savings worksheets, the Assumptions drafts, the
+    # Otter call summaries, the IC form and the answers to Brogan's questions.
+    # They go back to the two folders the firm already keeps them in.
+    home = firm_folder(fname)
+    if home:
+        return (home, 'the firm\u2019s own file or a call note, kept with the '
+                      'firm\u2019s working files', False)
 
     mapped = TYPE_MAP.get(dtype)
+    # A file the team has already named "Business - Financials - ..." or
+    # "Personal - Debt - ..." says its side and its folder. When the reader
+    # cannot tell what it is (a .numbers P&L, a phone photo of a loan), that
+    # name is the best evidence there is, and asking about it again was most
+    # of what was left on Oyler's list.
+    if (not mapped or mapped[1] is None) and dtype == 'unknown':
+        named = folder_from_name(fname)
+        if named:
+            return (named, 'filed by its name; the contents could not be read '
+                           'to confirm it', False)
     if not mapped or mapped[1] is None:
         # Two different problems were saying the same jargon. "We could not tell
         # what this is" is a document to open; "we know what it is and have
@@ -258,6 +327,13 @@ def plan_destination(doc):
 
     forced_side, sub = mapped
     use_side = forced_side or side
+    # A file already named "Personal - Banking - 0393 - ..." has been sided by
+    # a person, in its name. Twelve of Oyler's statements named that way were
+    # still being asked about.
+    if not use_side:
+        m = re.match(r'(personal|business)\s+-\s', fname, re.I)
+        if m:
+            use_side = 'Personal' if m.group(1).lower() == 'personal' else 'Business'
     if not use_side:
         return (REVIEW_DIR, 'personal vs practice unclear — needs a human call', True)
     if conf == 'low':
