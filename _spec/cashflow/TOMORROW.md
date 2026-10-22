@@ -82,8 +82,11 @@ Defined it; a test audit of Oyler TEST now writes the page with the tiles and
 no second logo. pyflakes finds no other undefined names. The Review tab
 redraws stale pages itself, so opening each TEST client brings it current.
 
-Then, in Austin's order: the sequence of steps in the app, then the
-calculations tying together end to end.
+Agreed plan, in Austin's order:
+1. Decide the overall sequence of steps in the app.
+2. Fine-tune the calculations so everything ties together.
+3. Run one full client end to end: pull documents from LaunchBay through to
+   the finished consult deck.
 
 ## (history) the review page layout
 

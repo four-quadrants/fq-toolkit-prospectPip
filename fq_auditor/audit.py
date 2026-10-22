@@ -491,21 +491,19 @@ def propagate_side_within_series(docs, quiet=False):
 
 def _load_claude_checklist(folder):
     """checklist_claude.py's verdicts for whichever client this folder is in."""
+    # This client's folder only. It used to walk up four levels, the same
+    # pattern that pulled Oyler's IC form into Rebol's plan: from a client
+    # folder, the levels above are the other clients' parents.
     here = os.path.abspath(folder)
-    for _ in range(4):
-        for rel in (os.path.join('_Audit', 'claude_checklist.json'),
-                    'claude_checklist.json'):
-            path = os.path.join(here, rel)
-            if os.path.exists(path):
-                try:
-                    with open(path) as fh:
-                        return json.load(fh)
-                except (OSError, ValueError):
-                    return {}
-        parent = os.path.dirname(here)
-        if parent == here:
-            break
-        here = parent
+    for rel in (os.path.join('_Audit', 'claude_checklist.json'),
+                'claude_checklist.json'):
+        path = os.path.join(here, rel)
+        if os.path.exists(path):
+            try:
+                with open(path) as fh:
+                    return json.load(fh)
+            except (OSError, ValueError):
+                return {}
     return {}
 
 
