@@ -72,11 +72,24 @@ def inventory(folder):
     This is the factual half. Claude is not asked to work out which month a
     statement covers; it is told, and asked whether the months add up.
     """
-    out = []
-    for path in sorted(glob.glob(os.path.join(folder, CACHE, '*.txt'))):
+    out, seen = [], set()
+    # One entry per document. The cache holds the same document several
+    # times over: under its hash at each reader version (.v4, .v6) and under
+    # its descriptive name. Oyler's 192 documents arrived as 343, and with a
+    # cap per question the June statement Claude needed was crowded out by
+    # copies of March, so it reported June missing when it was here.
+    paths = sorted(glob.glob(os.path.join(folder, CACHE, '*.txt')),
+                   key=lambda p: (-int((re.search(r'\.v(\d+)\.txt$', p) or
+                                        re.search(r'()$', '')).group(1) or 0),
+                                  p))
+    for path in paths:
         text = open(path, errors='replace').read()
         if len(text.strip()) < 40:
             continue
+        key = ' '.join(text.split())[:400]
+        if key in seen:
+            continue
+        seen.add(key)
         doc = classify.classify(text)
         out.append({
             'sha': os.path.basename(path).split('.')[0],
@@ -107,7 +120,7 @@ def names_for(folder):
     return out
 
 
-def relevant(item, docs, cap=24):
+def relevant(item, docs, cap=40):
     """Documents that could bear on this item.
 
     Three groups, in order. Documents of a type that would satisfy the ask.
