@@ -447,6 +447,21 @@ def build_plan(docs, decisions=None, mislabeled=()):
             'akey': akey,
         })
 
+    # The same file twice (identical content, different names): a re-pull
+    # beside a copy the toolkit had already renamed. Oyler, 23 October: the
+    # renamed scan was placed from its name while the fresh download sat in
+    # "Decide these". If any copy is placed, every copy follows it.
+    placed = {}
+    for r in rows:
+        if r['sha'] and not r['review']:
+            placed.setdefault(r['sha'], r)
+    for r in rows:
+        twin = placed.get(r['sha'])
+        if r['review'] and twin is not None and twin is not r:
+            r['review'] = False
+            r['dest'] = twin['dest']
+            r['why'] = 'same file as %s' % (twin.get('file') or 'another copy')
+
     # Names, then collisions — collisions can only be judged once every proposed
     # name exists, and a decided destination changes which names share a folder.
     by_sha = {d.get('sha256'): d for d in docs}
@@ -2042,7 +2057,13 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
     # items are where, because every tile carries the item's name on hover.
     # Thirty things asked for is a shape you can take in at a glance; "61%" is
     # a number you have to think about.
-    pct = int(round(100.0 * len(settled) / (len(results) or 1)))
+    # A partly-provided item counts half. Counting it as nothing put Oyler at
+    # 64% with four gaps, three of them small (one return of four, one page
+    # range, a personal debt list), which no one who did his consult would
+    # recognise. Half credit reads 77%, closer to how much actually arrived.
+    partly = [r for r in judge if r['status'] == 'partly satisfied']
+    pct = int(round(100.0 * (len(settled) + 0.5 * len(partly))
+                    / (len(results) or 1)))
     a('<div class="donutrow">')
     a('<div class="donut" style="--pct:%d">'
       '<div class="donutmid"><b>%d%%</b><span>complete</span></div></div>' % (pct, pct))
@@ -2415,8 +2436,9 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
     else:
         a('<h2 id="decidethese">Decide these<span class="n">%d of %d documents</span></h2>'
               % (len(review), len(plan)))
-        a('<p class="hint">Everything else has been placed already. Work down this list, '
-          'then press <b>Save decisions</b> at the top. Nothing moves until you do.</p>')
+        a('<p class="hint">Everything else has been placed already. Pick a folder for '
+          'each one; your choice saves itself and the card turns green. Then press '
+          '<b>Build File Tree</b>: the documents are filed and drop off this list.</p>')
 
         # Account-level shortcuts first: one answer can settle a whole run of
         # statements, so offering it before the individual cards saves the

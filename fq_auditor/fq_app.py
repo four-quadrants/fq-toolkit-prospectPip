@@ -1073,13 +1073,22 @@ function buildReady(){
 // One runner for both build buttons: the same job, the same log, the
 // outputs turned into buttons that open them.
 function runBuild(boxId, logId, madeId, btn){
-  if(!FOLDER) return;
+  var log=document.getElementById(logId);
+  // These two used to return without a word, so the button looked dead.
+  if(!FOLDER){
+    log.classList.remove('hide');
+    log.textContent='Open a client on the Intake tab first.';
+    return;
+  }
   var want=[];
   document.querySelectorAll('#'+boxId+' input:checked').forEach(function(i){
     want.push(i.value);
   });
-  if(!want.length) return;
-  var log=document.getElementById(logId);
+  if(!want.length){
+    log.classList.remove('hide');
+    log.textContent='Tick at least one box above, then build.';
+    return;
+  }
   var made=document.getElementById(madeId);
   log.classList.remove('hide'); log.textContent='';
   made.classList.add('hide'); made.innerHTML='';
@@ -2139,8 +2148,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(400, '{"error":"not a folder"}')
             if JOB.running:
                 return self._send(200, json.dumps(
-                    {'error': 'Something is already running. Wait for it to '
-                              'finish, then build.'}))
+                    {'error': 'Claude is still checking the documents against '
+                              'the checklist (a few minutes on a big folder). '
+                              'Press Build again when the Intake review '
+                              'finishes.'}))
             client = data.get('client') or guess_inputs(folder)['client']
             cmd = [sys.executable, os.path.join(HERE, 'build_outputs.py'),
                    folder, '--outdir', os.path.join(folder, '_Audit')]

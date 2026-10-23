@@ -202,6 +202,11 @@ How to judge:
   some appear, say which are present and that others may exist.
 - A document of the right kind for the wrong entity or the wrong year does not
   satisfy the ask. Say so plainly.
+- "Most recent" means most recent when the client sent it. Do not mark an item
+  partly because a newer statement or stub may exist by now; the request is
+  judged as of when it was answered, not as of today.
+- Judge only from the list above. Do not open other files in the folder, and
+  do not speculate about zips, temp files or files that could not be read.
 
 How to write the asks:
 - If it is satisfied, asks is an empty list.

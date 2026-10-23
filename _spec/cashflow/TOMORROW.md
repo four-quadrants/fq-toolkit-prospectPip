@@ -1,3 +1,25 @@
+# Pickup, Monday 26 October
+
+## Where Friday ended
+
+- Oyler re-pulled from LaunchBay: checklist is now 31 items (initial 11 +
+  expanded 20). The August pull only had the initial list. Onboarding-stage
+  files (Client File Checklist etc.) left out of the TEST manifest on purpose.
+- The re-pull wrote 22 copies of documents already on disk under their
+  filed names. Fixed: lb_fetch drops a download whose content matches a file
+  already there; build_plan files a second copy wherever the first went.
+  The 22 copies were deleted from the TEST folder.
+- "Decide these" hint now names Build File Tree, not Save decisions.
+- Claude checklist prompt: "most recent" judged as of when sent, not today;
+  judge only from the list given. Oyler now 18 satisfied, 7 partly, 6 missing.
+- Build buttons no longer fail silently (no client / nothing ticked / busy).
+- OPEN: "Build initial notes" did nothing in the app for Austin. The same
+  build from the command line works in 31s (47 of 51 facts). So it is the
+  app: likely JOB still busy, or the app running old code. First job Monday:
+  restart the app, press it, read the log box.
+- Handoff to Will: intake + initial notes as a pilot next week; due
+  diligence and deck after.
+
 # Pickup, Friday 23 October (priority day: make a lot of headway)
 
 ## Where Thursday ended

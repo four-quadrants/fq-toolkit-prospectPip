@@ -83,6 +83,15 @@ def unique_path(folder, name):
     return os.path.join(folder, '%s (%d)%s' % (stem, n, ext))
 
 
+def sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def download(url, dest, timeout=120):
     req = urllib.request.Request(url, headers={'User-Agent': 'fq-intake/1.0'})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -166,12 +175,41 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
             print("\nNothing downloaded (dry run).")
             return 0
 
-    got, failed = 0, []
+    # Same content, different name. Once the toolkit has renamed a document
+    # ("Personal - Debt - Scan ...pdf"), neither the id log (if it was lost or
+    # predates the file) nor the name check above recognises it, and a re-pull
+    # wrote a second copy beside it. Oyler, 23 October: 22 of 23 "new" files
+    # were copies of documents already here. So hash what is already on disk
+    # and drop a download whose content matches.
+    have = {}
+    if todo:
+        for n in os.listdir(intake):
+            p = os.path.join(intake, n)
+            if n.startswith('.') or not os.path.isfile(p):
+                continue
+            try:
+                have.setdefault(sha256_file(p), n)
+            except Exception:
+                pass
+
+    got, dupes, failed = 0, [], []
     for f in todo:
         name = safe_name(f.get('name'))
         dest = unique_path(intake, name)
         try:
             size = download(f['url'], dest)
+            digest = sha256_file(dest)
+            if digest in have:
+                os.remove(dest)
+                state[str(f.get('id') or f['url'])] = {
+                    'name': have[digest], 'bytes': size,
+                    'fetched': 'already here as %s' % have[digest]}
+                save_json(state_path, state)
+                dupes.append((name, have[digest]))
+                if not quiet:
+                    print("   already here  %-52s (as %s)" % (name[:52], have[digest][:50]))
+                continue
+            have[digest] = os.path.basename(dest)
             state[str(f.get('id') or f['url'])] = {
                 'name': os.path.basename(dest),
                 'bytes': size,
@@ -200,6 +238,9 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
 
     if not quiet:
         print("\n%d new document(s) in %s" % (got, intake))
+        if dupes:
+            print("%d were already here under another name, so no copy was kept."
+                  % len(dupes))
         if failed:
             print("%d could not be fetched:" % len(failed))
             for n, e in failed:
