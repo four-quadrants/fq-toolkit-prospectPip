@@ -1171,8 +1171,18 @@ function consultStatus(){
     });
 }
 
+// Re-read and review: the documents already here, read again, no LaunchBay.
+// It used to do nothing at all unless a client had been clicked in the list
+// during this visit, which after a restart looked like a dead button.
 document.getElementById('skipget').onclick=function(){
-  if(PICKED) startClient(PICKED.path, PICKED.name);
+  var path = (PICKED && PICKED.path) || FOLDER;
+  if(!path){ alert('Pick a client in the list first.'); return; }
+  if(!FOLDER || FOLDER !== path){ FOLDER = path; CUR = path; buildReady(); planReady(); }
+  document.getElementById('gocard').classList.remove('hide');
+  var st = document.getElementById('golog');
+  st.textContent = 'Reading ' + path.split('/').pop() + ' again\u2026\n';
+  st.scrollIntoView({behavior:'smooth', block:'center'});
+  goAudit(st);
 };
 
 // --- Consult plan -----------------------------------------------------

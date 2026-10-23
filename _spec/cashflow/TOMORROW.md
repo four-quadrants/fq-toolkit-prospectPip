@@ -1,3 +1,33 @@
+# Pickup, Friday 23 October (priority day: make a lot of headway)
+
+## Where Thursday ended
+
+- App is in the firm's order (_spec/SEQUENCE.md): 1 Intake (Client &
+  documents / Review & file), 2 Initial notes, 3 Assumptions, 4 Due
+  diligence, 5 Consult deck. Redact removed.
+- Intake: Claude reads the checklist on every run. Claude Code is now
+  installed AND signed in on the iMac (binary at ~/.local/bin/claude). On
+  Oyler it answered 11 items: 6 satisfied, 3 partly, 2 missing, against the
+  rules' 11 of 11. The app says so out loud if Claude is not signed in.
+- Review & file: Oyler's "decide these" went from 66 to 0 (junk files
+  skipped, firm files to Consult info / Z.)Planning Team Info, file names
+  decide side and folder, ACH flat beside Business and Personal, decree to
+  Personal/Misc). PII panel removed; "What to chase" only lists what the
+  client owes; "Documents/" no longer shown in folder names.
+- Open question for Austin: should the Documents level go on disk too, or
+  only on the page?
+- Brogan's five follow-up emails analysed: _spec/FOLLOWUPS.md.
+
+## First thing Friday
+
+1. Austin: restart the app, Oyler TEST, Re-read and review, check Claude's
+   verdicts on the tiles; then walk tabs 2-5 and send notes.
+2. Wire Claude into naming/sorting documents (classify_claude.py,
+   rename_plan.py exist from the old Mac but are not connected).
+3. Calculations tying together, then the due diligence questions list
+   (drafted from findings, in Brogan's format) and the credit report reader.
+4. One full client end to end (Rebol; needs his IC form in the folder).
+
 # Pickup, Thursday 22 October
 
 Written at the end of 21 October.
