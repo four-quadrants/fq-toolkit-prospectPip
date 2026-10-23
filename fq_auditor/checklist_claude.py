@@ -129,7 +129,7 @@ def names_for(folder):
     return out
 
 
-def relevant(item, docs, cap=40):
+def relevant(item, docs, cap=60):
     """Documents that could bear on this item.
 
     Three groups, in order. Documents of a type that would satisfy the ask.

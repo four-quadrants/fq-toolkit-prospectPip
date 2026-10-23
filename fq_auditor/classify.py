@@ -815,8 +815,13 @@ RULES = [
                         r'credit (?:line|limit)', r'available credit', r'\bAADVANTAGE\b')
                     and has(h, r'statement|transactions|new balance|billing')),
     _r('brokerage_statement', 'Investment / brokerage statement', 'Personal',
-       lambda h, t: has(h, r'\bbrokerage\b', r'\bIRA\b', r'\b401\s?\(?k\)?\b', r'\b457\b',
-                        r'\b529\b', r'\bRoth\b', r'portfolio (?:value|summary)',
+       # 529 and 457 as plan names, not as numbers: "$9,529.00" on Oyler's
+       # June Civista statement made it a brokerage statement, filed it under
+       # Investments, and hid it from the bank-statement checklist item.
+       lambda h, t: has(h, r'\bbrokerage\b', r'\bIRA\b', r'\b401\s?\(?k\)?\b',
+                        r'(?<![\d,.$])\b457\s*\(?b\)?\s*(?:plan|account)',
+                        r'(?<![\d,.$])\b529\s*(?:plan|account|college|savings)',
+                        r'\bRoth\b', r'portfolio (?:value|summary)',
                         r'\bmutual fund\b', r'market value', r'\bshares\b')),
     # Two tiers, because one weak phrase is not a bank statement.
     #
