@@ -91,12 +91,21 @@ def inventory(folder):
             continue
         seen.add(key)
         doc = classify.classify(text)
+        # The statement's own date beats a guess. Oyler's June statement for
+        # x4728 carries a notice about October, and the classifier's
+        # "most frequent full date" made it an October statement, so Claude
+        # was told June was missing when it was here.
+        period = doc.get('period') or doc.get('granularity')
+        own = re.search(r'statement\s+date\s*:?\s*(\d{1,2}/\d{1,2}/\d{2,4})',
+                        text[:3000], re.I)
+        if own:
+            period = 'statement dated %s' % own.group(1)
         out.append({
             'sha': os.path.basename(path).split('.')[0],
             'type': doc.get('doc_type'),
             'side': doc.get('owner_side'),
             'year': doc.get('year'),
-            'period': doc.get('period') or doc.get('granularity'),
+            'period': period,
             'account': doc.get('account_tail'),
             'issuer': doc.get('issuer'),
             'entity': doc.get('entity'),
