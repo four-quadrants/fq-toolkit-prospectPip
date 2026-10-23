@@ -224,7 +224,7 @@ def install(src=None, dest=None):
     dest = dest or LOCAL_DIR
     if not os.path.isdir(os.path.join(src, 'fq_auditor')):
         print("This does not look like the toolkit folder:\n  %s\n" % src)
-        print("Unzip the file Austin sent, then run this from inside the")
+        print("Unzip the toolkit file you were sent, then run this from inside the")
         print("'FQ Toolkit' folder it creates.")
         return 1
     if os.path.abspath(src) == os.path.abspath(dest):

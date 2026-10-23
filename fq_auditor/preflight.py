@@ -160,7 +160,7 @@ def check_share(rep, path=None):
         return rep.add(False, 'Analysis share',
                        '%s is mounted but cannot be written to (%s)'
                        % (path, type(e).__name__),
-                       fix='Check with Austin that your account has write access.',
+                       fix='Ask IT to give your account write access to the Analysis share.',
                        fatal=False)
     # Writing is the check. Tidying up afterwards is not: some SMB mounts allow
     # create and refuse delete, and treating a failed cleanup as a failed write

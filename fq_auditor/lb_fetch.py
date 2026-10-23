@@ -121,7 +121,7 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
     man = load_json(manifest_path, None)
     if not man:
         print("No document list for this client yet (looked for %s).\n"
-              "Ask Austin to run the LaunchBay refresh for them." % MANIFEST)
+              "To get one, open Claude and say: pull this client from LaunchBay." % MANIFEST)
         return 1
 
     files = man.get('files') or []

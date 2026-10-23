@@ -466,8 +466,9 @@ def lb_status(folder):
             man_path = cand
             break
     if not man_path:
-        return {'error': "No document list in this folder yet. Ask Austin to run "
-                         "the LaunchBay refresh for this client."}
+        return {'error': "No document list for this client yet. To get one, "
+                         "open Claude and say: pull %s from LaunchBay."
+                         % os.path.basename(folder.rstrip('/'))}
 
     man = lb_fetch.load_json(man_path, None) or {}
     state = lb_fetch.load_json(os.path.join(os.path.dirname(man_path),
@@ -886,8 +887,8 @@ label.ck span{font-size:11.5px;color:#8A9099}
       <label>Documents from the client</label>
       <div id="lbstatus" class="found">Checking…</div>
       <div class="row" style="margin-top:12px">
-        <button class="ghost" id="getdocs">Check for new uploads</button>
-        <button class="ghost" id="skipget">Re-read the documents</button>
+        <button class="ghost hide" id="getdocs">Check for new uploads</button>
+        <button class="ghost hide" id="skipget">Re-read the documents</button>
       </div>
       <pre class="log hide" id="lblog" style="margin-top:12px"></pre>
     </div>
@@ -1032,21 +1033,17 @@ function show(name){
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.stale){ load(); return; }
+        // Out of date because documents arrived or the toolkit changed:
+        // re-read and re-check now, the same run as Re-read and review.
         f.srcdoc='<body style="font:15px -apple-system,Helvetica;padding:40px;'+
-          'color:#16324F"><h3>Bringing this review up to date…</h3>'+
-          '<p style="color:#6C7480">It was saved by an older version of the '+
-          'toolkit. Redrawing it from the documents already read, with your '+
-          'decisions kept. About a minute.</p></body>';
-        fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({folder:FOLDER})})
-          .then(function(){
-            var at=0, t=setInterval(function(){
-              fetch('/api/log?since='+at).then(function(r){return r.json();})
-                .then(function(s){ at=s.total;
-                  if(!s.running){ clearInterval(t); f.removeAttribute('srcdoc'); load(); }
-                });
-            }, 1000);
-          });
+          'color:#16324F"><h3>Bringing this review up to date\u2026</h3>'+
+          '<p style="color:#6C7480">Because '+(d.why||'something changed')+
+          '. Reading the documents again and checking the list, with your '+
+          'decisions kept. A few minutes.</p></body>';
+        var st=document.getElementById('golog');
+        document.getElementById('gocard').classList.remove('hide');
+        st.textContent='Bringing the review up to date ('+(d.why||'')+')\u2026\n';
+        goAudit(st);
       })
       .catch(load);
   }
@@ -1371,14 +1368,15 @@ function lbRefresh(){
       lines.push('The list was refreshed '+d.age+'.');
       // Said plainly, because a stale list looks exactly like a client who has
       // sent nothing. If the refresh stopped running, this is the only clue.
-      if(d.stale) lines.push('WARNING: that is old. Ask Austin whether the daily '
-                             +'refresh is still running before trusting "nothing new".');
+      if(d.stale) lines.push('WARNING: that is old, so "nothing new" may not be true. '
+                             +'To refresh it, open Claude and say: pull this client from LaunchBay.');
       // Named, because "3 documents are missing" with no names sends someone
       // hunting through the folder for which three.
       if(d.failed && d.failed.length){
         lines.push('');
         lines.push(d.failed.length + ' document(s) could not be downloaded. '
-                   + 'Pressing Download again will not help — ask Austin:');
+                   + 'Pressing Download again will not help. Download these from the '
+                   + 'LaunchBay portal by hand:');
         d.failed.forEach(function(f){ lines.push('   - ' + f.name); });
       }
       el.textContent=lines.join('\n');
@@ -1476,7 +1474,7 @@ function selectClient(path, name){
   PICKED = {path: path, name: name};
   var b = document.getElementById('go');
   b.disabled = false;
-  b.textContent = 'Download and audit \u201c' + name + '\u201d';
+  b.textContent = 'Open \u201c' + name + '\u201d';
   document.querySelectorAll('.folders .clientrow').forEach(function(r){
     r.classList.toggle('picked', r.dataset.path === path);
   });
@@ -1519,7 +1517,7 @@ function goFetch(st){
   since = 0;
   fetch('/api/lbfetch',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({folder:FOLDER})})
-    .then(function(){ poll=setInterval(function(){ goTick(st, goAudit); }, 700); });
+    .then(function(){ poll=setInterval(function(){ goTick(st, goAfterFetch); }, 700); });
 }
 function goTick(st, next){
   fetch('/api/log?since='+since).then(function(r){return r.json();}).then(function(d){
@@ -1527,6 +1525,24 @@ function goTick(st, next){
     if(d.lines.length){ st.textContent += d.lines.join('\n')+'\n'; st.scrollTop=st.scrollHeight; }
     if(!d.running){ clearInterval(poll); next(st); }
   });
+}
+// After downloading: read and check again only when something changed (a new
+// document, or a toolkit update). Otherwise go straight to the review. The
+// person opening a client never has to choose between "download" and
+// "re-read"; opening it does whichever is needed.
+function goAfterFetch(st){
+  fetch('/api/reviewstale?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.none || d.stale){
+        if(d.why) st.textContent += '\nUpdating: ' + d.why + '.\n';
+        goAudit(st);
+      } else {
+        st.textContent += '\nNothing has changed since the last review.\n';
+        goOpen(st);
+      }
+    })
+    .catch(function(){ goAudit(st); });
 }
 function goAudit(st){
   st.textContent += '\nReading the documents. The first run on a client takes a '
@@ -1572,6 +1588,7 @@ function goDone(st){
 }
 function goOpen(st){
   st._claudeDone = false;
+  document.getElementById('reviewframe').removeAttribute('srcdoc');
   st.textContent += '\nDone. Opening the review.\n';
   lbRefresh();
   show('review');
@@ -1762,15 +1779,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not pages:
                 return self._send(200, '{"stale":false,"none":true}')
             page = os.path.join(out, pages[0])
+            built = os.path.getmtime(page)
             code = max(os.path.getmtime(os.path.join(HERE, f))
-                       for f in ('render_html.py', 'audit.py'))
+                       for f in ('render_html.py', 'audit.py', 'reconcile.py',
+                                 'classify.py', 'checklist_claude.py')
+                       if os.path.exists(os.path.join(HERE, f)))
+            # A document that arrived after the review was made, downloaded
+            # into Original_sourcedocs or dropped into the folder by hand.
+            newer_doc = None
+            for d in (os.path.join(folder, 'Original_sourcedocs'), folder):
+                try:
+                    names = os.listdir(d)
+                except OSError:
+                    continue
+                for f in names:
+                    p2 = os.path.join(d, f)
+                    if not f.startswith('.') and os.path.isfile(p2) and \
+                            os.path.getmtime(p2) > built + 5:
+                        newer_doc = f
+                        break
+                if newer_doc:
+                    break
             try:
                 with open(page, errors='replace') as fh:
                     tiles = 'class="tiles"' in fh.read()
             except OSError:
                 tiles = False
-            stale = (not tiles) or os.path.getmtime(page) < code
-            return self._send(200, json.dumps({'stale': stale}))
+            why = ('a new document arrived (%s)' % newer_doc) if newer_doc else (
+                'the toolkit was updated' if (not tiles or built < code) else None)
+            return self._send(200, json.dumps({'stale': bool(why), 'why': why}))
 
         if p == '/api/consultstatus':
             folder = (q.get('folder') or [''])[0]
@@ -2011,9 +2048,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                           'solid #F0D9B5;padding:10px 16px;font:14px '
                           '-apple-system,Helvetica,sans-serif">This review was '
                           'saved by an older version of the toolkit, before the '
-                          'status tiles. In step 1, pick this client and press '
-                          '<b>Download and audit</b> to rebuild it in the '
-                          'current layout. Your decisions are kept.</div>')
+                          'status tiles. Open this client again from Intake and '
+                          'it will be rebuilt. Your decisions are kept.</div>')
                 html = re.sub(r'(<body[^>]*>)', r'\1' + banner, html, count=1)
 
             head, sep, tail = html.rpartition('</body>')
