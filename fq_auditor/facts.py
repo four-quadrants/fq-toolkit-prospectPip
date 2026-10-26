@@ -488,6 +488,25 @@ def gather(folder, client=None):
         ('officer compensation (tax return)',
          {y: tax.get(y, {}).get('officer_comp') for y in years}, MONEY),
     ]
+    # ------------------------------------------------- pain points, last
+    # Where Brogan puts them: the dentist's own words, then the consult
+    # themes each with the figure behind it, then fee range and timeline.
+    try:
+        import painpoints as _pp
+        rows = _pp.themes(form, src, p, t, latest, series,
+                          _compose.fee_study(folder),
+                          _compose.practice_debt(debts.get('practice') or (),
+                                                 debts.get('unread') or ()))
+        blocks.append(Block('Pain points and consult themes', [
+            Fact(theme, evidence, TEXT, source, 'pain point',
+                 needed=('Advisor' if source == 'Advisor'
+                         else 'Add from the initial call'))
+            for theme, evidence, source in rows]))
+    except Exception as exc:
+        blocks.append(Block('Pain points and consult themes', [
+            Fact('Pain points', None, TEXT, None,
+                 needed='Could not be drafted (%s)' % exc)]))
+
     bundle = Bundle(client, blocks, years, series, folder)
     bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0
                              for y in years}

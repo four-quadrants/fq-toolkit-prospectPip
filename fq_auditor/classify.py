@@ -109,6 +109,19 @@ def statement_period(text):
     """(month, year, raw) for a periodic document."""
     head = text[:6000]
 
+    # 0. A QuickBooks report header: "January-December, 2025" or
+    #    "January 1-September 29, 2026". The report also prints the day it
+    #    was RUN ("Tuesday, September 29, 2026"), and step 5b's most frequent
+    #    full date took that instead: Oyler's 2025 P&L became a 2026 one and
+    #    the initial notes read 2025's income as 2026's.
+    m = re.search(MONTH_RE + r'\w*\s*(?:\d{1,2})?\s*[-–]\s*' + MONTH_RE
+                  + r'\w*\s*(?:\d{1,2})?,?\s*(20\d\d)', text[:400], re.I)
+    if m and re.search(r'profit\s*(?:and|&)\s*loss|income\s+statement|balance\s+sheet',
+                       text[:400], re.I):
+        mi = MONTHS.get(m.group(2)[:3].lower())
+        if mi:
+            return mi, _norm_year(m.group(3)), m.group(0).strip()
+
     # 1. labelled range -> closing month
     m = re.search(RANGE_LABEL + r'\s*[:\-]?\s*' + NUM_DATE
                   + r'\s*(?:thru|through|to|-|–)\s*' + NUM_DATE, head, re.I)

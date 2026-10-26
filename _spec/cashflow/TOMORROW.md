@@ -1,3 +1,38 @@
+# Pickup, Tuesday 27 October (goal: all the way to the consult deck)
+
+## Where Monday ended
+
+- Intake and filing: done on Oyler. Checklist 31 items, 77% (real gaps,
+  most sent after his consult). Build File Tree button now grey "All filed"
+  when nothing is left (audit writes _Audit/filing_status.json).
+- Initial notes: builds in the app (child output was buffered, fixed with
+  PYTHONUNBUFFERED). Open + Show in Finder buttons (Numbers imports .xlsx as
+  a new doc that saves to Documents, so Finder shows the real file).
+- Bug fixed: QuickBooks PDF headers ("January-December, 2025") now set the
+  year; the print date had made Oyler's 2025 P&L a 2026 one. Same-year P&L
+  copies keep the one with more lines read (spreadsheet over PDF). Oyler
+  overhead back to 77.0%; tax basis 74.0% now shows.
+- Pain points: DRAFTED (painpoints.py, last block of the initial notes),
+  modelled on Brogan's Farag, Spaulding, Wright and Kinsler notes: the
+  dentist's own words from the IC form's true/false page, then themes with
+  the figure behind each (retirement, OH, efficiencies, fees, debt, QB,
+  tax/CPA, comprehensive plan), then fee range and timeline for the advisor.
+  Call notes are not read yet, so the call's pain goes in by hand.
+- Spaulding and Rebol initial notes are thin (13 of 42, 12 of 41 facts):
+  neither TEST folder has an IC form, and Spaulding's tax-basis overhead is
+  not read (Brogan has 80.70% for 2025). Check these first Tuesday. 2026 YTD doctor
+  wages read 0 (the 2026 P&L used is a PDF print).
+- Never run fq_app.py in the sandbox without FQ_ROOT_FILE set: it overwrote
+  Austin's .fq_root on Monday.
+
+## Tuesday plan
+
+1. Check Initial notes on Spaulding and Rebol after the P&L year fix.
+2. Pain points.
+3. Assumptions tab (cash flow workbook, review, Assumptions PDF) on Oyler.
+4. Due diligence: the questions list (analyst first, then prospect).
+5. Consult deck from the plan card. Commit.
+
 # Pickup, Monday 26 October
 
 ## Where Friday ended

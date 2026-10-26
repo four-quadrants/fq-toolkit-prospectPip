@@ -302,7 +302,16 @@ def gather(folder):
     # the one kept, and it has to be the practice. Rebol's folder also holds
     # the P&L of his building LLC ($113,000 of rent against the practice's
     # $2.68m), and in file order the LLC was the one kept.
-    out.sort(key=lambda d: ((d.get('year') or ''), -(d.get('income_base') or 0)),
+    # Two copies of the same P&L (the client's spreadsheet and a PDF print of
+    # it) have the same income; keep the one with more lines read. A PDF puts
+    # the labels and figures in separate columns, so Oyler's 2025 PDF gave no
+    # Doctor Wages and overhead came out 86% instead of 77%.
+    def detail(d):
+        return sum(1 for v in d.values()
+                   if isinstance(v, (int, float)) and not isinstance(v, bool) and v)
+    out.sort(key=lambda d: ((d.get('year') or ''),
+                            -round(d.get('income_base') or 0, -2),
+                            -detail(d)),
              reverse=True)
     return out
 

@@ -1277,6 +1277,17 @@ def main():
         move_log = os.path.join(outdir, f"{safe} - Filing Log.csv")
         with open(move_log, 'w') as fh:
             fh.write(_filing.build_move_log(done, refused))
+
+        # What is left to file, for the app's Build File Tree button. Without
+        # it the button looked the same whether everything was filed or
+        # nothing was, so there was no way to tell from the screen.
+        pending = len(moves) - (len(done) if a.file_them else 0)
+        with open(os.path.join(outdir, 'filing_status.json'), 'w') as fh:
+            json.dump({'pending': max(0, pending),
+                       'filed': len(skipped) + (len(done) if a.file_them else 0),
+                       'refused': len(refused) if a.file_them else 0,
+                       'when': datetime.datetime.now().isoformat(timespec='seconds')},
+                      fh)
     except Exception as e:
         print(f"(filing step skipped: {e})")
         move_log = None

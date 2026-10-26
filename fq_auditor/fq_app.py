@@ -210,8 +210,12 @@ class Job:
 
     def _run(self, cmd):
         try:
+            # Unbuffered, or a Python child holds its output until it exits and
+            # the page shows "Building…" over an empty box the whole time.
+            env = dict(os.environ, PYTHONUNBUFFERED='1')
             p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                 stderr=subprocess.STDOUT, text=True, bufsize=1,
+                                 env=env)
             for line in p.stdout:
                 line = line.rstrip('\n')
                 if 'deprecated' in line.lower():
@@ -1025,6 +1029,7 @@ function show(name){
     // decisions having been ignored.
     var f=document.getElementById('reviewframe');
     var load=function(){
+      fileButton();
       f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now(); };
     // A page drawn by an older version of the toolkit is redrawn first, from
     // the documents already read, with the decisions already made. Nobody
@@ -1125,6 +1130,15 @@ function runBuild(boxId, logId, madeId, btn){
                       body:JSON.stringify({path:p, folder:FOLDER})});
                   };
                   made.appendChild(b);
+                  var s=document.createElement('button');
+                  s.className='ghost';
+                  s.textContent='Show in Finder';
+                  s.onclick=function(){
+                    fetch('/api/showfile',{method:'POST',
+                      headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({path:p})});
+                  };
+                  made.appendChild(s);
                 });
               }
             }
@@ -1640,12 +1654,37 @@ function fileTick(){
       document.getElementById('filethem').disabled=false;
       if(!said.length) st.textContent='Finished, but it reported nothing — check the '
                                     + 'Audit & File tab for the full output.';
+      fileButton();
       var f=document.getElementById('reviewframe');
       f.src='/review?folder='+encodeURIComponent(FOLDER)+'&t='+Date.now();
     }
   });
 }
 document.getElementById('filethem').onclick=fileThem;
+
+// Orange only when there is something to file. Grey and "All filed" when
+// the last run left nothing, so the screen answers "is everything filed?"
+function fileButton(){
+  if(!FOLDER) return;
+  fetch('/api/filestatus?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var b=document.getElementById('filethem');
+      var st=document.getElementById('filestatus');
+      if(d.unknown){ b.className='primary'; b.textContent='Build File Tree'; return; }
+      if(d.pending>0){
+        b.className='primary';
+        b.textContent='File '+d.pending+' document'+(d.pending===1?'':'s');
+        st.textContent=d.pending+' not filed yet. '+(d.filed||0)+' already filed. '
+          +'Originals are never moved.';
+      } else {
+        b.className='ghost';
+        b.textContent='All filed ✓';
+        st.textContent='Everything is filed ('+(d.filed||0)+' documents). '
+          +'New documents will turn this orange again.';
+      }
+    }).catch(function(){});
+}
 window.showTab=show;   // the review frame calls this
 
 document.getElementById('openfolder').onclick=function(){
@@ -1771,6 +1810,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   'text/html; charset=utf-8')
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
+
+        if p == '/api/filestatus':
+            # How many documents are still to be filed, written by the last
+            # audit run. Drives the Build File Tree button's colour and words.
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            try:
+                with open(os.path.join(folder, '_Audit', 'filing_status.json')) as fh:
+                    return self._send(200, fh.read())
+            except (OSError, ValueError):
+                return self._send(200, '{"unknown":true}')
 
         if p == '/api/reviewstale':
             # Is the saved review page older than the code that draws it?
@@ -2161,6 +2212,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cmd += ['--what', data['what']]
             JOB.start_cmd(cmd, folder)
             return self._send(200, '{"started":true}')
+
+        if p == '/api/showfile':
+            # Show a built file selected in Finder. Numbers imports an .xlsx as
+            # a new document that saves to Documents, so Open alone hid where
+            # the real file lives.
+            path = data.get('path') or ''
+            if not self._guard(path):
+                return
+            if not os.path.isfile(path):
+                return self._send(400, '{"error":"not found"}')
+            try:
+                subprocess.Popen(['open', '-R', path])
+            except Exception as e:
+                return self._send(500, json.dumps({'error': str(e)}))
+            return self._send(200, '{"shown":true}')
 
         if p == '/api/openfile':
             # Opens a client document in Preview/Excel/whatever, for the review
