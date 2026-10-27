@@ -76,6 +76,7 @@ class Book(object):
         self.s_edit = d.add_style(name='FQ edit', bg_color=AMBER)
         self.s_note = d.add_style(name='FQ note', italic=True,
                                   font_color=RGB(107, 118, 131))
+        self.s_wrap = d.add_style(name='FQ wrap', text_wrap=True)
         self.used = 0
 
     def table(self, name, rows, cols):
@@ -102,6 +103,11 @@ class Book(object):
         t.col_width(0, 260)
         for c in range(1, cols):
             t.col_width(c, 105)
+        # The template's rows are 14pt, which clips every figure. 22 fits a
+        # line of 13pt text with room; the title row gets more.
+        for r in range(t.num_rows):
+            t.row_height(r, 22)
+        t.row_height(0, 30)
         return t
 
     def money(self, t, r, c, v, style=None):
@@ -289,7 +295,10 @@ def write_review(book, entities):
         t.write(r, 2, per)
         t.write(r, 3, kind)
         book.money(t, r, 4, amount)
-        t.write(r, 5, ' '.join(str(why).split()))
+        text = ' '.join(str(why).split())
+        t.write(r, 5, text, style=book.s_wrap)
+        # About 75 characters a line at this width.
+        t.row_height(r, max(22, 18 * (1 + len(text) // 75)))
         t.write(r, 6, conf)
         t.write(r, 7, False)
 

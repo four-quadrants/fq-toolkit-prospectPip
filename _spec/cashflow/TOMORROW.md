@@ -34,6 +34,23 @@ Where Tuesday ended:
   parser on it is current, so comments work.
 - Build buttons: pale blue when built and current, orange when needed.
 
+Oyler vs Brogan's live Assumptions (Oyler Assumptions 2026-BB.pages),
+27 Oct. Household: excl. fixed $13,892 vs $13,985 (-$93/mo); incl.
+$32,958 vs $33,716 (-$758/mo). Per account (dep / exp, toolkit vs BB):
+  x0054   47,598 / 49,999   vs 47,359 / 23,785  (toolkit leaves the $100k
+          one-off in the account's expense; BB takes it out)
+  x0222    8,740 / 5,297    vs  3,333 / 9,086   (transfers classed differently)
+  x0393    3,752 / 1,712    vs    250 / 0       (BB: all transfers)
+  x1145    2,326 / 125      vs  2,291 / 123     (months vs periods)
+  x2683       40 / 950      vs      0 / 935
+  x4728  345,453 / 308,892  vs 311,431 / 315,708
+  x9399   34,730 / 36,613   vs 33,949 / 26,322
+Work these down tomorrow: one-offs out of the account line, and transfers
+between his own accounts on x0222, x0393, x4728 and Moonridge.
+Rows are 22pt now (were 14pt and clipped). Austin's edit test: the 0 did
+not reach cashflow_review.json; the read-back works when tested with a
+library-saved edit, so check whether his edit was saved before the rebuild.
+
 First thing Wednesday:
 1. Austin rebuilds Oyler's cash flow in the app, opens it in Numbers, edits
    one amber cell, saves, rebuilds: check the change is kept.
