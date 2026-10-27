@@ -262,6 +262,10 @@ def extract_other(path, ext=None):
             # "QuickBooks backup" checklist item read missing with the file
             # sitting right there.
             return ''
+        if ext in ('.pages', '.key'):
+            # Otter call summaries arrive as Pages files. See iwork.py.
+            import iwork
+            return iwork.text_of(path)
         if ext == '.eml':
             import email
             msg = email.message_from_file(open(path, errors='ignore'))
@@ -276,7 +280,8 @@ def extract_other(path, ext=None):
 
 
 SUPPORTED = ('.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.eml',
-             '.qbb', '.qbw', '.qbm', '.png', '.jpg', '.jpeg', '.tif', '.tiff')
+             '.qbb', '.qbw', '.qbm', '.png', '.jpg', '.jpeg', '.tif', '.tiff',
+             '.pages', '.key')
 
 
 # Bump whenever the OCR settings change. The cache is keyed by file CONTENTS, so

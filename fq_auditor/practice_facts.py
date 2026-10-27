@@ -123,9 +123,132 @@ def find_docs(folder):
     return found
 
 
+def from_tables(folder):
+    """Counts laid out as a table with one column per year.
+
+    Rebol's "Dr Days Total Patients New Patients Summary.docx": a Year row
+    (2024 | 2025 | 2026), then a row per doctor under "Dr Days", then
+    "Total Patients Seen", "Total Active Patients", "Total New Patients".
+    The prose reader took "2025" for a count of new patients.
+    Returns ({year: {field: n}}, {doctor: {year: days}}).
+    """
+    try:
+        import docx
+    except ImportError:
+        return {}, {}
+    by_year, doctors = {}, {}
+    for root, _dirs, files in os.walk(folder):
+        if os.path.basename(root).startswith('.'):
+            continue
+        for name in files:
+            if not name.lower().endswith('.docx') or name.startswith('~$'):
+                continue
+            try:
+                tables = docx.Document(os.path.join(root, name)).tables
+            except Exception:
+                continue
+            for t in tables:
+                rows = [[c.text.strip() for c in r.cells] for r in t.rows]
+                head = next((r for r in rows
+                             if sum(bool(re.fullmatch(r'20\d\d', c)) for c in r) >= 2),
+                            None)
+                if not head:
+                    continue
+                cols = {i: c for i, c in enumerate(head)
+                        if re.fullmatch(r'20\d\d', c)}
+
+                def nums(r):
+                    out = {}
+                    for i, y in cols.items():
+                        v = r[i].replace(',', '') if i < len(r) else ''
+                        if v.isdigit():
+                            out[y] = int(v)
+                    return out
+                in_days = False
+                for r in rows:
+                    label = (r[0] if r else '').strip()
+                    low = label.lower()
+                    if re.match(r'(dr|doctor)\.?\s+days', low):
+                        in_days = True
+                        continue
+                    vals = nums(r)
+                    if not label:
+                        in_days = False
+                        continue
+                    if in_days and DOCTOR.search(label) and vals:
+                        doctors[DOCTOR.search(label).group(1)] = vals
+                        continue
+                    if 'new patient' in low:
+                        field = 'new_patients'
+                    elif 'active patient' in low:
+                        field = 'total_patients'
+                    elif 'total patient' in low or 'patients seen' in low:
+                        field = 'patients_seen'
+                    else:
+                        continue
+                    for y, v in vals.items():
+                        by_year.setdefault(y, {})[field] = v
+    for y, rec in by_year.items():
+        # Unique patients when the table gives them; visits otherwise.
+        if 'total_patients' not in rec and 'patients_seen' in rec:
+            rec['total_patients'] = rec['patients_seen']
+        rec.pop('patients_seen', None)
+    for name, years in doctors.items():
+        for y, d in years.items():
+            rec = by_year.setdefault(y, {})
+            rec['doctor_days'] = rec.get('doctor_days', 0) + d
+    return by_year, doctors
+
+
+def from_comments(folder):
+    """Counts the client typed into the LaunchBay portal instead of uploading.
+
+    Spaulding: "Jan 1 - Dec 31, 2025 NEW Patients: 398", "... Total
+    Patients: 1016", "Total Dr. Days worked: 2024: 144 2025: 193 Jan
+    1-June 30 2026: 94". These are the client's own figures, the same
+    standing as a count document they would have uploaded.
+    """
+    texts = []
+    for p in (os.path.join(folder, 'launchbay_tasks.json'),
+              os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+        try:
+            with open(p) as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        for task in data.get('tasks') or ():
+            for c in task.get('comments') or ():
+                texts.append(' '.join(str(c.get('text') or '').split()))
+        break
+    out = {}
+    for t in texts:
+        for m in re.finditer(r'(20\d\d)\s*(NEW|Total)\s+Patients?\s*:?\s*([\d,]+)',
+                             t, re.I):
+            field = 'new_patients' if m.group(2).lower() == 'new' \
+                else 'total_patients'
+            out.setdefault(m.group(1), {})[field] = int(m.group(3).replace(',', ''))
+        d = re.search(r'(?:Dr\.?|doctor)\s+days\s+worked\s*:?(.*)', t, re.I)
+        if d:
+            for y, n in re.findall(r'(20\d\d)\s*:\s*([\d,]+)', d.group(1)):
+                out.setdefault(y, {})['doctor_days'] = int(n.replace(',', ''))
+    return out
+
+
 def gather(folder):
     """Everything these documents state, keyed by field then year."""
     out = {'by_year': {}, 'doctor_days': {}, 'sources': {}}
+    for year, vals in from_comments(folder).items():
+        for field, v in vals.items():
+            out['by_year'].setdefault(year, {})[field] = v
+            out['sources'].setdefault(field, 'typed in the LaunchBay portal')
+    tab_years, tab_doctors = from_tables(folder)
+    if tab_years:
+        for year, vals in tab_years.items():
+            for field, v in vals.items():
+                out['by_year'].setdefault(year, {})[field] = v
+                out['sources'][field] = 'count table (.docx)'
+        out['doctor_days'] = tab_doctors
+        return out
     docs = find_docs(folder)
     for field, path in docs.items():
         lines = _text(path)

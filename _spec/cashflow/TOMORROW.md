@@ -1,3 +1,28 @@
+# BEFORE HANDOFF (must be done before the project is called finished)
+
+- LaunchBay pull on a schedule. The toolkit has no LaunchBay login; only
+  Claude with the LaunchBay connector can write launchbay_manifest.json and
+  launchbay_tasks.json (skill: fq-launchbay-pull). Today it only happens when
+  someone asks. Set up a weekday-morning scheduled task that pulls every
+  active prospect, so new uploads are waiting when the app is opened.
+  Decide whose Claude account runs it (Austin leaves in a few weeks).
+
+# Tuesday 27 October, midday
+
+Initial notes checked against Brogan's on all three TEST clients:
+Oyler 58/62, Spaulding 64/67, Rebol 56/60 (open = advisor fields, investable
+assets, and a basis difference when the newest return is an older year).
+Fixed today: scanned IC forms read by Claude (_Audit/ic_form.json), Otter
+.pages read (iwork.py), portal comments fed to the checklist and to the
+counts, Schedule C and Aprio-style 1120-S tax basis, Debt Sheet template
+(practice and personal, Business column, file-name side), count tables in
+.docx, practice address from the letterhead under the dental name, home from
+the newest return with a move noted, fee positioning from the study table
+when the file name has no % (Rebol -11.26%, Spaulding -4.79%, both exact).
+Fee studies are done BEFORE the notes; the notes only read the result.
+OPEN: opening Rebol took ~18 min (re-audit after Claude's checklist took
+13 of them). Find out why the second audit pass is slow.
+
 # Pickup, Tuesday 27 October (goal: all the way to the consult deck)
 
 ## Where Monday ended

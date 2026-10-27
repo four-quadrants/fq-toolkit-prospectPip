@@ -131,13 +131,17 @@ def associates(roles, production_by_year, days_by_doctor, years, comp=None):
     return line + '.'
 
 
-def overhead(pnl_pct, tax_pct, stated_pct, year):
+def overhead(pnl_pct, tax_pct, stated_pct, year, tax_year=None):
     """The three bases in one line, because they are only useful together."""
     bits = []
     if pnl_pct is not None:
         bits.append('%.1f%% on the %s P&L' % (pnl_pct, year))
     if tax_pct is not None:
-        bits.append('%.1f%% on the return' % tax_pct)
+        if tax_year and tax_year != year:
+            bits.append('%.1f%% on the %s return (newest on file)'
+                        % (tax_pct, tax_year))
+        else:
+            bits.append('%.1f%% on the return' % tax_pct)
     if stated_pct is not None:
         bits.append('%.0f%% client-stated' % stated_pct)
     if not bits:
@@ -181,15 +185,22 @@ def bank_accounts(accounts, personal_expected=True):
 
 
 ADDRESS = re.compile(
-    r'\b(\d{3,5}\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?\s+'
-    r'(?:Dr|Drive|St|Street|Rd|Road|Ln|Lane|Way|Blvd|Ave|Avenue))'
-    r'[,\s]+([A-Z][a-z]+)[,\s]+([A-Z]{2})\s+(\d{5})', re.I)
+    # "298 S. 10th Street Suite 100, Noblesville IN 46060" was missed: the
+    # direction, a numbered street and the suite each broke the old pattern,
+    # so Spaulding's practice never counted and an insurer's address won.
+    r'\b(\d{2,5}\s+(?:[NSEW]\.?\s+)?(?:[A-Z0-9][A-Za-z0-9]+\s+){0,2}'
+    r'(?:Dr|Drive|St|Street|Rd|Road|Ln|Lane|Way|Blvd|Ave|Avenue|Ct|Court|'
+    r'Pkwy|Parkway|Pl|Place|Cir|Circle)\b\.?)'
+    r'(?:[,\s]+(?:Suite|Ste\.?|Unit|#)\s*\w+)?'
+    r'[,\s]+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)[,\s]+([A-Z]{2})\s+(\d{5})', re.I)
 
 
 SUFFIX = {'dr': 'Drive', 'drive': 'Drive', 'st': 'Street', 'street': 'Street',
           'rd': 'Road', 'road': 'Road', 'ln': 'Lane', 'lane': 'Lane',
           'ave': 'Avenue', 'avenue': 'Avenue', 'blvd': 'Boulevard',
-          'boulevard': 'Boulevard', 'way': 'Way'}
+          'boulevard': 'Boulevard', 'way': 'Way', 'ct': 'Court',
+          'court': 'Court', 'pkwy': 'Parkway', 'parkway': 'Parkway',
+          'pl': 'Place', 'place': 'Place', 'cir': 'Circle', 'circle': 'Circle'}
 
 
 def _normal_street(street):
@@ -217,24 +228,68 @@ def cache_dir(folder):
     return nested if os.path.isdir(nested) else direct
 
 
-def addresses(folder, head=1500):
-    """Addresses printed on the documents, commonest first.
+PRACTICE_WORDS = re.compile(r'dental|dentistry|\bDDS\b|\bDMD\b|orthodont|'
+                            r'oral surgery|endodont|periodont', re.I)
 
-    Read from the letterhead rather than asked for. Every bank statement, P&L
-    and tax return carries the practice address at the top, and the mortgage
-    statements carry the home; the one that appears most often on practice
-    documents is the practice.
-    """
+
+def _surname(folder):
+    base = os.path.basename(folder.rstrip('/'))
+    return re.split(r'[,\s]+', base.strip())[0] if base.strip() else ''
+
+
+def _scan_addresses(folder, head=1500):
+    """{address: [all, practice, household]} -- how often each address is
+    printed, how often under a dental name, how often under the family name
+    with no dental name (a statement mailed home)."""
     import collections
     import glob as _glob
-    seen = collections.Counter()
+    seen = collections.defaultdict(lambda: [0, 0, 0, '', ''])
+    sur = _surname(folder)
+    import classify as _classify
+    sur_re = re.compile(r'\b%s\b' % re.escape(sur), re.I) if len(sur) > 2 else None
     for path in _glob.glob(os.path.join(cache_dir(folder), '*.txt')):
-        text = ' '.join(open(path, errors='replace').read()[:head].split())
+        raw = open(path, errors='replace').read()
+        text = ' '.join(raw[:head].split())
+        year, is_return = None, False
         for m in ADDRESS.finditer(text):
             street, town, state, _zip = m.groups()
-            seen[(_normal_street(street), town.title(),
-                  state.upper())] += 1
-    return seen.most_common()
+            key = (_normal_street(street), town.title(), state.upper())
+            seen[key][0] += 1
+            before = text[max(0, m.start() - 160):m.start()]
+            if PRACTICE_WORDS.search(before):
+                seen[key][1] += 1
+            elif sur_re and sur_re.search(before[-90:]):
+                seen[key][2] += 1
+                # [3] the newest personal return carrying it, [4] the newest
+                # document of any kind. The return is the legal residence;
+                # banks keep mailing the old address for months after a move
+                # (Spaulding's 2026 statements still go to Westfield while
+                # her 2025 return says Noblesville).
+                if year is None:
+                    try:
+                        d = _classify.classify(raw)
+                        year = str(d.get('year') or '')
+                        is_return = d.get('doc_type') == 'personal_tax_return'
+                    except Exception:
+                        year, is_return = '', False
+                if is_return and year > seen[key][3]:
+                    seen[key][3] = year
+                if year > seen[key][4]:
+                    seen[key][4] = year
+    return seen
+
+
+def addresses(folder, head=1500):
+    """Addresses printed on the documents, practice first, then commonest.
+
+    Read from the letterhead rather than asked for. The practice is the
+    address printed under a dental name. Counting alone was not enough:
+    Spaulding's home appears on twice as many documents as her office, and
+    the commonest-address rule put her practice in her living room.
+    """
+    seen = _scan_addresses(folder, head)
+    ranked = sorted(seen.items(), key=lambda kv: (-kv[1][1], -kv[1][0]))
+    return [(k, v[0]) for k, v in ranked]
 
 
 def office(form, folder):
@@ -269,35 +324,53 @@ def office(form, folder):
 
 
 def residence(folder):
-    """The home address, which is whichever one is not the practice.
-
-    The practice is the address that appears most often, because it is on
-    every statement, return and report. The home turns up on the mortgage and
-    the retirement statements. So the second-commonest is the residence, and
-    nothing has to be told which town the practice is in.
-    """
+    """Town and state of the home, from the newest personal return. Any other
+    household address still on recent documents is named beside it, because
+    a move means a new mortgage, a sale, or both."""
+    seen = _scan_addresses(folder)
     got = residence_full(folder)
     if not got:
         return None
     _street, town, state = got
-    return '%s, %s' % (town, state)
+    out = '%s, %s' % (town, state)
+    mine = seen[got]
+    others = [(k, v) for k, v in seen.items()
+              if k != got and k[1].replace(' ', '').lower()
+              != town.replace(' ', '').lower() and v[2] >= 3]
+    others.sort(key=lambda kv: (kv[1][4], kv[1][2]), reverse=True)
+    if others:
+        k, v = others[0]
+        if v[3] and mine[3] and v[3] < mine[3]:
+            out += (' (moved from %s, %s, the address on the %s return'
+                    % (k[1], k[2], v[3]))
+            if v[4] > mine[3]:
+                out += '; %s statements still go there' % v[4]
+            out += ')'
+        else:
+            out += (' (%s statements also go to %s, %s: confirm)'
+                    % (v[4] or 'some', k[1], k[2]))
+    return out
 
 
 def residence_full(folder):
     """The home address with its street, as (street, town, state).
 
-    residence() deliberately prints town and state only, because that is what
-    the initial notes asked for. The Assumptions needs the street: the
-    property section states the address, and whoever pulls the market estimate
-    has to type it into Zillow. Reporting "no street address on file" because
-    the caller above happened to truncate it is how a figure that is sitting
-    in six documents comes to look missing.
+    The address printed under the family name on documents with no dental
+    name: statements mailed home. "Second-commonest address" was the old
+    rule and it picked a lender's office in Utah for Oyler, whose 401(k)
+    provider prints its own address on every page.
     """
-    found = addresses(folder)
-    if len(found) < 2:
+    seen = _scan_addresses(folder)
+    practice = addresses(folder)
+    office_key = practice[0][0] if practice else None
+    cands = [(k, v) for k, v in seen.items() if k != office_key and v[2]]
+    if not cands:
         return None
-    return found[1][0]
-
+    # The address on the newest personal return wins; failing that, the
+    # commonest. A move is reported by residence(), not hidden.
+    cands.sort(key=lambda kv: (kv[1][3], kv[1][2]), reverse=True)
+    best = cands[0]
+    return best[0]
 
 def schedule(form):
     """How many days the doctor and hygiene chairs run in a week.
@@ -388,10 +461,66 @@ def fee_study(folder):
         if best is None or weight > best[0]:
             best = (weight, pct, name)
     if not best:
-        return None, None
+        return fee_study_table(folder)
     _w, pct, name = best
     where = 'above' if pct > 0 else 'below'
     return pct, '%+.2f%% %s the benchmark (from %s).' % (pct, where, name)
+
+
+def _study_rows(path):
+    """[(practice fee, benchmark fee, percentile)] from a fee study PDF.
+
+    The study is a table exported from Numbers: zip, date, then for each
+    priced code its practice fee, the P80/P90 fee and the percentile, in
+    that order, before the code column is printed. Unpriced codes print N/A
+    and carry no row.
+    """
+    import fitz
+    with fitz.open(path) as doc:
+        text = doc[0].get_text()
+    head = text.split('D0120')[0]
+    toks = re.findall(r'(\d[\d,]*)USD|^\s*(\d{1,3})\s*$', head, re.M)
+    rows, money = [], []
+    for usd, pct in toks:
+        if usd:
+            money.append(float(usd.replace(',', '')))
+        elif pct and len(money) >= 2:
+            rows.append((money[-2], money[-1], int(pct)))
+            money = []
+    return rows
+
+
+def fee_study_table(folder):
+    """Fee positioning worked out from the study's own table, when the file
+    name does not carry the result ("Fee Study - 28801.pdf").
+
+    Brogan's figure is the mean of each code's (practice - benchmark) /
+    benchmark, leaving out codes that fall off the bottom or top of the
+    NDAS table (P10 or below, P95 or above). Checked against his notes:
+    Rebol -11.26% (three codes at P10 left out), Spaulding -4.79% (none).
+    """
+    import glob as _glob
+    for path in sorted(_glob.glob(os.path.join(folder, '**', '*.pdf'),
+                                  recursive=True)):
+        name = os.path.basename(path)
+        if not re.search(r'fee (study|comparison)', name, re.I):
+            continue
+        try:
+            rows = _study_rows(path)
+        except Exception:
+            continue
+        if len(rows) < 5:
+            continue
+        keep = [(a, b) for a, b, p in rows if 10 < p < 95 and b]
+        left = len(rows) - len(keep)
+        if not keep:
+            continue
+        pct = round(sum((a - b) / b for a, b in keep) / len(keep) * 100, 2)
+        where = 'above' if pct > 0 else 'below'
+        return pct, '%+.2f%% %s the benchmark (from %s, %d codes%s).' % (
+            pct, where, name, len(keep),
+            ', %d off the chart left out' % left if left else '')
+    return None, None
 
 
 ENTITY_LINE = re.compile(

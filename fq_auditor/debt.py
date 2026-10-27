@@ -73,7 +73,7 @@ def read_schedule(path):
     head = next((i for i, r in enumerate(rows)
                  if r and str(r[0]).strip().lower() == 'creditor'), None)
     if head is None:
-        return []
+        return read_debt_sheet(path, rows)
     cols = [str(c).strip() if c else '' for c in rows[head]]
 
     def col(*words):
@@ -106,6 +106,90 @@ def read_schedule(path):
             'source': os.path.basename(path),
             'as_of': next((cols[i] for i in reversed(bals)
                            if _num(r[i]) is not None), None),
+        })
+    return out
+
+
+def read_debt_sheet(path, rows):
+    """The firm's other template, the "Debt Sheet": practice AND personal.
+
+    Columns: Debt Description, Practice/Personal/Other, Bank/Lender,
+    Original Amount, Origination Date, Current Balance, Payment Terms,
+    Interest Rate, Minimum Payment, Extra Amount, Notes. Spaulding filled
+    this one in and the reader, which only knew the "Creditor" template,
+    returned nothing: no practice debt and no personal debt in her notes.
+    A row marked "Personal/Practice" is counted as personal; Brogan's own
+    $728k on 8 loans for her practice leaves it out.
+    """
+    head = None
+    for i, r in enumerate(rows):
+        cells = [str(c).strip().lower() for c in r if c]
+        if any('balance' in c for c in cells) and \
+                any('lender' in c or 'description' in c or 'loan' in c
+                    for c in cells):
+            head = i
+            break
+    if head is None:
+        return []
+    cols = [str(c).strip().lower() if c else '' for c in rows[head]]
+
+    def idx(*words):
+        # Words in order of preference: "minimum payment" before a bare
+        # "payment", which would otherwise find "Payment Terms" first.
+        for w in words:
+            for i, c in enumerate(cols):
+                if w in c:
+                    return i
+        return None
+
+    c_desc, c_side = idx('description'), idx('practice/personal', 'personal')
+    c_lender = idx('lender', 'bank', 'loan service')
+    c_orig = idx('original amount', 'original note', 'original')
+    c_bal, c_rate = idx('current balance', 'balance'), idx('interest rate', 'rate')
+    c_pay = idx('minimum payment', 'payment amt', 'payment')
+    c_terms = idx('payment terms', 'terms')
+    c_notes, c_start = idx('notes'), idx('origination')
+    c_end = idx('payoff', 'maturity', 'end date')
+
+    def cell(r, i):
+        return r[i] if i is not None and i < len(r) else None
+
+    out = []
+    for r in rows[head + 1:]:
+        if not r or not any(r):
+            continue
+        desc = cell(r, c_desc)
+        bal = _num(cell(r, c_bal))
+        if not desc or bal is None:
+            continue
+        side_txt = str(cell(r, c_side) or '').strip().lower()
+        # The side can be its own column ("Practice/Personal"), an unlabelled
+        # cell saying "Business" (Rebol), or only the file's name ("Business
+        # Debt YTD 2026 04.xlsx" beside "Personal Debt ...").
+        cells = {str(c).strip().lower() for c in r if isinstance(c, str)}
+        fname = os.path.basename(path).lower()
+        if side_txt in ('practice', 'business') or cells & {'practice', 'business'}:
+            side = 'Practice'
+        elif side_txt.startswith('personal') or 'personal' in cells:
+            side = 'Personal'
+        elif 'business' in fname or 'practice' in fname:
+            side = 'Practice'
+        else:
+            side = 'Personal'
+        notes = str(cell(r, c_notes) or '')
+        out.append({
+            'creditor': str(cell(r, c_lender) or desc).strip(),
+            'description': str(desc).strip(),
+            'original': _num(cell(r, c_orig)),
+            'balance': bal,
+            'rate': _num(cell(r, c_rate)),
+            'payment': _num(cell(r, c_pay)),
+            'maturity': _year_of(cell(r, c_end)) or _year_of(notes) or None,
+            'terms': cell(r, c_terms),
+            'started': cell(r, c_start),
+            'side': side,
+            'source': os.path.basename(path),
+            'as_of': 'current balance',
         })
     return out
 
@@ -205,6 +289,12 @@ def gather(folder):
         seen.add(digest)
         sched += read_schedule(path)
     statements = dedupe_statements(read_statements(folder))
+    # A Debt Sheet carries personal rows too. They are the client's own
+    # account; a mortgage statement for the same loan is not added twice.
+    personal_sheet = [r for r in sched if r.get('side') == 'Personal']
+    sched = [r for r in sched if r.get('side') != 'Personal']
+    if personal_sheet:
+        statements = personal_sheet
     prose = find_prose(folder)
 
     def total(rows, key):

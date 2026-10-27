@@ -48,7 +48,7 @@ def _form_text(path):
 # Brogan would put it. The answer alone ("True. I am not satisfied.") loses
 # what he is not satisfied with.
 STATEMENTS = [
-    ('willing to settle', 'True', 'not willing to settle where he is'),
+    ('willing to settle', 'True', 'not willing to settle where things are'),
     ('practice bank account balances', 'True',
      'not satisfied with the practice bank balances'),
     ('should be making more', 'True', 'should be making more for the work'),
@@ -63,12 +63,22 @@ STATEMENTS = [
 ]
 
 
-def own_words(form_path):
+def own_words(form_path, form=None):
     """The form's answers that name a problem, in short form."""
-    if not form_path:
+    out = []
+    # A scanned form has been read already: its statements arrive as pairs.
+    if form and form.get('_statements'):
+        for pair in form['_statements']:
+            if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+                continue
+            stmt, ans = str(pair[0]), str(pair[1]).strip()
+            for key, pain, short in STATEMENTS:
+                if key in stmt and ans.startswith(pain) and short not in out:
+                    out.append(short)
+        return out
+    if not form_path or not form_path.lower().endswith('.eml'):
         return []
     lines = [l.strip() for l in _form_text(form_path).splitlines() if l.strip()]
-    out = []
     for i, line in enumerate(lines[:-1]):
         nxt = lines[i + 1]
         for key, pain, short in STATEMENTS:
@@ -91,23 +101,72 @@ def _last(by_year):
     return (ys[-1], by_year[ys[-1]]) if ys else (None, None)
 
 
-def themes(form, form_path, p, t, latest, series, fee, debt_head):
+def call_needs(folder):
+    """What the Otter call summaries say the client needs and objects to.
+
+    Otter's summary carries labelled lines ("Need", "Objections",
+    "Competition") as a heading on one line and the answer on the next.
+    """
+    import glob
+    import os
+    out = []
+    if not folder:
+        return out
+    paths = []
+    for pat in ('*.pages', '*/*.pages', '*/*/*.pages'):
+        paths += glob.glob(os.path.join(folder, pat))
+    try:
+        import iwork
+    except ImportError:
+        return out
+    for p in sorted(set(paths)):
+        if 'otter' not in os.path.basename(p).lower():
+            continue
+        try:
+            lines = [l.strip() for l in iwork.text_of(p).splitlines()]
+        except Exception:
+            continue
+        for head in ('Need', 'Objections', 'Competition'):
+            for i, l in enumerate(lines[:-1]):
+                if l == head and lines[i + 1]:
+                    out.append((head, lines[i + 1], os.path.basename(p)))
+                    break
+    return out
+
+
+def themes(form, form_path, p, t, latest, series, fee, debt_head, folder=None):
     """[(theme, evidence or None, source)] in the order Brogan lists them."""
     s = {name: vals for name, vals, _fmt in series}
     out = []
 
-    words = own_words(form_path)
+    words = own_words(form_path, form)
+    # A pain note is a phrase, not a name: Casey writes "PAIN 1) Kelly" to
+    # say whose pain follows, and that line alone says nothing.
+    said = [str(x).strip() for x in (form.get('_pain') or [])
+            if len(str(x).split()) >= 3]
+    if form.get('_challenges'):
+        said.append('top challenges: %s' % ', '.join(
+            x.strip(' .') for x in str(form['_challenges']).splitlines()
+            if x.strip()))
+    calls = call_needs(folder)
+    for head, line, _src in calls:
+        if head == 'Need':
+            said.append('on the call: %s' % line)
+    allw = said + words
     out.append(('Dentist pain, their words',
-                '; '.join(words) if words else None,
-                'IC form true/false page' if words else
+                '; '.join(allw) if allw else None,
+                'IC form, Casey\'s notes and call summary' if allw else
                 'Add from the initial call'))
+    for head, line, src in calls:
+        if head in ('Objections', 'Competition'):
+            out.append(('%s (call)' % head, line, src))
 
     # Retirement
     bits = []
     if (form.get('retire_basis') or '').strip().lower() in ('guess', 'a guess'):
         bits.append('target %s was a guess' % (form.get('retire_target') or '?'))
     if form.get('saved_liquid'):
-        bits.append('liquid if he walked away: "%s"' % form['saved_liquid'])
+        bits.append('liquid if walking away today: "%s"' % form['saved_liquid'])
     for w in words:
         if 'retirement' in w:
             bits.append(w)
@@ -123,7 +182,8 @@ def themes(form, form_path, p, t, latest, series, fee, debt_head):
         if tax_oh:
             bits.append('%s on the return' % _pct(tax_oh / 100.0))
         if form.get('overhead_stated'):
-            bits.append('he thinks %s' % form['overhead_stated'])
+            stated = str(form['overhead_stated']).strip()
+            bits.append('client thinks %s' % (stated if stated.endswith('%') else stated + '%'))
         out.append(('OH improvements', ', '.join(bits) +
                     '. Target is the advisor\'s call.', 'P&L, return, IC form'))
 
@@ -139,7 +199,11 @@ def themes(form, form_path, p, t, latest, series, fee, debt_head):
     if hyg is not None and hyg < 0.25:
         eff.append('hygiene %s of production (%s)' % (_pct(hyg), y))
     nps = s.get('new patients', {})
-    full = [yy for yy in sorted(nps) if nps.get(yy)]
+    # Full years only. The current year is a year to date, and "660 to 371"
+    # compared twelve months of Oyler's with seven.
+    import datetime
+    this_year = str(datetime.date.today().year)
+    full = [yy for yy in sorted(nps) if nps.get(yy) and yy < this_year]
     if len(full) >= 2 and nps[full[-2]] and nps[full[-1]] < nps[full[-2]]:
         eff.append('new patients %s to %s (%s to %s)'
                    % (format(nps[full[-2]], ','), format(nps[full[-1]], ','),

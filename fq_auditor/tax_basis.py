@@ -35,15 +35,16 @@ each year's figure beneath.
 """
 import os
 import re
-import sys
+import sys  # noqa: F401
 import glob
 import json
 import argparse
 
 # The lines this needs, matched on a distinctive fragment of the printed label.
 WANT = [
-    ('gross_receipts',   r'gross receipts less returns'),
-    ('total_income',     r'total income \(loss\)'),
+    ('gross_receipts',   r'gross receipts (less returns|or sales)'),
+    # "Total income (loss)" on most; Aprio prints a bare "TOTAL INCOME".
+    ('total_income',     r'total income\s*(\(loss\)|$)'),
     ('officer_comp',     r'compensation of officers'),
     ('salaries',         r'salaries/wages'),
     ('depreciation',     r'^\s*depreciation\b'),
@@ -52,11 +53,11 @@ WANT = [
     ('ordinary_income',  r'ordinary business income'),
 ]
 
-NUM = re.compile(r'^\(?-?[\d,]+\)?$')
+NUM = re.compile(r'^\(?-?[\d,]+\)?\.?$')
 
 
 def _num(s):
-    s = s.strip().replace(',', '')
+    s = s.strip().rstrip('.').replace(',', '')
     neg = s.startswith('(') and s.endswith(')')
     s = s.strip('()')
     try:
@@ -96,6 +97,13 @@ def parse(text):
                 vals = vals[:2]
             out[key] = vals[:2]
             break
+    # Some preparers print Prior Year before Current Year (Rebol's Aprio
+    # returns); everything downstream expects the newest year first.
+    head = text or ''
+    pi, ci = head.find('Prior Year'), head.find('Current Year')
+    if 0 <= pi < ci:
+        out = {k: list(reversed(v)) if len(v) == 2 else v
+               for k, v in out.items()}
     return out
 
 
@@ -134,9 +142,13 @@ def find_returns(folder):
             continue
         for name in files:
             low = name.lower()
-            if not low.endswith('.pdf') or 's-corporation' not in low:
+            if not low.endswith('.pdf'):
                 continue
-            if 'clientcopy' not in low.replace(' ', ''):
+            compact = low.replace(' ', '').replace('-', '').replace('_', '')
+            if 'scorporation' not in compact and '1120s' not in compact:
+                continue
+            # A preparer file copy is the same return as the client copy.
+            if 'preparer' in compact:
                 continue
             if '_k1_' in low or 'k1' in low.split('_')[-1]:
                 continue
@@ -158,11 +170,97 @@ def read_return(path, pages=6):
     try:
         for i in range(min(pages, doc.page_count)):
             text = doc[i].get_text()
-            if 'Total deductions' in text:
+            if 'total deductions' in text.lower():
                 return text
     finally:
         doc.close()
     return ''
+
+
+NUMLINE = re.compile(r'^\(?\d{1,3}(?:,\d{3})+\)?$|^\d{3,}$')
+
+
+def _schedule_c(text):
+    """Tax-basis overhead from a Schedule C in a 1040, or None.
+
+    A sole proprietor (Spaulding) files no 1120-S; the practice is on
+    Schedule C. The figures print in a column with the labels elsewhere, so
+    the lines are found by arithmetic rather than position: line 28 (total
+    expenses) is the figure that equals the sum of the run before it, and
+    that run starts after line 7 (gross income). Depreciation (line 13) is
+    the expense figure that reappears on Form 4562.
+    """
+    best = None
+    for m in re.finditer(r'Profit or Loss From Business', text):
+        seg = text[m.end():m.end() + 6000]
+        cut = seg.find('Part III')
+        seg = seg[:cut] if cut > 0 else seg
+        nums = [_num(l) for l in seg.split('\n') if NUMLINE.match(l.strip())]
+        nums = [n for n in nums if n is not None]
+        found = None
+        for j in range(4, len(nums)):
+            for i in range(0, j - 3):
+                # A real expense section has many lines and costs a practice
+                # most of its income; a short run that happens to add up
+                # (2024 matched one at 13%) is not it.
+                if nums[i] > 0 and j - i - 1 >= 6 \
+                        and abs(sum(nums[i + 1:j]) - nums[j]) < 2 \
+                        and 0.3 * nums[i] < nums[j] < nums[i] * 1.3:
+                    found = (i, j)
+                    break
+            if found:
+                break
+        if not found:
+            continue
+        i, j = found
+        gross, expenses, total = nums[i], nums[i + 1:j], nums[j]
+        if best is None or gross > best[0]:
+            best = (gross, expenses, total, m.start())
+    if not best:
+        return None
+    gross, expenses, total, _at = best
+    dep = 0.0
+    h = text.find('Depreciation and Amortization')
+    if h >= 0:
+        region = text[h:h + 8000]
+        for v in expenses:
+            if v >= 1000 and ('%s' % format(int(v), ',')) in region:
+                dep = max(dep, v)
+    oh = total - dep
+    return {
+        'income_base': round(gross, 2),
+        'total_deductions': round(total, 2),
+        'officer_comp': 0.0,
+        'depreciation_amort': round(dep, 2),
+        'overhead': round(oh, 2),
+        'overhead_pct': round(100.0 * oh / gross, 1),
+    }
+
+
+def gather_schedule_c(folder):
+    """{year: overhead} from Schedule C, read from the extracted text cache."""
+    out = {}
+    for cache in (os.path.join(folder, '.fq_cache'),
+                  os.path.join(folder, 'Original_sourcedocs', '.fq_cache')):
+        for p in sorted(glob.glob(os.path.join(cache, '*.txt')), reverse=True):
+            try:
+                text = open(p, errors='replace').read()
+            except OSError:
+                continue
+            if 'Profit or Loss From Business' not in text:
+                continue
+            m = (re.search(r'Schedule C \(Form 1040\) (20\d\d)', text) or
+                 re.search(r'\b1040\s+(20\d\d)\b', text[:600]))
+            if not m:
+                continue
+            year = m.group(1)
+            if year in out:
+                continue
+            got = _schedule_c(text)
+            if got:
+                got['source'] = 'Schedule C, %s 1040' % year
+                out[year] = got
+    return out
 
 
 def gather(folder):
@@ -185,6 +283,8 @@ def gather(folder):
             if got and year not in out:
                 got['source'] = os.path.basename(path)
                 out[year] = got
+    if not out:
+        out = gather_schedule_c(folder)
     return out
 
 

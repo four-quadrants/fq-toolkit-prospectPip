@@ -96,6 +96,119 @@ def _plain(path):
     return [l.strip() for l in text.split('\n') if l.strip()]
 
 
+SCAN_NAME = re.compile(r'casey notes|ic form|ic-form|fast track|intake form', re.I)
+SCAN_EXT = ('.pdf', '.jpg', '.jpeg', '.png', '.heic', '.tif', '.tiff')
+IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.heic', '.tif', '.tiff')
+
+
+def _client_of(path):
+    d = os.path.dirname(os.path.abspath(path))
+    if os.path.basename(d).lower().startswith('original'):
+        d = os.path.dirname(d)
+    return d
+
+
+def find_scan(folder):
+    """A printed-and-annotated IC form: a PDF scan or phone photos.
+
+    Spaulding's arrived as "Casey notes.pdf", Rebol's as "Casey notes.jpeg"
+    plus three IMG_ photos of the other pages, all with Casey's handwriting
+    on them. Photos taken together sit together, so every image beside the
+    named one is taken as another page of it.
+    """
+    for d in (folder, os.path.join(folder, 'Original_sourcedocs')):
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for n in names:
+            if n.lower().endswith(SCAN_EXT) and SCAN_NAME.search(n):
+                return os.path.join(d, n)
+    return None
+
+
+def scan_pages(path):
+    """The named scan, plus the photos beside it if it is a photo."""
+    if not path.lower().endswith(IMAGE_EXT):
+        return [path]
+    d = os.path.dirname(path)
+    return [path] + [os.path.join(d, n) for n in sorted(os.listdir(d))
+                     if n.lower().endswith(IMAGE_EXT)
+                     and os.path.join(d, n) != path]
+
+
+def parse_scan(path):
+    """Read a scanned or photographed IC form by asking Claude to look at it.
+
+    OCR cannot: the pages are rotated photos with handwriting across the
+    printed answers. Claude reads the printed answer for each question and,
+    separately, Casey's handwritten notes, which carry the pain points.
+    Cached in the client's _Audit/ic_form.json against the files' sizes and
+    dates, so it is asked once per form.
+    """
+    pages = scan_pages(path)
+    client = _client_of(path)
+    stamp = {os.path.basename(p): [os.path.getsize(p), int(os.path.getmtime(p))]
+             for p in pages}
+    cache = os.path.join(client, '_Audit', 'ic_form.json')
+    try:
+        with open(cache) as fh:
+            got = json.load(fh)
+        if got.get('files') == stamp:
+            return got.get('form') or {}
+    except (OSError, ValueError):
+        pass
+
+    try:
+        import ask_claude
+    except ImportError:
+        return {}
+    if not ask_claude.available():
+        return {}
+    keys = '\n'.join('  "%s": the answer to the question matching /%s/'
+                     % (k, pat) for k, pat in FIELDS)
+    prompt = """These files are a dental prospect's "IC Form Fast Track", a HubSpot form
+printed out and annotated by hand. Some are photos taken sideways. Read every
+page with the Read tool:
+%s
+
+Each printed question is followed by the client's printed answer. Reply with
+only JSON:
+{
+  "fields": {
+%s
+  },
+  "statements": [["the printed true/false statement", "the printed answer"]],
+  "challenges": "the printed answer to 'What are your Top 3+ Challenges', or null",
+  "handwritten": ["each handwritten note, transcribed as written"],
+  "pain": ["each item written under a handwritten PAIN heading, if any"]
+}
+Use the PRINTED answer for fields, exactly as printed; null when the question
+is not on the pages or was left blank. Never use a handwritten note as a
+field's answer. Do not guess at handwriting you cannot read; skip it.""" % (
+        '\n'.join('  ' + p for p in pages), keys)
+    try:
+        ans = ask_claude.ask_json(prompt, add_dirs=[os.path.dirname(path)],
+                                  timeout=600)
+    except Exception:
+        return {}
+    if not ans:
+        return {}
+    form = {k: str(v).strip() for k, v in (ans.get('fields') or {}).items()
+            if v not in (None, '', 'null')}
+    form['_statements'] = ans.get('statements') or []
+    form['_challenges'] = ans.get('challenges')
+    form['_handwritten'] = ans.get('handwritten') or []
+    form['_pain'] = ans.get('pain') or []
+    try:
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        with open(cache, 'w') as fh:
+            json.dump({'files': stamp, 'form': form}, fh, indent=1)
+    except OSError:
+        pass
+    return form
+
+
 def parse(path):
     """{field: answer} for every question the form actually asked.
 
@@ -104,6 +217,8 @@ def parse(path):
     that is itself a question — the next label — means the client left it blank,
     and it is recorded as absent rather than as that label's text.
     """
+    if not path.lower().endswith('.eml'):
+        return parse_scan(path)
     lines = _plain(path)
     if not lines:
         return {}
@@ -170,7 +285,7 @@ def find_form_near(folder):
     form: age 58, retiring at 68, $800,000 take-home, 16 chairs, and his
     email address, all printed as theirs.
     """
-    got = find_form(folder)
+    got = find_form(folder) or find_scan(folder)
     if got:
         return got
     parent = os.path.dirname(folder.rstrip('/'))

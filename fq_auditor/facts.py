@@ -18,6 +18,7 @@ is absent -- what is needed to get it and why that matters. A figure stripped
 of its source is the thing this whole project exists to stop producing.
 """
 import os
+import re
 import sys
 import argparse
 from collections import namedtuple
@@ -178,7 +179,10 @@ def gather(folder, client=None):
     full = [y for y in years if (pnl.get(y, {}).get('months') or 0) >= 12]
     latest = full[-1] if full else (years[-1] if years else None)
     p = pnl.get(latest, {})
-    t = tax.get(latest, {})
+    # The newest return on file when the P&L year has none yet: Rebol's 2024
+    # return is missing, and a blank tax basis hid the 2023 one.
+    tax_year = latest if latest in tax else (max(tax) if tax else None)
+    t = tax.get(tax_year, {}) if tax_year else {}
 
     # ------------------------------------------------------------- practice
     practice = [
@@ -197,7 +201,9 @@ def gather(folder, client=None):
             {y: _providers_for(prod, y) for y in years},
             (_pf.gather(folder) or {}).get('doctor_days') or {},
             years, form.get('associate_comp'))
-            or form.get('associate_comp'), TEXT,
+            or form.get('associate_comp')
+            or ('None' if str(form.get('has_associates') or '').strip()
+                .lower().startswith('no') else None), TEXT,
              'Provider Summary, days-worked document, IC form',
              'composed'),
         Fact('Chairs', form.get('chairs_total') and
@@ -219,14 +225,17 @@ def gather(folder, client=None):
         Fact('New patients', _compose.new_patients(form, counts, years), TEXT,
              'IC form and the count documents', 'stated against counted'),
         Fact('Ownership', form.get('ownership'), TEXT, ic_name),
-        Fact('Collections projected', _ic.money(form.get('collections_proj')),
-             MONEY, ic_name, 'projected collections this year'),
+        Fact('Collections projected', _ic.money(form.get('collections_proj'))
+             or form.get('collections_proj'),
+             MONEY if _ic.money(form.get('collections_proj')) else TEXT,
+             ic_name, 'projected collections this year'),
         Fact('Practice management software', form.get('pms'), TEXT, ic_name,
              'practice management software'),
         Fact('Fees off by', _compose.fee_study(folder)[1], TEXT,
              'Documents/Business/Fees', 'the fee study result',
-             needed='Run the fee-comparison skill; its output lands in '
-                    'Documents/Business/Fees and is read from there',
+             needed='The fee study is done before the notes. Put its result '
+                    '(e.g. "Fee Study -4.79%.pdf") in Documents/Business/Fees '
+                    'and rebuild',
              why='Sizes the single easiest revenue lever'),
     ]
 
@@ -234,7 +243,7 @@ def gather(folder, client=None):
     overhead = [
         Fact('Overhead', _compose.overhead(
             p.get('overhead_pct'), t.get('overhead_pct'),
-            _ic.money(form.get('overhead_stated')), latest), TEXT,
+            _ic.money(form.get('overhead_stated')), latest, tax_year), TEXT,
              'P&L, 1120-S and IC form', 'composed'),
         Fact('Overhead, client says', _pct(_ic.money(form.get('overhead_stated'))),
              PCT, ic_name, 'approximate overhead percentage'),
@@ -243,11 +252,12 @@ def gather(folder, client=None):
              'Expenses + Other Expenses less doctor wages and D&A, '
              'over Income + Other Income'),
         Fact('Overhead, tax basis', _pct(t.get('overhead_pct')), PCT,
-             t.get('source'), 'total deductions less officer comp and '
+             t.get('source') and '%s (%s)' % (t.get('source'), tax_year),
+             'total deductions less officer comp and '
                               'depreciation, over total income'),
         Fact('Basis difference', _pct((p.get('overhead_pct') or 0) -
                                       (t.get('overhead_pct') or 0))
-             if (p and t) else None, PCT, 'derived',
+             if (p and t and tax_year == latest) else None, PCT, 'derived',
              'P&L basis less tax basis'),
         Fact('Income base (overhead denominator)', p.get('income_base'),
              MONEY, 'P&L %s' % latest if p else None,
@@ -335,8 +345,15 @@ def gather(folder, client=None):
         Fact('Dependents', _ic.money(form.get('dependents')), NUM, ic_name),
         Fact('Take-home, stated', _ic.money(form.get('take_home')), MONEY,
              ic_name, 'annual take-home pay'),
-        Fact('Retirement age goal', _ic.money(form.get('retire_age')), NUM,
-             ic_name, 'retirement age goal'),
+        # A number when they gave one; their words when they wrote a sentence
+        # (Rebol: "down to 3 days a week ... by 55 and able to walk away by
+        # 65" was read as age 3).
+        Fact('Retirement age goal',
+             _ic.money(form.get('retire_age'))
+             if re.fullmatch(r'\s*\d{2}\s*', str(form.get('retire_age') or ''))
+             else form.get('retire_age'),
+             NUM if re.fullmatch(r'\s*\d{2}\s*', str(form.get('retire_age') or ''))
+             else TEXT, ic_name, 'retirement age goal'),
         Fact('Retirement target', form.get('retire_target'), TEXT, ic_name,
              'how much do you think you need',
              note='Client says this was arrived at by: %s'
@@ -496,7 +513,8 @@ def gather(folder, client=None):
         rows = _pp.themes(form, src, p, t, latest, series,
                           _compose.fee_study(folder),
                           _compose.practice_debt(debts.get('practice') or (),
-                                                 debts.get('unread') or ()))
+                                                 debts.get('unread') or ()),
+                          folder)
         blocks.append(Block('Pain points and consult themes', [
             Fact(theme, evidence, TEXT, source, 'pain point',
                  needed=('Advisor' if source == 'Advisor'

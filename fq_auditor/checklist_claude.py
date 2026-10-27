@@ -162,7 +162,31 @@ def relevant(item, docs, cap=60):
     return out[:cap]
 
 
-def build_prompt(item, docs, names):
+def portal_comments(folder):
+    """Everything typed on the LaunchBay tasks, client and team.
+
+    Clients answer half the list by typing: birthdates, patient counts,
+    doctor days, "no line of credit", "no current financial plan". Without
+    these, Spaulding scored 52% for a client who had answered all of it.
+    """
+    for p in (os.path.join(folder, 'launchbay_tasks.json'),
+              os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+        try:
+            with open(p) as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        out = []
+        for task in data.get('tasks') or ():
+            for c in task.get('comments') or ():
+                if c.get('text'):
+                    out.append('  - %s: %s' % (c.get('who') or '?',
+                                               ' '.join(c['text'].split())))
+        return out
+    return []
+
+
+def build_prompt(item, docs, names, comments=()):
     lines = []
     for d in docs:
         bits = [b for b in (d['type'], d['side'], d['year'], d['period'],
@@ -189,6 +213,9 @@ WHAT WAS ASKED OF THE CLIENT:
 WHAT THE CLIENT HAS SENT, with what we read from each:
 %s
 
+WHAT WAS TYPED IN THE PORTAL (client and team messages):
+%s
+
 Has the ask been satisfied?
 
 Reply with only JSON:
@@ -205,8 +232,14 @@ How to judge:
 - "Most recent" means most recent when the client sent it. Do not mark an item
   partly because a newer statement or stub may exist by now; the request is
   judged as of when it was answered, not as of today.
-- Judge only from the list above. Do not open other files in the folder, and
-  do not speculate about zips, temp files or files that could not be read.
+- Judge only from the two lists above. Do not open other files in the folder,
+  and do not speculate about zips, temp files or files that could not be read.
+- A typed answer in the portal counts. Counts, dates, birthdates and similar
+  facts typed by the client satisfy an ask for that information. "We don't
+  have one" (no line of credit, no financial plan, no pay stubs because the
+  owner takes draws) settles the ask: mark it satisfied and say why.
+- A sole proprietor has no separate practice return; the practice is the
+  Schedule C inside the personal 1040.
 
 How to write the asks:
 - If it is satisfied, asks is an empty list.
@@ -221,6 +254,7 @@ How to write the asks:
   2026 statement for the practice account ending 4728. We have March to May."
   is the whole thing.""" % (
         asked, extra, '\n'.join(lines) or '  (nothing relevant has arrived)',
+        '\n'.join(comments) or '  (nothing typed)',
         SCHEMA)
 
 
@@ -234,13 +268,14 @@ def main():
     items = load_checklist(a.folder)
     docs = inventory(a.folder)
     names = names_for(a.folder)
+    comments = portal_comments(a.folder)
     if a.only:
         items = [i for i in items if i.get('id') == a.only]
     print('%d checklist items, %d documents\n' % (len(items), len(docs)))
 
     if not a.run:
         item = items[0]
-        print(build_prompt(item, relevant(item, docs), names))
+        print(build_prompt(item, relevant(item, docs), names, comments))
         print('\n[dry run. add --run to ask]')
         return
 
@@ -252,7 +287,7 @@ def main():
     cdir = os.path.join(a.folder, CACHE, 'checklist')
     out, counts = {}, {}
     for item in items:
-        prompt = build_prompt(item, relevant(item, docs), names)
+        prompt = build_prompt(item, relevant(item, docs), names, comments)
         try:
             ans = ask_claude.ask_json(prompt, cache_dir=cdir,
                                       add_dirs=[os.path.abspath(a.folder)])
