@@ -22,6 +22,7 @@ that stopped at the first error would give them nothing and look like a broken
 tool rather than a missing document.
 """
 import os
+import re
 import sys
 import time
 import argparse
@@ -46,9 +47,18 @@ TITLES = {
 
 
 def _surname(folder, client):
+    # The folder is "Oyler, Brian - TEST": the surname is before the comma.
+    # Taking the last word of the client string named Oyler's workbook
+    # "Cash flow - TEST".
+    base = os.path.basename(folder.rstrip('/'))
+    if ',' in base:
+        return base.split(',')[0].strip()
     if client:
-        return client.split('|')[0].strip().split()[-1]
-    return os.path.basename(folder.rstrip('/')).split(',')[0].strip()
+        words = [w for w in re.split(r'[\s,|]+', client)
+                 if w and w.upper() != 'TEST' and w not in ('-', 'Dr', 'Dr.')]
+        if words:
+            return words[-1]
+    return base.strip()
 
 
 def step_workbook(folder, client, outdir):
@@ -67,8 +77,18 @@ def step_workbook(folder, client, outdir):
 
 def step_cashflow(folder, client, outdir):
     import cashflow as _cf
-    import cashflow_workbook as _cwb
+    import cashflow_book as _cwb       # the toolkit's own layout (27 Oct)
     entities = _cf.build(folder)
+    # The household's fixed payments (mortgages, insurance, savings) are
+    # found by for_assumptions, not by build; carry them onto the Personal
+    # tab so the workbook's totals are the Assumptions' totals.
+    try:
+        fixed_rows = _cf._liabilities(folder)
+        for e in entities or ():
+            if e['name'] == 'Personal' and not e.get('liabilities'):
+                e['liabilities'] = list(fixed_rows)
+    except Exception:
+        pass
     if not entities:
         raise RuntimeError('no readable bank statements in this folder')
     out = os.path.join(outdir, 'Cash flow - %s.numbers'

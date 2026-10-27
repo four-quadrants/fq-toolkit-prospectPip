@@ -733,6 +733,9 @@ input[type=text]{font:inherit;font-size:14px;padding:9px 11px;border:1px solid #
 button.primary{background:#E8792B;color:#fff;border:0;font:inherit;font-size:15px;font-weight:600;
       padding:11px 22px;border-radius:9px;cursor:pointer}
 button.primary:disabled{opacity:.5;cursor:default}
+/* Built and current: nothing to do, so not the colour that says "press me". */
+button.primary.done{background:var(--fq-baby-pale);color:var(--fq-navy);
+      border:1px solid var(--fq-baby);font-weight:500}
 button.ghost{background:#fff;border:1px solid #D8D4CA;font:inherit;font-size:13px;
       padding:7px 13px;border-radius:8px;cursor:pointer}
 .crumb{font:12.5px ui-monospace,Menlo,monospace;color:#5A6270;background:#F2F0EB;
@@ -755,7 +758,7 @@ button.ghost{background:#fff;border:1px solid #D8D4CA;font:inherit;font-size:13p
 pre.log{background:#141C28;color:#cfe3ff;border-radius:9px;padding:14px;font:12.5px/1.6 ui-monospace,Menlo,monospace;
       white-space:pre-wrap;max-height:320px;overflow:auto;margin:0}
 .step{display:flex;gap:11px;align-items:flex-start;margin:9px 0;font-size:14px}
-.step b{background:var(--fq-slate);color:#fff;width:21px;height:21px;border-radius:50%;
+.step > b{background:var(--fq-slate);color:#fff;width:21px;height:21px;border-radius:50%;
       display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 21px}
 /* The filing bar used to sit above the review, which put the irreversible
    button in the path of someone still reading. It now sits under the review,
@@ -1074,6 +1077,29 @@ function buildReady(){
   });
   document.getElementById('buildwho').textContent =
     FOLDER ? FOLDER.split('/').pop() : 'No client chosen yet';
+  buildState();
+}
+// Orange only when an output is missing or older than what it is built
+// from. Built and current: pale blue, saying when, still pressable.
+function buildState(){
+  if(!FOLDER) return;
+  fetch('/api/outputstatus?folder='+encodeURIComponent(FOLDER))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      [['buildgo','workbook','Initial notes'],['cfgo','cashflow','Cash flow workbook'],
+       ['asgo','assumptions','Assumptions'],['consultgo','deck','Deck']].forEach(function(x){
+        var b=document.getElementById(x[0]), st=d[x[1]];
+        if(!b || b.disabled || !st) return;
+        if(st.current){
+          b.classList.add('done');
+          b.textContent=x[2]+' built '+st.when+' \u2713  (rebuild)';
+          b.title=st.why||'';
+        } else {
+          b.classList.remove('done');
+          b.title=st.why||'';
+        }
+      });
+    }).catch(function(){});
 }
 // One runner for both build buttons: the same job, the same log, the
 // outputs turned into buttons that open them.
@@ -1811,6 +1837,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(rp, 'rb') as fh:
                 return self._send(200, fh.read(), 'text/html; charset=utf-8')
 
+        if p == '/api/outputstatus':
+            folder = (q.get('folder') or [''])[0]
+            if not self._guard(folder):
+                return
+            return self._send(200, json.dumps(output_status(folder)))
+
         if p == '/api/filestatus':
             # How many documents are still to be filed, written by the last
             # audit run. Drives the Build File Tree button's colour and words.
@@ -2427,6 +2459,72 @@ SAVE_SHIM = r"""
 </script>
 """
 
+
+
+OUTPUTS = {
+    'workbook': ('Initial notes', '.xlsx'),
+    'cashflow': ('Cash flow', '.numbers'),
+    'assumptions': ('Assumptions', '.pdf'),
+    'deck': ('Consult deck', '.pptx'),
+}
+
+
+def output_status(folder):
+    """For each build button: is its output there, and newer than everything
+    it is built from (the client's documents, typed answers, the IC form
+    reading, the fee study, and the toolkit's own code)?"""
+    import datetime as _dt
+    out_dir = os.path.join(folder, '_Audit')
+
+    def newest(paths):
+        best, what = 0, ''
+        for p in paths:
+            try:
+                m = os.path.getmtime(p)
+            except OSError:
+                continue
+            if m > best:
+                best, what = m, p
+        return best, what
+
+    inputs = []
+    for d in ('Original_sourcedocs', os.path.join('Documents', 'Business', 'Fees')):
+        root = os.path.join(folder, d)
+        if os.path.isdir(root):
+            inputs += [os.path.join(root, n) for n in os.listdir(root)
+                       if not n.startswith('.')]
+    for n in ('launchbay_tasks.json', 'launchbay_manifest.json'):
+        inputs.append(os.path.join(folder, n))
+    for n in ('ic_form.json', 'plan_inputs.json', 'cashflow_review.json'):
+        inputs.append(os.path.join(out_dir, n))
+    code = [os.path.join(HERE, n) for n in os.listdir(HERE) if n.endswith('.py')
+            and n not in ('fq_app.py', 'preflight.py', 'deploy.py')]
+    in_t, in_what = newest(inputs)
+    code_t, code_what = newest(code)
+
+    try:
+        names = os.listdir(out_dir)
+    except OSError:
+        names = []
+    status = {}
+    for key, (prefix, ext) in OUTPUTS.items():
+        made = [os.path.join(out_dir, n) for n in names
+                if n.startswith(prefix) and n.endswith(ext)]
+        t, _ = newest(made)
+        if not t:
+            status[key] = {'current': False, 'why': 'not built yet'}
+            continue
+        when = _dt.datetime.fromtimestamp(t).strftime('%-m/%-d %-I:%M%p').lower()
+        if in_t > t:
+            why = 'newer document: %s' % os.path.basename(in_what)
+            status[key] = {'current': False, 'when': when, 'why': why}
+        elif code_t > t:
+            status[key] = {'current': False, 'when': when,
+                           'why': 'the toolkit changed since (%s)'
+                                  % os.path.basename(code_what)}
+        else:
+            status[key] = {'current': True, 'when': when, 'why': 'up to date'}
+    return status
 
 
 class Server(socketserver.ThreadingTCPServer):

@@ -57,6 +57,12 @@ R_ENDING = 8
 R_ADJ_FIRST = 10
 R_ADJ_OUT = 16
 R_ADJ_IN = 17
+# Where the toolkit's own adjustments go: an input line INSIDE each block, so
+# the template's SUM picks them up. Writing to the total rows (16 and 17)
+# did nothing, because those are formulas and are never overwritten; every
+# workbook went out with zero adjustments while the figures were computed.
+R_ADJ_OUT_LINE = R_ADJ_FIRST + 1          # 0-based 11: summed by row 16
+R_ADJ_IN_LINE = R_ADJ_IN + 2              # 0-based 19: summed by row 17
 R_LESS_ADJ = 25
 R_WEIGHTS = 27
 R_AVG_WEIGHTED = 29
@@ -159,17 +165,50 @@ class Filler(object):
         self._surplus()
         self._liabilities(need)
 
+        self._review_list()
         for row, col, text in self.notes:
             # A cell that already has a comment cannot take another without
             # being treated as a reply, and the template's seed comments
             # sit at B2 on every sheet.
-            if self.t.cell(row, col).comments:
+            # Older numbers-parser (the iMac's) has no comment support at all;
+            # the workbook is still right without them, just less explained.
+            try:
+                if getattr(self.t.cell(row, col), 'comments', None):
+                    continue
+            except Exception:
+                continue
+            if not hasattr(self.t, 'add_comment'):
                 continue
             try:
                 self.t.add_comment(row, col, text, author=AUTHOR)
             except Exception:
                 pass          # a comment is never worth losing the file over
         return self.t
+
+    def _review_list(self):
+        """Every movement awaiting the analyst, written out under the sheet.
+
+        These used to live only in cell comments, and the iMac's
+        numbers-parser cannot write comments, so the workbook arrived with
+        "36 movements need a decision" and nothing on the page saying which.
+        A visible list works with every version and is easier to work down.
+        """
+        rows = list(self.e.get('adjustments') or ())
+        if not rows:
+            return
+        start = self.t.num_rows + 2
+        self.t.write(start, 1, 'TO REVIEW: %d movement%s need a decision'
+                     % (len(rows), '' if len(rows) == 1 else 's'))
+        heads = ('Account', 'Period', 'Kind', 'Amount', 'Why it is flagged')
+        for c, h in enumerate(heads, 1):
+            self.t.write(start + 1, c, h)
+        for k, (acct, per, kind, amount, why, conf) in enumerate(rows):
+            r = start + 2 + k
+            self.t.write(r, 1, acct)
+            self.t.write(r, 2, per)
+            self.t.write(r, 3, kind)
+            self.t.write(r, 4, float(amount or 0))
+            self.t.write(r, 5, '%s [%s]' % (' '.join(str(why).split()), conf))
 
     def _copy_formula(self, from_row, from_col, to_row, to_col):
         """Give a cell the same formula as another one.
@@ -246,6 +285,9 @@ class Filler(object):
                zip(exp, acct['adj_out'], acct['adj_in'])]
 
         mine = reasons.get(acct['name'], [])
+        if i == 0:
+            self.put(R_ADJ_OUT_LINE, 1, 'Toolkit: transfers and one-offs out')
+            self.put(R_ADJ_IN_LINE, 1, 'Toolkit: adjusted back in')
         for j, period in enumerate(periods):
             col = base + j
             if col >= base + ACCOUNT_WIDTH:
@@ -270,9 +312,9 @@ class Filler(object):
             self.put(R_TRANSFER_OUT, col, acct['transfers_out'][j],
                      _reason(mine, period, 'Transfer out'))
             self.put(R_ENDING, col, acct['ending'][j])
-            self.put(R_ADJ_OUT, col, acct['adj_out'][j],
+            self.put(R_ADJ_OUT_LINE, col, acct['adj_out'][j],
                      _reason(mine, period, 'Adjustment out'))
-            self.put(R_ADJ_IN, col, acct['adj_in'][j],
+            self.put(R_ADJ_IN_LINE, col, acct['adj_in'][j],
                      _reason(mine, period, 'Adjustment in'))
             self.put(R_LESS_ADJ, col, adj[j], workings=
                      'Computed here: expenses less adjustments out, plus '

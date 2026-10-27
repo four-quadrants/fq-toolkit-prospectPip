@@ -46,6 +46,8 @@ import cashflow_workbook as _wb                              # noqa: E402
 SNAPSHOT = 'cashflow_written.json'
 DECISIONS = 'cashflow_review.json'
 ADJ_LINES = list(range(_wb.R_ADJ_FIRST, _wb.R_ADJ_OUT))
+# The IN block's own lines, summed by the template into row 17 (0-based).
+ADJ_IN_LINES = list(range(_wb.R_ADJ_IN + 1, _wb.R_ADJ_IN + 7))
 FIELDS = {_wb.R_TRANSFER_IN: 'transfers_in', _wb.R_TRANSFER_OUT: 'transfers_out',
           _wb.R_ADJ_OUT: 'adj_out', _wb.R_ADJ_IN: 'adj_in'}
 
@@ -72,43 +74,10 @@ def _num(v):
 
 
 def read_cells(path):
-    """{sheet: {account: {period: {field: value, 'adj_lines': total}}}}."""
-    from numbers_parser import Document
-    doc = Document(path)
-    out = {}
-    for sheet in doc.sheets:
-        if sheet.name.startswith('Unused'):
-            continue
-        t = sheet.tables[0]
-        accounts = {}
-        i = 0
-        while True:
-            base = _wb.FIRST_ACCOUNT_COL + _wb.ACCOUNT_WIDTH * i
-            if base >= t.num_cols:
-                break
-            name = t.cell(_wb.R_ACCOUNT, base).value
-            if not name:
-                break
-            periods = {}
-            for j in range(_wb.ACCOUNT_WIDTH):
-                col = base + j
-                period = t.cell(_wb.R_DATES, col).value
-                if not period:
-                    continue
-                row = {}
-                for r, field in FIELDS.items():
-                    c = t.cell(r, col)
-                    # A formula cell is the sheet's own arithmetic, not a
-                    # decision; only typed figures are read.
-                    row[field] = None if c.is_formula else _num(c.value)
-                row['adj_lines'] = round(sum(
-                    _num(t.cell(r, col).value) or 0 for r in ADJ_LINES
-                    if not t.cell(r, col).is_formula), 2)
-                periods[str(period)] = row
-            accounts[str(name)] = periods
-            i += 1
-        out[sheet.name] = accounts
-    return out
+    """{sheet: {account: {period: {field: value}}}}, from the toolkit's
+    layout (cashflow_book.py). Rows are found by their labels."""
+    import cashflow_book as _book
+    return _book.read_back(path)
 
 
 def snapshot(folder, path=None):
@@ -156,7 +125,8 @@ def harvest(folder):
             for period, row in periods.items():
                 was = (((snap['cells'].get(sheet) or {}).get(acct) or {})
                        .get(period) or {})
-                for field in list(FIELDS.values()) + ['adj_lines']:
+                for field in list(FIELDS.values()) + ['adj_lines',
+                                                      'adj_in_lines']:
                     a, b = was.get(field), row.get(field)
                     if b is None or a == b:
                         continue
@@ -197,6 +167,8 @@ def apply(folder, entities):
                     f, v = d['field'], d['analyst']
                     if f == 'adj_lines':
                         acct['adj_out'][j] += v - (d['toolkit'] or 0)
+                    elif f == 'adj_in_lines':
+                        acct['adj_in'][j] += v - (d['toolkit'] or 0)
                     elif f == 'transfers_out':
                         # A transfer out is taken out of expenses through the
                         # adjustments, so the adjustment moves with it.

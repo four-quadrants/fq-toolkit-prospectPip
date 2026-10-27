@@ -6,6 +6,43 @@
   someone asks. Set up a weekday-morning scheduled task that pulls every
   active prospect, so new uploads are waiting when the app is opened.
   Decide whose Claude account runs it (Austin leaves in a few weeks).
+- New-Mac setup for Will, as automated as possible: a one-page guide that
+  hands him the exact commands in order (xcode-select --install; Homebrew
+  installer; brew install python@3.13 tesseract; Claude Code install and
+  login; connect smb://192.168.62.170/Analysis), and Install FQ Toolkit
+  doing everything it can itself. The launcher already prefers Homebrew's
+  python3.13/3.12 (Apple's 3.9 caps numbers-parser at 4.16: no comments)
+  and installs every Python library on first start. Run it on Will's Mac
+  with him before Austin leaves.
+  PLAN (Austin, 27 Oct): install on BRYAN's workstation first (he has a
+  Claude seat), with Austin; Bryan hands it on to Will after Austin leaves.
+  So the guide is written for Bryan to follow alone, and the LaunchBay
+  scheduled pull runs on Bryan's Claude.
+
+# Pickup, Wednesday 28 October
+
+Where Tuesday ended:
+- Cash flow workbook REBUILT on a toolkit-owned layout (cashflow_book.py),
+  Austin approved the preview ("much cleaner"): Summary tab, one tab per
+  side with identical account blocks, amber editable rows with comments,
+  fixed payments and totals matching the Assumptions (Oyler Personal
+  $32,958 incl / $13,892 excl), To review tab with a Done column.
+  cashflow_review.read_cells now reads this layout by row label.
+  The old template writer (cashflow_workbook.py) only supplies constants.
+- The template's adjustments had never landed (written onto formula cells).
+- iMac now runs Homebrew python3.13 (launcher prefers 3.13/3.12); numbers-
+  parser on it is current, so comments work.
+- Build buttons: pale blue when built and current, orange when needed.
+
+First thing Wednesday:
+1. Austin rebuilds Oyler's cash flow in the app, opens it in Numbers, edits
+   one amber cell, saves, rebuilds: check the change is kept.
+2. Build the Assumptions (step 3, button 3) for Oyler; compare to the
+   firm's Assumptions answer key.
+3. Due diligence (step 4): the questions list, analyst first, Brogan's
+   email format (_spec/FOLLOWUPS.md); credit report reader.
+4. Consult deck (step 5).
+5. Find why the second audit pass took 13 minutes on Rebol.
 
 # Tuesday 27 October, midday
 
