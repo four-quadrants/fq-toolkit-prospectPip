@@ -19,6 +19,29 @@
   So the guide is written for Bryan to follow alone, and the LaunchBay
   scheduled pull runs on Bryan's Claude.
 
+# Wednesday 28 October, afternoon
+
+- Cash flow reader fixes: statement 7/01-8/02 is July (missing month),
+  average per statement (quarterly counts 3), inclusive first day,
+  "Transfer from X to Y" direction from the text, one-offs out of the
+  account line, loan payments matched to the client's debt sheet.
+  Oyler excl. fixed $14,203 vs Brogan $13,985; most accounts exact.
+- Assumptions: Reef/Bitcoin back in section 5, x3309 once, personal debt
+  named ("Florida Mortgage (Regions x3779)") plus loans paid with no
+  schedule (Guaranteed Rate, Truist) marked "balance needed".
+- Due diligence: duediligence.py drafts the questions (Oyler 19, close to
+  Brogan's real email) and the email text. NOT yet a button in the app.
+- Concerns on the deck now come from the initial notes' pain points.
+- Brogan's review page (artifact, db): Oyler Consult Review
+  https://claude.ai/artifact/Lwqpd6UhE6h8JMpWSXsjbf  plan figures with
+  proposals, workings (start, sale, sources, levers, savings worksheet),
+  concerns, questions with Send/Answered/Strike. Seeded via ArtifactData.
+  TODO: (1) Austin tests a save; (2) read-back into plan_inputs deck entry
+  and the email; (3) make one page per client automatically; (4) share
+  with Brogan (edit access); (5) due diligence button in the app.
+- Levers for hygiene/new patients/fees/per-patient need hygiene days,
+  provider split, FFS share: not read yet.
+
 # Pickup, Wednesday 28 October
 
 Where Tuesday ended:

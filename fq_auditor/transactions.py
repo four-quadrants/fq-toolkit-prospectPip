@@ -475,6 +475,7 @@ def gather(folder):
                 t['account'] = row.get('account') or key[1]
                 t['side'] = row.get('side')
                 t['statement'] = row['file']
+                _direction_from_text(t)
             out.setdefault(key, []).extend(got)
 
     # One transaction can arrive several times. A cumulative statement
@@ -494,6 +495,47 @@ def gather(folder):
             kept.append(t)
         out[key] = kept
     return out
+
+
+FROM_TO = re.compile(r'transfer\s+from\s+x+\s*([\d ]+?)\s+to\s+x+\s*([\d ]+?)'
+                     r'(?=\s*:|\s+conf|$)', re.I)
+
+
+def _subseq(short, long_):
+    it = iter(long_)
+    return all(ch in it for ch in short)
+
+
+def _direction_from_text(t):
+    """Let the description settle the direction when it states it.
+
+    Civista prints both sides of an internal transfer the same way:
+    "Transfer from XXX0054 to XXX02 22". On x0222's own statement that is
+    money ARRIVING, but the reader took every line on that statement as a
+    debit, so $23,000 of deposits became transfers out and his savings
+    account read $3,800 a month wrong both ways. OCR also splits the
+    digits ("XXX02 1 22"), so the account is matched as a subsequence.
+    """
+    acct = re.sub(r'\D', '', str(t.get('account') or ''))[-4:]
+    desc = t.get('description') or ''
+    if re.match(r'\s*interest\s+deposit', desc, re.I):
+        t['direction'] = 'credit'
+        return
+    m = FROM_TO.search(desc)
+    if not (m and len(acct) == 4):
+        return
+    src = m.group(1).replace(' ', '')
+    dst = m.group(2).replace(' ', '')
+    to_me = dst.endswith(acct) or (_subseq(acct, dst) and len(dst) - len(acct) <= 1)
+    from_me = src.endswith(acct)
+    if to_me and not from_me:
+        t['direction'] = 'credit'
+        t['kind'] = 'transfer'
+        t['counterparty'] = src[-4:]
+    elif from_me and not to_me:
+        t['direction'] = 'debit'
+        t['kind'] = 'transfer'
+        t['counterparty'] = dst[-4:] if len(dst) >= 4 else t.get('counterparty')
 
 
 def _text_for(folder, name, path=None):

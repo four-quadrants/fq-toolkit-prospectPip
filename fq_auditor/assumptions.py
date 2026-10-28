@@ -29,6 +29,7 @@ will see it, rather than silently omitted or quietly carried over from someone
 else.
 """
 import os
+import re
 import sys
 import json
 import argparse
@@ -290,7 +291,18 @@ def build(bundle, folder):
         # Built from the cash flow workbook rather than typed in, so the
         # published sentence and the workbook cannot drift apart.
         listed, unread = [], []
+        tails = {}
         for a in cash['accounts']:
+            m = re.search(r'x(\d{4})', a['name']) or re.search(r'(\d{4})', a['name'])
+            if m:
+                tails.setdefault(m.group(1), []).append(a)
+        for a in cash['accounts']:
+            m = re.search(r'x(\d{4})', a['name']) or re.search(r'(\d{4})', a['name'])
+            # One account, two readings: Oyler's Eden account x3309 came out
+            # once under the practice (unreadable) and once on its own tab.
+            if m and not a['readable'] and any(
+                    o['readable'] for o in tails.get(m.group(1), ())):
+                continue
             if not a['readable']:
                 unread.append(a['name'])
                 listed.append({'label': a['name'],
@@ -301,10 +313,26 @@ def build(bundle, folder):
                 'label': a['name'],
                 'amount': _money(a['balance']),
                 'basis': 'Average deposit %s, average expense %s, average '
-                         '%s %s, across %d statement periods.'
-                         % (_money(a['deposit']), _money(a['expense']),
+                         '%s %s, across %d statement period%s.'
+                         % (_money(a['deposit']), _money(abs(a['expense'])
+                                                         if abs(a['expense']) < 0.5
+                                                         else a['expense']),
                             'surplus' if a['surplus'] >= 0 else 'deficit',
-                            _money(abs(a['surplus'])), a['periods'])})
+                            _money(abs(a['surplus'])), a['periods'],
+                            '' if a['periods'] == 1 else 's')})
+        # What the statements reader does not cover: brokerage and private
+        # holdings recorded in the input store (Oyler's $408,526 at Reef,
+        # the Bitcoin named in the decree). The bank-account rows replaced
+        # the whole listing and dropped these.
+        have = set(tails)
+        for r in ((_inputs.get(folder, 'nonqualified_accounts') or {})
+                  .get('value') or []):
+            m = re.search(r'x(\d{4})', str(r.get('label') or ''))
+            if m and m.group(1) in have:
+                continue
+            listed.append({'label': r.get('label'),
+                           'amount': r.get('amount') or _money(r.get('value')),
+                           'basis': r.get('basis')})
         rows = Section(5,
             'Below is a list of all NON-QUALIFIED investable assets that %s '
             'currently owns, along with their respective market values.'
@@ -397,7 +425,38 @@ def build(bundle, folder):
                                             'Practice debt service',
                                             'Personal debt service',
                                             'Practice debt', 'Personal debt'))]
-        if rows:
+        extra = []
+        if number == 8 and cash:
+            # Loans the bank statements show being paid but no schedule or
+            # lender statement lists: Oyler's Guaranteed Rate mortgage
+            # ($4,103) and Truist boat loan ($1,970). Named with their
+            # payment so the gap is visible, not silently left out.
+            paid = []
+            for r in rows:
+                paid += [float(x.replace(',', '')) for x in
+                         re.findall(r'([\d,]+(?:\.\d+)?)/mo', r.note or '')]
+            for payee, monthly, kind in cash.get('fixed_rows') or ():
+                if kind != 'Liability':
+                    continue
+                if any(abs(monthly - p) <= 2 for p in paid):
+                    continue
+                low = payee.lower()
+                what = ('Mortgage' if re.search(r'\bmtge?\b|mortgage|\bmort\b', low)
+                        else 'HELOC' if 'heloc' in low else 'Loan')
+                lender = next((n for k, n in (('guaranteed rate', 'Guaranteed Rate'),
+                                              ('truist', 'Truist'), ('usaa', 'USAA'),
+                                              ('wells', 'Wells Fargo'),
+                                              ('regions', 'Regions'),
+                                              ('m & t', 'M&T'), ('chase', 'Chase'),
+                                              ('freddie', 'Freddie Mac'))
+                               if k in low), None)
+                name = '%s (%s)' % (what, lender) if lender else payee.title()
+                extra.append({'label': name, 'amount': 'not stated',
+                              'mid': None,
+                              'detail': '%s/mo paid on the bank statements; '
+                                        'balance, rate and term needed'
+                                        % _money(monthly)})
+        if rows or extra:
             total = sum(r.value for r in rows)
             out.append(Section(number,
                 'The following %s liability positions are worth mentioning.'
@@ -405,8 +464,9 @@ def build(bundle, folder):
                 rows=[{'label': r.label, 'amount': _money(r.value),
                        'mid': _maturity(folder, r.value),
                        'detail': (r.note or '').replace('  ·  ', ', ') or None}
-                      for r in rows] +
-                     [{'label': 'Total', 'amount': _money(total),
+                      for r in rows] + extra +
+                     [{'label': 'Total' + (' of stated balances' if extra else ''),
+                       'amount': _money(total),
                        'detail': None, 'rule': True}],
                 source='debt schedule and lender statements',
                 flag=_flag(folder, number)))

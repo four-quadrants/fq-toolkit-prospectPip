@@ -231,6 +231,14 @@ def read_statements(folder):
             m = re.search(pat, text, re.I)
             if m:
                 rec[field] = _num(m.group(1))
+        # What it is, so the plan can say "Florida Mortgage (Regions x3779)"
+        # the way Brogan writes it, rather than a lender and four digits.
+        rec['what'] = 'Mortgage' if re.search(r'mortgage', text, re.I) else 'Loan'
+        prop = re.search(r'property\s+address\s*:?\s*(.{0,90})', text, re.I)
+        if prop:
+            st = re.search(r'\b([A-Z]{2})\s+\d{5}\b', prop.group(1))
+            if st:
+                rec['state'] = st.group(1)
         if rec.get('balance') or rec.get('payment'):
             out.append(rec)
     return out
@@ -243,7 +251,11 @@ def dedupe_statements(rows):
         key = (r.get('creditor'), r.get('account_last4'))
         have = best.get(key)
         if not have or (r.get('balance') and not have.get('balance')):
+            if have and have.get('state') and not r.get('state'):
+                r['state'] = have['state']
             best[key] = r
+        elif r.get('state') and not have.get('state'):
+            have['state'] = r['state']
     return list(best.values())
 
 

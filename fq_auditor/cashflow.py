@@ -41,7 +41,12 @@ WINDOW = 4          # statement periods per account, as the template holds
 
 
 def _period(row):
-    d = row['ends']
+    # A statement running 7/01 to 8/02 is July's, not August's. Civista closes
+    # a day or two into the next month, so Oyler's practice account read May,
+    # Jun, Aug, Aug and July went missing.
+    d, b = row['ends'], row.get('begins')
+    if d and b and d.day <= 3 and (b.year, b.month) != (d.year, d.month):
+        d = b
     return '%s %d' % (MONTHS[d.month - 1], d.year) if d else '?'
 
 
@@ -74,6 +79,7 @@ def build(folder):
     # with no description can often be recognised by the debit that
     # created it on another account.
     _tx.match_across(moves)
+    _mark_scheduled(folder, moves)
     entities = {}
     # The analyst's review of the last workbook, read back before building
     # (cashflow_review.py) and applied at the end, so nothing downstream
@@ -146,6 +152,7 @@ def build(folder):
             # but the first spans 2 April to 1 July: a quarter counted as
             # one month understates that account's rate threefold.
             'months': _months_of(usable),
+            'stmt_months': _statement_months(usable),
             'transactions_read': bool(moves.get((side, key))),
             'one_offs': [t['amount'] or 0 for t in
                          (moves.get((side, key)) or ())
@@ -286,7 +293,7 @@ def _card_gap(moves, periods, row):
                 continue
             by_period.append(sum(
                 c['amount'] or 0 for c in cards
-                if c.get('date') and p['begins'] < c['date'] <= p['ends']))
+                if c.get('date') and p['begins'] <= c['date'] <= p['ends']))
         average = (sum(by_period) / len(by_period)) if by_period else 0.0
         _CARD_CACHE[key] = (by_period, average)
     by_period, average = _CARD_CACHE[key]
@@ -294,6 +301,22 @@ def _card_gap(moves, periods, row):
         if p is row:
             return round(by_period[i] - average, 2)
     return 0.0
+
+
+def _statement_months(rows):
+    """How many months the statements stand for, the way the firm counts.
+
+    One per monthly statement, whatever its exact days (Brogan divides
+    Oyler's x0054 by four statements, not 3.98 months), but a quarterly
+    statement is three: x0222's first statement runs 2 April to 1 July,
+    and counting it as one month put $27,000 of premiums into one period.
+    """
+    total = 0
+    for r in rows:
+        b, e = r.get('begins'), r.get('ends')
+        days = (e - b).days if (b and e) else 30
+        total += max(1, int(round(days / 30.44)))
+    return total or 1
 
 
 def _months_of(rows):
@@ -319,7 +342,10 @@ def _sum(moves, row, effect):
     for t in moves:
         if not t.get('date') or t.get('effect') != effect:
             continue
-        if row['begins'] < t['date'] <= row['ends']:
+        # Inclusive at both ends. U.S. Bank's period opens on the day of the
+        # first transaction ("Jun 25 ... through Jul 23", first entry Jun 25),
+        # and a strict start dropped Oyler's $5,000 to himself that day.
+        if row['begins'] <= t['date'] <= row['ends']:
             total += t.get('amount') or 0
     return round(total, 2)
 
@@ -424,7 +450,11 @@ def for_assumptions(folder):
             periods = len(acct['periods'])
             if not periods:
                 continue
-            months = acct.get('months') or periods
+            # Per statement, as the firm averages (Brogan's Assumptions divide
+            # by the number of statements, not the days they span): Oyler's
+            # x0054 deposits read $47,598 over 3.98 months against his
+            # $47,359 over four statements.
+            months = acct.get('stmt_months') or periods
             exp = [b + d - e for b, d, e in
                    zip(acct['beginning'], acct['additions'], acct['ending'])]
             adj = [x - o + i for x, o, i in
@@ -451,6 +481,13 @@ def for_assumptions(folder):
                 'readable': bool(seen),
             }
             if seen:
+                # One-off outflows come out of the account's expense line too,
+                # as Brogan takes them out: Oyler's x0054 read $49,749 a month
+                # with the $100,000 in it, against his $23,785.
+                once = sum(acct.get('one_offs') or ())
+                if once:
+                    spend = list(spend)
+                    spend[-1] -= once
                 # Per period as well as on average. An account averaging a
                 # surplus can still have run dry in three months out of
                 # four, and the average is the one figure that cannot show
@@ -498,6 +535,48 @@ def for_assumptions(folder):
     }
 
 
+def _schedule_payments(folder):
+    """[(label, monthly payment)] from the client's own debt schedule."""
+    try:
+        import debt as _debt
+        got = _debt.gather(folder)
+    except Exception:                                        # noqa: BLE001
+        return []
+    out = []
+    for r in (got.get('personal') or []) + (got.get('practice') or []):
+        if r.get('payment') and r.get('side') == 'Personal':
+            label = ' '.join(x for x in (r.get('creditor'), r.get('description'))
+                             if x)
+            out.append((label, float(r['payment'])))
+    return out
+
+
+def _mark_scheduled(folder, moves):
+    """A debit that pays a loan on the client's own debt schedule is debt
+    service, whatever the bank calls it.
+
+    USAA prints Rebol's boat and Tesla payments as "ACH PAYMENT TRANSFER",
+    $679.22 and $892.93, the exact figures on his Personal Debt sheet. Read
+    as transfers they were taken out of his spending AND missed as fixed
+    payments, so both of the published figures were wrong.
+    """
+    sched = _schedule_payments(folder)
+    if not sched:
+        return
+    for (side, _key), rows in moves.items():
+        if side != 'Personal':
+            continue
+        for t in rows:
+            if t.get('direction') != 'debit':
+                continue
+            for label, pay in sched:
+                if abs((t.get('amount') or 0) - pay) <= 1.0:
+                    t['kind'] = 'debt'
+                    t['effect'] = 'keep'
+                    t['scheduled'] = label
+                    break
+
+
 def _liabilities(folder):
     """Fixed payments the plan reports apart: liabilities, insurance, savings.
 
@@ -516,6 +595,14 @@ def _liabilities(folder):
             if len(dates) >= 2 else 1)
     out = [(f['payee'], f['monthly'], f['kind'])
            for f in _tx.find_fixed(rows, range(span))]
+    # Payments matching the client's debt schedule, when the bank's wording
+    # gave no hint (see _mark_scheduled). One line per loan, at the
+    # schedule's own payment, unless a payee above already carries it.
+    for label, pay in _schedule_payments(folder):
+        hits = [t for t in rows if t.get('direction') == 'debit'
+                and abs((t.get('amount') or 0) - pay) <= 1.0]
+        if len(hits) >= 2 and not any(abs(a - pay) <= 1.0 for _n, a, _k in out):
+            out.append((label, round(pay, 2), 'Liability'))
     try:
         import inputs as _inputs
         got = (_inputs.get(folder, 'fixed_payments') or {}).get('value') or []

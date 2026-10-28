@@ -97,12 +97,40 @@ def _signed(v):
 # The figures
 # --------------------------------------------------------------------------
 
+SKIP_THEMES = ('Fee range', 'Timeline', 'Comprehensive plan', 'Objections',
+               'Competition', 'Fees')
+
+
+def pain_concerns(bundle, limit=5):
+    """[(heading, body)] from the initial notes' pain points block: the
+    dentist's own words first, then the themes with the figure behind each."""
+    rows = []
+    for block in bundle.blocks:
+        if not block.title.lower().startswith('pain points'):
+            continue
+        for fact in block.facts:
+            if not fact.value or fact.label.startswith(SKIP_THEMES):
+                continue
+            if fact.label.startswith('Dentist pain'):
+                continue
+            head = re.sub(r',.*$', '', fact.label)
+            rows.append((head, str(fact.value)))
+    return rows[:limit]
+
+
 def figures(folder, client):
     """Everything the slides print, from the documents, the models and the
     advisor's entry. Missing values are None and the slide says so."""
     b = _facts.gather(folder, client)
     f = {x.label: x.value for x in b.all_facts()}
     adv = _deck._advisor(folder)
+    # The concerns are the pain points from the initial notes, settled
+    # weeks earlier, not something to invent at the deck. Used unless the
+    # advisor has written their own.
+    if not adv.get('concerns'):
+        adv = dict(adv)
+        adv['concerns'] = pain_concerns(b)
+        adv['concerns_from'] = 'initial notes'
     D = {'adv': adv, 'facts': f, 'first': b.forename or 'the client',
          'surname': b.surname or ''}
     D['names'] = adv.get('names') or client or b.client

@@ -27,6 +27,7 @@ saying what is needed, why, and where to go and get it, in the body of the
 plan where the reader cannot miss it.
 """
 import os
+import re
 import sys
 import argparse
 import datetime
@@ -124,6 +125,11 @@ rowD = ParagraphStyle('rowD', fontName='Helvetica', fontSize=7.5, leading=10,
                       textColor=MUTE, leftIndent=0)
 
 
+
+def _x(text):
+    """Escape a bare ampersand for reportlab: "M&T" printed as "M&T;"."""
+    return re.sub(r'&(?!(?:[a-zA-Z]+|#\d+);)', '&amp;', str(text or ''))
+
 def _block(rows, width, bg, bar):
     t = Table(rows, colWidths=[width])
     t.setStyle(TableStyle([
@@ -191,10 +197,10 @@ def _card(row, width):
     on, but a section with seven accounts cannot afford a tall block for
     each, so the air comes out of the padding rather than out of the type.
     """
-    lines = [[Paragraph(row['label'], cardL)],
-             [Paragraph(row['amount'] or '', cardV)]]
+    lines = [[Paragraph(_x(row['label']), cardL)],
+             [Paragraph(_x(row['amount'] or ''), cardV)]]
     if row.get('detail'):
-        lines.append([Paragraph(row['detail'], cardD)])
+        lines.append([Paragraph(_x(row['detail']), cardD)])
     t = Table(lines, colWidths=[width])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), BAND_BG),
@@ -217,9 +223,9 @@ def _entry(row, lstyle, dstyle):
     depend on padding rules that had to be unpicked row by row. A cell takes
     a list of flowables, so one entry is now one row and cannot split.
     """
-    cell = [Paragraph(row['label'], lstyle)]
+    cell = [Paragraph(_x(row['label']), lstyle)]
     if row.get('detail'):
-        cell.append(Paragraph(row['detail'], dstyle))
+        cell.append(Paragraph(_x(row['detail']), dstyle))
     return cell if len(cell) > 1 else cell[0]
 
 

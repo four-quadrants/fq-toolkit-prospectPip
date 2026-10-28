@@ -150,7 +150,8 @@ def _reasons(entity):
 
 
 def _months(a):
-    return a.get('months') or len(a['periods']) or 1
+    # Per statement, as the firm averages (see cashflow.for_assumptions).
+    return a.get('stmt_months') or len(a['periods']) or 1
 
 
 def side_totals(entity):
@@ -184,8 +185,8 @@ def write_side(book, entity):
         for j, p in enumerate(a['periods']):
             t.write(r, 1 + j, p, style=book.s_acct)
         t.write(r, 1 + width, 'Monthly avg', style=book.s_acct)
-        book.note(t, r, 1 + width, 'Totals over the %.2f months these '
-                  'statements cover.' % _months(a))
+        book.note(t, r, 1 + width, 'Averaged over %d months: one per monthly '
+                  'statement, three for a quarterly one.' % _months(a))
         exp, net = _net(a)
         series = {L_BEGIN: a['beginning'], L_ADD: a['additions'],
                   L_TIN: a['transfers_in'], L_END: a['ending'], L_EXP: exp,

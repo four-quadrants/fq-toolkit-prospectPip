@@ -57,6 +57,18 @@ class Fact(object):
 
 Block = namedtuple('Block', 'title facts')
 
+STATES = {'AL': 'Alabama', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+          'CO': 'Colorado', 'FL': 'Florida', 'GA': 'Georgia', 'ID': 'Idaho',
+          'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+          'KY': 'Kentucky', 'LA': 'Louisiana', 'MI': 'Michigan',
+          'MN': 'Minnesota', 'MS': 'Mississippi', 'MO': 'Missouri',
+          'NE': 'Nebraska', 'NV': 'Nevada', 'NC': 'North Carolina',
+          'OH': 'Ohio', 'OK': 'Oklahoma', 'OR': 'Oregon',
+          'PA': 'Pennsylvania', 'SC': 'South Carolina', 'TN': 'Tennessee',
+          'TX': 'Texas', 'UT': 'Utah', 'VA': 'Virginia', 'WA': 'Washington',
+          'WI': 'Wisconsin', 'WV': 'West Virginia', 'NY': 'New York',
+          'NJ': 'New Jersey', 'MD': 'Maryland', 'MA': 'Massachusetts'}
+
 
 class Bundle(object):
     def __init__(self, client, blocks, years, series, folder=None):
@@ -288,6 +300,11 @@ def gather(folder, client=None):
             name = r.get('creditor') or 'unnamed'
             if r.get('account_last4'):
                 name += ' x%s' % r['account_last4']
+            # "Florida Mortgage (Regions x3779)", as Brogan names them.
+            if r.get('what'):
+                where = STATES.get(r.get('state') or '', '')
+                name = '%s%s (%s)' % (where + ' ' if where else '',
+                                      r['what'], name)
             bits = []
             if r.get('rate'):
                 rate = r['rate'] * 100 if r['rate'] < 1 else r['rate']
