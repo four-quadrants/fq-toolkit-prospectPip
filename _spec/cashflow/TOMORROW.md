@@ -19,6 +19,22 @@
   So the guide is written for Bryan to follow alone, and the LaunchBay
   scheduled pull runs on Bryan's Claude.
 
+# Pickup, Thursday 29 October (goal: a working version by end of day)
+
+1. Review page (Oyler Consult Review artifact): "Up to date" shows, so the
+   page reaches its store, but the Strike button did nothing for Austin.
+   Likely cause fixed in v4: question rows had no id, so clicks wrote to
+   "questions/undefined". Retest: Strike on #12, then read back with
+   ArtifactData. Typing a figure did save once (plan doc v6) after the v3
+   fix. If it still fails, ask for a screenshot of the page.
+2. Read-back: page decisions -> _Audit/plan_inputs.json deck entry
+   (retire age, income, sale, schedule, concerns) and the email
+   (duediligence.write uses Send rows only).
+3. Consult deck for Oyler from the decided plan; open in Keynote.
+4. Due diligence button in the app (builds questions + email + seeds the
+   page), one review page per client.
+5. Commit, then run Spaulding end to end as the "working version" check.
+
 # Wednesday 28 October, afternoon
 
 - Cash flow reader fixes: statement 7/01-8/02 is July (missing month),
