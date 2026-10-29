@@ -33,6 +33,7 @@ Corporate debt (no practice loans), the tax example (no 1040 figures yet) and
 the larger-practice-value scenario (none entered) are dropped when there is
 nothing to put on them.
 """
+import json
 import os
 import re
 import sys
@@ -114,8 +115,142 @@ def pain_concerns(bundle, limit=5):
             if fact.label.startswith('Dentist pain'):
                 continue
             head = re.sub(r',.*$', '', fact.label)
-            rows.append((head, str(fact.value)))
-    return rows[:limit]
+            rows.append((client_head(head), client_voice(head, str(fact.value))))
+    return [_fit_card(i, r) for i, r in enumerate(rows[:limit])]
+
+
+def _fit_card(i, row):
+    """The fourth concern card's text box shrinks anything past one short
+    line to fit (Austin, 29 Oct: the Debt line went tiny). Keep it to the
+    first clause there."""
+    head, body = row
+    if i == 3 and len(body) > 70:
+        body = body.split(';')[0].rstrip('.') + '.'
+    return (head, body)
+
+
+def _short(text):
+    """'$720,061' -> '$720k'."""
+    v = float(re.sub(r'[^\d.]', '', text) or 0)
+    return '$%.1fM' % (v / 1e6) if v >= 1e6 else '$%dk' % round(v / 1000)
+
+
+HEADS = {'oh improvements': 'Overhead', 'qb improvements': 'Books and taxes',
+         'debt structuring': 'Debt', 'retirement planning': 'Retirement',
+         'tax management / cpa': 'Tax surprises'}
+
+
+def client_head(head):
+    return HEADS.get((head or '').strip().lower(), head)
+
+
+def client_voice(head, body):
+    """The analyst's evidence line, said to the client for the slide.
+
+    The pain points block is written for the team ("liquid if walking away
+    today: 'Not enough'"); the concerns slide is read by the dentist."""
+    h = head.lower()
+    bits = []
+    if h.startswith('retirement'):
+        m = re.search(r'target ([^;]+?) was a guess', body)
+        if m:
+            bits.append('Your %s retirement target was a guess' % (m.group(1).strip() if m.group(1).strip().startswith('$') else '$' + m.group(1).strip()))
+        if 'no plan connecting' in body:
+            bits.append('nothing ties the practice to retirement')
+        if 'not saving enough' in body:
+            bits.append('you are not saving enough today')
+        if re.search(r'walking away today: "?not enough', body, re.I):
+            bits.append('there is not enough set aside to walk away')
+    elif h.startswith('oh'):
+        pnl = re.search(r'([\d.]+)% on the (\d{4}) P&L', body)
+        said = re.search(r'client thinks ([\d.]+%)', body)
+        if pnl:
+            bits.append('Overhead runs %s%% on the books' % round(float(pnl.group(1))))
+            if said:
+                bits[-1] += ' against the %s you estimated' % said.group(1)
+    elif h.startswith('practice efficiencies'):
+        m = re.search(r'new patients ([\d,]+) to ([\d,]+)', body)
+        if m:
+            bits.append('New patients fell from %s to %s last year' % m.groups())
+        m = re.search(r'collect % ([\d.]+%)', body)
+        if m:
+            bits.append('collections are at %s' % m.group(1))
+    elif h.startswith('debt'):
+        m = re.search(r'(\$[\d,]+) across (\d+) obligations\. (\$[\d,]+)/mo', body)
+        if m:
+            bits.append('%s of practice debt costing %s a month' % (_short(m.group(1)), _short(m.group(3))))
+        m = re.search(r'LOC drawn to (\$[\d,]+) of (\$[\d,]+)', body)
+        if m:
+            bits.append('the line of credit is drawn to %s of %s' % (_short(m.group(1)), _short(m.group(2))))
+    elif h.startswith('qb'):
+        if 'not' in body or 'apart' in body:
+            bits.append('The books do not tie to the tax return')
+        if 'depreciation' in body:
+            bits.append('depreciation is not being booked')
+    elif h.startswith('tax'):
+        bits.append('Surprises at tax time and a CPA relationship that is not proactive')
+    elif h.startswith('fee'):
+        m = re.search(r'([\d.]+)% below', body)
+        bits.append('Fees sit %s%% below the market' % m.group(1) if m else body)
+    if not bits:
+        return body
+    # The cards hold about 110 characters at their font; past that the line
+    # runs off the card (Austin, 29 Oct, the Debt card). Keep whole clauses.
+    text = bits[0]
+    for b in bits[1:]:
+        if len(text) + 2 + len(b) > 105:
+            break
+        text += '; ' + b
+    return text[0].upper() + text[1:] + '.'
+
+
+def _series_inputs(bundle, folder):
+    """The lever inputs the initial notes already hold: patients, new patient
+    share and net production per patient for the last two FULL years (the
+    current year is a year to date), hygiene share, the IC form's days, and
+    the fee study. Without them the deck showed two levers where Brogan
+    shows five."""
+    out = {}
+    this_year = str(datetime.date.today().year)
+    ser = {name: vals for name, vals, _f in bundle.series}
+
+    def last_two(name):
+        vals = ser.get(name) or {}
+        ys = [y for y in sorted(vals) if vals.get(y) is not None and y < this_year]
+        return [vals[y] for y in ys[-2:]] if len(ys) >= 2 else None
+    pats = ser.get('patients (procedures)') or {}
+    full = [y for y in sorted(pats) if pats.get(y) and y < this_year]
+    if full:
+        out['patients'] = pats[full[-1]]
+    np2 = last_two('new patients % of total')
+    if np2:
+        out['np_pct_prior'], out['np_pct'] = np2
+    pp2 = last_two('net production / patient')
+    if pp2:
+        out['net_per_patient_prior'], out['net_per_patient'] = pp2
+    hyg = last_two('hygiene % of production')
+    if hyg:
+        out['hygiene_share'] = hyg[-1]
+    try:
+        import intake_form as _ic
+        f = _ic.find_form_near(folder)
+        form = _ic.parse(f) if f else {}
+        if _ic.money(form.get('hygiene_days')):
+            out['hygiene_days'] = _ic.money(form.get('hygiene_days'))
+        if _ic.money(form.get('doctor_days')):
+            out['doctor_days'] = _ic.money(form.get('doctor_days'))
+        if str(form.get('in_network') or '').strip().lower().startswith('no'):
+            out['ffs_share'] = 1.0
+    except Exception:                                        # noqa: BLE001
+        pass
+    try:
+        import compose as _compose
+        pct, _txt = _compose.fee_study(folder)
+        if pct is not None:
+            out['fees_off'] = max(0.0, -pct / 100.0)
+    except Exception:                                        # noqa: BLE001
+        pass
+    return out
 
 
 def figures(folder, client):
@@ -131,7 +266,15 @@ def figures(folder, client):
         adv = dict(adv)
         adv['concerns'] = pain_concerns(b)
         adv['concerns_from'] = 'initial notes'
-    D = {'adv': adv, 'facts': f, 'first': b.forename or 'the client',
+    else:
+        # Concerns carried from the review page are still the team's wording
+        # unless Brogan rewrote them; say them to the client.
+        adv = dict(adv)
+        adv['concerns'] = [_fit_card(i, (client_head(c[0]),
+                            client_voice(c[0], c[1] if len(c) > 1 else '')))
+                           for i, c in enumerate(adv['concerns'])]
+    D = {'adv': adv, 'facts': f, 'folder': folder,
+         'first': b.forename or 'the client',
          'surname': b.surname or ''}
     D['names'] = adv.get('names') or client or b.client
     D['date'] = adv.get('consult_date_text') or \
@@ -165,6 +308,11 @@ def figures(folder, client):
     D['revenue'] = N(f.get('Income base (overhead denominator)'))
     D['overhead_dollars'] = N(f.get('Total expenses (overhead numerator)'))
     D['debt_total'] = N(f.get('Practice total'))
+    try:
+        import debt as _debt
+        D['practice_debts'] = _debt.gather(folder).get('practice') or []
+    except Exception:                                        # noqa: BLE001
+        D['practice_debts'] = []
     D['debt_service'] = N(f.get('Practice debt service'))
 
     # ---- what the plan works out instead of asking for -------------------
@@ -190,6 +338,7 @@ def figures(folder, client):
     lx = {'overhead': D['overhead'], 'net_collections': D['revenue'],
           'target_overhead': N(adv.get('target_overhead'))}
     lx.update(_deck._production_inputs(folder))
+    lx.update(_series_inputs(b, folder))
     lx.update(adv.get('levers') or {})
     D['lever_inputs'] = lx
     D['levers'] = _lev.compute(lx)
@@ -285,6 +434,51 @@ def figures(folder, client):
 # Writing into a shape without losing its formatting
 # --------------------------------------------------------------------------
 
+PLACEHOLDER_GREY = 'A0A8B1'
+
+
+def placeholder_style(shape, short):
+    """Quiet the marker: grey, small, never wrapping.
+
+    "[TBD]" in a 28pt orange figure cell read as a headline and wrapped to
+    "[TB D]" (Austin, 29 Oct). A figure cell now shows a small grey TBD; a
+    text box keeps its [ADVISOR: ...] note, grey and at body size, so the
+    slide still says what to write without shouting it.
+    """
+    from pptx.util import Pt
+    from pptx.dml.color import RGBColor
+    tf = shape.text_frame
+    tf.word_wrap = not short
+    for para in tf.paragraphs:
+        for run in para.runs:
+            run.font.color.rgb = RGBColor.from_string(PLACEHOLDER_GREY)
+            size = run.font.size.pt if run.font.size else 12
+            run.font.size = Pt(min(size, 11 if short else 12))
+            run.font.bold = False
+            run.font.italic = not short
+
+
+def _split_label(shape, force=False):
+    """Brogan's red flags read "Label: detail" with only the label bold.
+    set_text clones the first (bold) run for the whole line; split it."""
+    import copy as _copy
+    p = shape.text_frame.paragraphs[0]
+    runs = list(p.runs)
+    if len(runs) != 1 or not (force or runs[0].font.bold):
+        return
+    t = runs[0].text
+    m = re.match(r'^([^:]{3,60}:)(\s.+)$', t)
+    if not m:
+        return
+    runs[0].text = m.group(1)
+    new = _copy.deepcopy(runs[0]._r)
+    runs[0]._r.addnext(new)
+    r2 = p.runs[1]
+    r2.text = m.group(2)
+    runs[0].font.bold = True
+    r2.font.bold = False
+
+
 def set_text(shape, text):
     """Replace a shape's words, keeping the first run's formatting.
 
@@ -359,11 +553,23 @@ def slide_fills(D):
         cur = D['current_savings']
         fq_w, cur_w = proj['fq_at_retirement'], proj['current_at_retirement']
         pace = proj['on_pace_for']
+        # How much of retirement rests on the sale: its share of the
+        # portfolio at retirement, current path against 4Q's.
+        sale_c = D.get('sale') or 0
+        sale_q = N(D['adv'].get('sale_net_fq')) or sale_c
+        share_c = sale_c / cur_w if cur_w else None
+        share_q = sale_q / fq_w if fq_w else None
+        reliance = (_signed(share_q / share_c - 1) if share_c and share_q
+                    else ask('change in reliance on the sale'))
         diff = {
             'income': '%s/yr' % M(D['income']),
             'income_line': 'Retirement income with %s retiring at age %d'
                            % (first, ra),
-            'income_up': _signed(D['income'] / pace - 1) if pace else ask('%'),
+            # Against what the household spends today, as Brogan computes
+            # it (Oyler: $599,000 over $404,592 = +48%), not against the
+            # income the current path could sustain.
+            'income_up': (_signed(D['income'] / D['spend'] - 1) if D.get('spend')
+                          else (_signed(D['income'] / pace - 1) if pace else ask('%'))),
             'save2': '%s/yr' % _k(y2),
             'save_up': _signed(y2 / cur - 1) if cur else ask('%'),
             'wealth': _k(fq_w),
@@ -379,7 +585,7 @@ def slide_fills(D):
             'Text 16': diff['wealth'],
             'Text 18': 'Retirement wealth in %d years, against' % years,
             'Text 19': diff['wealth_vs'], 'Text 20': diff['wealth_up'],
-            'Text 23': ask('change in reliance on the sale'),
+            'Text 23': reliance,
         }
         out[20] = {
             'Text 3': diff['income'], 'Text 4': diff['income_line'],
@@ -425,6 +631,55 @@ def slide_fills(D):
             out[3][h] = ask('concern %d' % (i + 1))
             out[3][b] = ask('in the client’s words')
 
+    # 7 and 8 tax and accounting. Page 8 is the firm's standing language:
+    # Brogan's Oyler, Meier and Kinsler decks say the same five things with
+    # the name changed. Page 7's red flags are the client's own, but three
+    # lines recur on every deck, and the toolkit's findings supply the books
+    # line and the tax-surprise line.
+    out[8] = {
+        'Text 6': 'CLEAN UP THE PAST',
+        'Text 7': 'Review prior years and amend returns if needed, then correct '
+                  'those problems going forward.',
+        'Text 10': 'ELIMINATE THE RED FLAGS',
+        'Text 11': 'Correct the QuickBooks and financial problems and reconcile '
+                   'them to the tax returns.',
+        'Text 14': 'PAY YOURSELF CORRECTLY',
+        'Text 15': 'Adjust %s\u2019s W-2 and distributions to minimize taxes and '
+                   'maximize retirement.' % first,
+        'Text 18': 'BEST PRACTICES, IMPLEMENTED',
+        'Text 19': 'Advise on accounting best practices and implement additional '
+                   'tax savings strategies and deductions.',
+        'Text 22': 'BOOKS THAT STAY CLOSED',
+        'Text 23': 'Improve practice accounting, update financials, and record '
+                   'adjustments and reconcile monthly, reducing audit exposure.',
+    }
+    f7 = D.get('facts') or {}
+    flags = []
+    pnl, tax = N(f7.get('Overhead, P&L basis')), N(f7.get('Overhead, tax basis'))
+    dep = f7.get('Depreciation / amortisation')
+    books = []
+    if pnl and tax and abs(pnl - tax) >= 0.02:
+        books.append('overhead reads %.0f%% on the books and %.0f%% on the return'
+                     % (100 * pnl, 100 * tax))
+    if dep in (0, 0.0):
+        books.append('no depreciation is booked')
+    if books:
+        flags.append('QuickBooks and financials don\u2019t tie to the returns: %s. '
+                     'An audit flag.' % '; '.join(books))
+    # A surprise is a red flag only when it cost money: a big refund (Oyler's
+    # equipment and cost segregation) is not one.
+    surprise = str(f7.get('Tax surprises') or '')
+    if surprise.lower().startswith('yes') and re.search(
+            r'\bow(e|ed)\b|penalt|underpa|interest|balance due', surprise, re.I) \
+            and not re.search(r'refund', surprise, re.I):
+        flags.append('Tax surprises at filing: money owed that was not planned for.')
+    out[7] = {'Text 25': 'Opportunity to maximize deductions: meals, travel, '
+                         'meetings, the \u201cAugusta Rule\u201d and more.',
+              'Text 28': 'A lack of proactive tax advice and planning, so taxes are '
+                         'reacted to after the fact instead of managed.'}
+    for name, text in zip(('Text 8', 'Text 10', 'Text 12'), flags):
+        out[7][name] = text
+
     # 4 results applied to the practice
     th, oh, sv = D['take_home'], D['overhead'], D['current_savings']
     out[4] = {
@@ -453,13 +708,46 @@ def slide_fills(D):
         rows.append(('Collection %', _pct(lx['collection_pct']), '99.5%',
                      lv['collections']['value'] / owner,
                      lv['collections']['value']))
+    now_goal = {
+        'new_patients': (_pct(lx.get('np_pct')), _pct(lx.get('np_pct_prior'))),
+        'per_patient': (M(lx.get('net_per_patient')), M(lx.get('net_per_patient_prior'))),
+        'hygiene': ('%g days' % lx['hygiene_days'] if lx.get('hygiene_days') else 'TBD', 'TBD'),
+        'fees': ('%.1f%% below' % (100 * lx['fees_off']) if lx.get('fees_off') else 'TBD',
+                 'benchmark'),
+    }
     for key, label in (('new_patients', 'New patient % of total patients'),
                        ('per_patient', 'Net production/patient'),
                        ('hygiene', 'Hygiene chair-days'),
                        ('fees', 'Increase fees')):
         v = lv[key].get('value')
         if v:
-            rows.append((label, ask('current'), ask('goal'), v / owner, v))
+            cur, goal = now_goal.get(key, ('TBD', 'TBD'))
+            rows.append((label, cur or 'TBD', goal or 'TBD', v / owner, v))
+    rows.sort(key=lambda r: -r[4])
+    # Five rows, as Brogan shows them. A lever already at goal is still a
+    # finding worth a row ("adjustments 5.3%, below where dropping carriers
+    # pays"; "fees already above the market"), and it beats an empty line.
+    extra = []
+    if lx.get('adjust_pct') is not None:
+        extra.append(('Production adjustment %', _pct(lx['adjust_pct']),
+                      'At goal', 0.0, 0.0))
+    try:
+        import compose as _compose
+        fpct, _t = _compose.fee_study(D.get('folder'))
+    except Exception:                                        # noqa: BLE001
+        fpct = None
+    if fpct is not None and fpct >= 0:
+        extra.append(('Fees vs market', '%+.1f%%' % fpct, 'Hold', 0.0, 0.0))
+    if lx.get('net_per_patient') and lx.get('net_per_patient_prior') \
+            and lx['net_per_patient'] >= lx['net_per_patient_prior']:
+        extra.append(('Net production/patient', M(lx['net_per_patient']),
+                      'Holding', 0.0, 0.0))
+    have = {r[0] for r in rows}
+    for r in extra:
+        if len(rows) >= 5:
+            break
+        if r[0] not in have:
+            rows.append(r)
     rows = rows[:5]
     cells = [('Text 13', 'Text 15', 'Text 17', 'Text 19', 'Text 22'),
              ('Text 24', 'Text 26', 'Text 28', 'Text 30', 'Text 33'),
@@ -490,9 +778,31 @@ def slide_fills(D):
 
     # 10 corporate debt
     if D['debt_service']:
+        rf = _plan.refinance(D.get('practice_debts'))
+        n, c = rf['loans'], len(rf['candidates'])
+
+        def rng(v):
+            lo, hi = max(0, int(v // 1000)), int(v // 1000) + 2
+            return '$%d\u2013%dk/mo' % (lo, hi)
         out[10] = {'Text 3': '%s/mo in payments today' % M(D['debt_service']),
                    'Text 28': '%s/mo' % M(D['debt_service']),
-                   'Text 4': 'across the practice loans'}
+                   'Text 4': 'across the %s practice loans' % (WORDS.get(n, str(n)).lower())}
+        if c:
+            out[10].update({
+                'Text 2': '%s LOANS, %s TO REFINANCE' % (WORDS.get(n, str(n)),
+                                                        WORDS.get(c, str(c))),
+                'Text 6': 'There are %d practice loans today, and %d of them look '
+                          'like candidates for a refinance: %s.'
+                          % (n, c, ', '.join(re.sub(r'\s*/.*$', '', str(r.get('creditor')))
+                                             for r in rf['candidates'])),
+                'Text 8': 'Freed-up income is reallocated to build the practice bank '
+                          'account first, then savings.',
+                'Text 25': '%d refinance candidate%s of %d' % (c, '' if c == 1 else 's', n),
+                'Text 30': rng(rf['payment_new']),
+                'Text 33': rng(rf['freed']),
+            })
+        else:
+            out[10]['Text 2'] = '%s LOANS, NONE TO REFINANCE' % WORDS.get(n, str(n))
 
     # 13 cash flow process: the ideal balance, wherever it appears
     # One month of practice expenses on the most recent reliable overhead,
@@ -510,18 +820,92 @@ def slide_fills(D):
                    'strategies to maximize the financial plan.' % b_txt,
     }
 
+    # 11 income structure: today's W-2 from the P&L's doctor wages
+    w2 = N((D.get('facts') or {}).get('Doctor wages'))
+    if w2:
+        out.setdefault(11, {})
+        out[11].update({'Text 19': '%s/mo' % M(w2 / 12.0),
+                        'Text 20': '%s per year' % _k(w2)})
+
+    # 14 and 15 investments: how much is locked up, and in what. Brogan's
+    # Oyler slides: "94% of retirement savings sits in relatively illiquid
+    # private placements"; a bar of Reef IRA 57%, Reef non-qualified 37%,
+    # the rest 6%; "7 mutual funds" under the 401(k).
+    parts = D.get('start_parts') or []
+    tot = sum(a for _l, a in parts) or 0
+    binfo = {}
+    for key in ('qualified_accounts', 'nonqualified_accounts'):
+        for r in (_deck._inputs.value(D.get('folder'), key) or []):
+            binfo[str(r.get('label') or '')] = str(r.get('basis') or '')
+    ILL = re.compile(r'llc|private|placement|secured note|reef|units', re.I)
+    illiquid = [(l, a) for l, a in parts if ILL.search(l + ' ' + binfo.get(l, ''))]
+    if tot and parts:
+        share = sum(a for _l, a in illiquid) / tot
+        out[14] = {'Text 34': 'Readily priced holdings, with full transparency into '
+                              'every position.'}
+        if share >= 0.3:
+            out[14].update({'Text 20': '%d%%' % round(100 * share),
+                            'Text 21': 'Of retirement savings sits in relatively '
+                                       'illiquid private placements.',
+                            'Text 28': 'Limited information on statements. A more '
+                                       'fundamental approach brings visibility and '
+                                       'control.'})
+        funds = [l for l, _a in parts if re.search(r'fund', binfo.get(l, ''), re.I)]
+        if funds:
+            out[14]['Text 25'] = ('The %s holds mutual funds only. Upgrade to options '
+                                  'with lower internal expense and better '
+                                  'performance.' % re.sub(r'\s*\[.*?\]', '', funds[0]))
+        # the bar on 15: the two largest holdings and the rest
+        big = sorted(parts, key=lambda x: -x[1])
+        out.setdefault(15, {})
+        for (lab, val), (l, a) in zip((('Text 8', 'Text 9'), ('Text 11', 'Text 12')), big[:2]):
+            nm = re.sub(r'\s*\[.*?\]', '', l).upper()
+            if len(nm) > 22:
+                nm = nm[:22].rsplit(' ', 1)[0]
+            out[15][lab] = nm.rstrip(' ,;-')
+            out[15][val] = '%d%%' % round(100 * a / tot)
+        rest = sum(a for _l, a in big[2:])
+        out[15]['Text 14'] = '%d%%' % round(100 * rest / tot) if rest else '0%'
+        subs = (('Text 25'), ('Text 39'), ('Text 52'))
+        for name, (l, _a) in zip(subs, parts):
+            b = binfo.get(l, '')
+            m = re.search(r'(\w+) funds', b)
+            words = {'seven': 7, 'six': 6, 'five': 5, 'four': 4, 'three': 3, 'eight': 8}
+            if m:
+                n = words.get(m.group(1).lower(), m.group(1))
+                out[15][name] = '%s mutual funds' % n
+            elif ILL.search(l + ' ' + b):
+                out[15][name] = 'private placements'
+
     # 15 investments current
     if D['start']:
-        out[15] = {'Text 5': 'WHERE THE %s SITS' % _k(D['start']),
-                   'Text 6': '%s total retirement savings' % M(D['start'])}
+        out.setdefault(15, {}).update({'Text 5': 'WHERE THE %s SITS' % _k(D['start']),
+                   'Text 6': '%s total retirement savings' % M(D['start'])})
         acct_rows = [('Text 24', 'Text 27'), ('Text 38', 'Text 41'),
                      ('Text 51', 'Text 53')]
+        # What is inside and how liquid, from the Assumptions' own account
+        # notes (Oyler: "held across seven funds, 61.5% equities"; "$500,000
+        # in LLC interests") rather than left for the advisor to retype.
+        basis = {}
+        for key in ('qualified_accounts', 'nonqualified_accounts'):
+            for r in (_deck._inputs.value(D.get('folder'), key) or []):
+                basis[str(r.get('label') or '')] = str(r.get('basis') or '')
+        inside = [('Text 29', 'Text 31'), ('Text 43', 'Text 45'),
+                  ('Text 54', 'Text 55')]
         for i, (lab, val) in enumerate(acct_rows):
             if i < len(D['start_parts']):
                 l, a = D['start_parts'][i]
                 short = re.sub(r'\s*\[.*?\]', '', l).split(',')[0]
                 out[15][lab] = short.upper()[:24]
                 out[15][val] = _k(a)
+                note = basis.get(l, '')
+                note = re.sub(r'^per the most recent \[[^\]]*\] \w+;\s*', '', note)
+                if note:
+                    out[15][inside[i][0]] = note[0].upper() + note[1:]
+                    illiquid = re.search(r'llc|private|placement|note|reef|units',
+                                         note + ' ' + l, re.I)
+                    out[15][inside[i][1]] = ('Limited liquidity' if illiquid
+                                             else 'Daily')
             else:
                 out[15][lab], out[15][val] = '[TBD]', '[TBD]'
 
@@ -717,6 +1101,44 @@ def _drop(prs, index):
     prs.slides._sldIdLst.remove(sld)
 
 
+def _drafts(folder, D, prs, fills, drop):
+    """Ask Claude for every box that would otherwise go out as a placeholder."""
+    if os.environ.get('FQ_NO_DRAFTS'):
+        return {}
+    try:
+        with open(os.path.join(os.path.dirname(TEMPLATE),
+                               'deck_examples.json')) as fh:
+            examples = json.load(fh)
+    except (OSError, ValueError):
+        examples = {}
+    holes = []
+    for n, slide in enumerate(prs.slides, 1):
+        if n in drop:
+            continue
+        default, shapes = SPEC.get(n, ('keep', {}))
+        mine = fills.get(n, {})
+        texts = [sh.text_frame.text.strip() for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        heading = ' / '.join(t for t in texts[:2])[:80]
+        for sh in slide.shapes:
+            if not sh.has_text_frame or not sh.text_frame.text.strip():
+                continue
+            if sh.name in mine:
+                hole = str(mine[sh.name]).startswith(('[ADVISOR', '[TBD'))
+            else:
+                hole = shapes.get(sh.name, default) == 'advisor'
+            if hole:
+                holes.append({'id': '%d.%s' % (n, sh.name), 'slide': n,
+                              'heading': heading.replace('"', "'"),
+                              'example': examples.get(
+                                  '%d.%s' % (n, sh.name)) or '(none)'})
+    try:
+        import deck_drafts
+    except ImportError:
+        return {}
+    return deck_drafts.draft(folder, D, holes)
+
+
 def render(folder, client, out, template=TEMPLATE):
     D = figures(folder, client)
     fills = slide_fills(D)
@@ -731,20 +1153,33 @@ def render(folder, client, out, template=TEMPLATE):
     if not D.get('proj2'):
         drop.append(18)
 
+    drafts = _drafts(folder, D, prs, fills, drop)
+
     for n, slide in enumerate(prs.slides, 1):
         default, shapes = SPEC.get(n, ('keep', {}))
         mine = fills.get(n, {})
         asked = []
+        drafted = 0
         for sh in slide.shapes:
             if not sh.has_text_frame or not sh.text_frame.text.strip():
                 continue
             name = sh.name
+            mark = '%d.%s' % (n, name)
+            if mark in drafts:
+                set_text(sh, drafts[mark].replace('\u2019', "'"))
+                _split_label(sh, force=(n == 7))
+                drafted += 1
+                continue
             if name in mine:
                 # The redesign's minus sign and straight apostrophe.
                 text = str(mine[name]).replace('-$', '\u2212$').replace(
                     '\u2019', "'")
+                if text == '[TBD]':
+                    text = 'TBD'
                 set_text(sh, text)
+                _split_label(sh, force=(n == 7))
                 if str(mine[name]).startswith(('[ADVISOR', '[TBD')):
+                    placeholder_style(sh, text == 'TBD')
                     asked.append(mine[name])
                 continue
             how = shapes.get(name, default)
@@ -759,12 +1194,17 @@ def render(folder, client, out, template=TEMPLATE):
                 # carry them into the next client's deck. Short cells (a
                 # figure, a rate) get [TBD] so the layout holds.
                 was = sh.text_frame.text.strip()
-                label = '[TBD]' if len(was) <= 18 else ask('write this')
+                label = 'TBD' if len(was) <= 18 else ask('write this')
                 set_text(sh, label)
+                placeholder_style(sh, label == 'TBD')
                 asked.append(label)
         prompts += len(asked)
         if slide.has_notes_slide and n not in KEEP_NOTES:
             note = NOTES.get(n, '')
+            if drafted:
+                note += ('\n\nDrafted by Claude from the documents, read '
+                         'before the meeting: %d box%s on this slide.'
+                         % (drafted, '' if drafted == 1 else 'es'))
             if asked:
                 note += ('\n\nStill to write on this slide: %d item%s marked '
                          '[ADVISOR] or [TBD].'

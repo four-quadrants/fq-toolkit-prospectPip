@@ -153,3 +153,50 @@ def schedule(glist, first_year, years=3):
     then held, as his brokerage rows hold from year 3."""
     return [(first_year + i, sum(invested(g, i) for g in glist))
             for i in range(years)]
+
+
+REFI_RATE = 0.07        # what a consolidated practice loan is priced at today
+REFI_YEARS = 10
+REFI_MIN_BALANCE = 20000
+
+
+def _payment(balance, rate=REFI_RATE, years=REFI_YEARS):
+    r, n = rate / 12.0, years * 12
+    return balance * r / (1 - (1 + r) ** -n)
+
+
+def refinance(rows, this_year=None):
+    """Which practice loans look like refinance candidates, and what a
+    consolidation would do to the monthly payment.
+
+    Brogan's Oyler deck: "Six loans, four to refinance", $17,169/mo today,
+    "$7-9k/mo" after, "$8-10k/mo" freed. His four are the loans worth
+    consolidating: a real balance, not about to mature, and either costly
+    (5% or more), revolving (a line of credit), or with no stated rate. A
+    cheap loan (a 3.5% truck) or one ending within two years is left alone.
+    The new payment is the candidates' balance over 10 years at 7%, shown as
+    a $1k range because the rate is not known until the bank quotes.
+    """
+    import datetime as _dt
+    this_year = this_year or _dt.date.today().year
+    cands, keep = [], []
+    for r in rows or ():
+        bal = r.get('balance') or 0
+        rate = r.get('rate')
+        rate = rate / 100.0 if rate and rate > 1 else rate
+        mat = r.get('maturity')
+        revolving = 'line of credit' in ' '.join(
+            str(r.get(k) or '') for k in ('creditor', 'description')).lower()
+        ending = mat and mat < 2090 and mat - this_year <= 2
+        if bal >= REFI_MIN_BALANCE and not ending and (
+                revolving or rate is None or rate >= 0.05):
+            cands.append(r)
+        else:
+            keep.append(r)
+    now = sum(r.get('payment') or 0 for r in cands)
+    bal = sum(r.get('balance') or 0 for r in cands)
+    new = _payment(bal) if bal else 0
+    return {'loans': len(rows or ()), 'candidates': cands, 'kept': keep,
+            'balance': bal, 'payment_now': now, 'payment_new': new,
+            'freed': max(0.0, now - new),
+            'all_payments': sum(r.get('payment') or 0 for r in rows or ())}

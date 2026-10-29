@@ -353,3 +353,14 @@ kept only if the advisor changed it.
 Run `python3 -m pip install --user python-pptx`. The preflight now checks for
 python-pptx, numbers-parser and reportlab, and suggests `--user` on Apple's
 Python, where it used to suggest `--break-system-packages`.
+
+## Thursday Oct 29, afternoon: deck drafts
+
+- Deck now fills investments (94% illiquid, bar, what's inside) from the data. Advisor markers 135 -> 85.
+- New fq_auditor/deck_drafts.py: Claude drafts the remaining boxes (tax red flags, pay structure, returns, fees)
+  in one call on the team seat, cached in <client>/.fq_cache/drafts. A draft quoting a figure not in the fact
+  pack is thrown away. Presenter notes list the drafted boxes. FQ_NO_DRAFTS=1 turns it off.
+- Box-by-box examples: fq_auditor/assets/deck_examples.json, built by
+  python3 _spec/build_deck_examples.py "<Brogan deck>.pptx" Oyler Brian
+  It is NOT in git (json). HANDOFF: copy assets/deck_examples.json and consult_template.pptx to Bryan's machine.
+- The sandbox claude is not logged in, so drafts were only tested with a stub. First live run is on Austin's Mac.

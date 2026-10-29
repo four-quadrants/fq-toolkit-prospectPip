@@ -35,7 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # The order matters: the cheap ones first, so an operator watching the log
 # has something openable within a few seconds, and the cash flow pass is
 # paid once by whichever of the later three runs first.
-STEPS = ('workbook', 'cashflow', 'summary', 'assumptions', 'deck')
+STEPS = ('workbook', 'cashflow', 'summary', 'assumptions', 'duediligence', 'deck')
 
 TITLES = {
     'workbook': 'Initial notes workbook',
@@ -43,6 +43,7 @@ TITLES = {
     'summary': 'Prospect Summary',
     'assumptions': 'Assumptions',
     'deck': 'Consultation deck',
+    'duediligence': 'Due diligence questions and email',
 }
 
 
@@ -151,7 +152,15 @@ def step_deck(folder, client, outdir):
     return path
 
 
+def step_duediligence(folder, client, outdir):
+    import duediligence as _dd
+    path, email = _dd.write(folder, outdir)
+    print('OUTPUT\t%s' % email)
+    return path
+
+
 RUNNERS = {
+    'duediligence': step_duediligence,
     'deck': step_deck,
     'workbook': step_workbook,
     'cashflow': step_cashflow,

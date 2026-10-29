@@ -711,6 +711,15 @@ nav button{background:transparent;border:0;color:#cbd5e1;font:inherit;font-size:
      padding:8px 15px;border-radius:8px;cursor:pointer}
 nav button:hover{background:#2A4C74;color:#fff}
 nav button.on{background:var(--fq-orange);color:#fff;font-weight:600}
+#stepbar{display:flex;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;gap:6px 18px;align-items:center;padding:9px 22px;
+  background:var(--fq-baby-pale);border-bottom:1px solid #D6E4EE;font-size:13px;color:#16324F}
+#stepbar b{margin-right:4px}
+#stepbar .st{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+#stepbar .dot{width:9px;height:9px;border-radius:50%;background:#B8C2CC;flex:0 0 9px}
+#stepbar .ok .dot{background:#1E8449} #stepbar .need .dot{background:#E8792B}
+#stepbar .wait .dot{background:#C9A227}
+#stepbar .why{color:#5F6E7C}
+#stepbar .busy{color:#CE6E0D;font-weight:600}
 .tag{margin-left:auto;font-size:12px;opacity:.75}
 main{flex:1;overflow:hidden;position:relative}
 .pane{position:absolute;inset:0;overflow:auto;display:none}
@@ -827,6 +836,7 @@ label.ck span{font-size:11.5px;color:#8A9099}
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
 </header>
+<div id="stepbar" class="hide"></div>
 
 <main>
   <div class="pane" id="pane-redact">
@@ -991,8 +1001,13 @@ label.ck span{font-size:11.5px;color:#8A9099}
     <div class="card">
       <b style="color:#16324F">Questions for the prospect</b>
       <div class="sub" style="margin:2px 0 0">Drafted from what the documents show, in
-        Brogan's follow-up format, for the analyst to strike or answer before it goes
-        to the prospect. Being built next.</div>
+        Brogan's follow-up format. Brogan marks each Send, Answered or Strike on his
+        review page; once Claude has pulled his decisions in, rebuild for the email.</div>
+      <div id="ddwhat" class="hide"><input type="checkbox" value="duediligence" checked></div>
+      <div class="row"><span style="flex:1"></span>
+        <button class="primary" id="ddgo" disabled>Pick a client first</button></div>
+      <pre class="log hide" id="ddlog" style="margin-top:12px"></pre>
+      <div id="ddmade" class="row hide" style="margin-top:10px"></div>
     </div>
   </div></div>
 
@@ -1070,7 +1085,8 @@ document.getElementById('tab-consult').onclick=function(){show('consult');};
 var BPOLL=null;
 function buildReady(){
   [['buildgo','Build the initial notes'],['cfgo','Build the cash flow workbook'],
-   ['asgo','Build the Assumptions'],['consultgo','Build the deck']].forEach(function(x){
+   ['asgo','Build the Assumptions'],['consultgo','Build the deck'],
+   ['ddgo','Draft the questions and email']].forEach(function(x){
     var b=document.getElementById(x[0]);
     b.disabled = !FOLDER;
     b.textContent = FOLDER ? x[1] : 'Pick a client first';
@@ -1081,13 +1097,63 @@ function buildReady(){
 }
 // Orange only when an output is missing or older than what it is built
 // from. Built and current: pale blue, saying when, still pressable.
+// Where this client stands, on every tab, so work done in several sittings
+// picks up where it left off.
+var AUTO={}, CATCHUP=null;
+function stepBar(d){
+  var bar=document.getElementById('stepbar'); if(!FOLDER){ bar.classList.add('hide'); return; }
+  var steps=[['Initial notes','workbook','build'],['Cash flow','cashflow','assume'],
+             ['Assumptions','assumptions','assume'],['Brogan\u2019s review','brogan','consult'],
+             ['Questions + email','duediligence','consult'],['Deck','deck','deck']];
+  var h='<b>'+esc(FOLDER.split('/').pop())+'</b>';
+  steps.forEach(function(st){
+    var x=d[st[1]]||{}, cls, note;
+    if(st[1]==='brogan'){ cls=x.current?'ok':(x.started?'wait':''); note=x.why; }
+    else if(x.current){ cls='ok'; note='built '+x.when; }
+    else if(x.when){ cls='need'; note='needs a rebuild: '+x.why; }
+    else { cls=''; note='not built yet'; }
+    // A dot and the name only; the reason is in the tooltip (Austin: the
+    // explanations made the bar wrap and look wonky).
+    h+='<span class="st '+cls+'" data-tab="'+st[2]+'" title="'+esc(st[0]+': '+note)+'"><span class="dot"></span>'+st[0]+'</span>';
+  });
+  if(CATCHUP) h+='<span class="busy" title="'+esc(CATCHUP)+'">Updating\u2026</span>';
+  bar.innerHTML=h; bar.classList.remove('hide');
+  bar.querySelectorAll('.st').forEach(function(e){ e.onclick=function(){ show(e.dataset.tab); }; });
+  catchUp(d);
+}
+function catchUp(d){
+  // Rebuild what was built before and has gone out of date. Never the deck:
+  // it may have been edited in Keynote, so it is only flagged.
+  if(!FOLDER || AUTO[FOLDER] || CATCHUP) return;
+  var want=['workbook','cashflow','assumptions','duediligence'].filter(function(k){
+    return d[k] && d[k].when && !d[k].current; });
+  if(!want.length) return;
+  AUTO[FOLDER]=true;
+  var names={workbook:'Initial notes',cashflow:'Cash flow',assumptions:'Assumptions',duediligence:'Questions'};
+  CATCHUP='Bringing '+want.map(function(k){return names[k]}).join(', ')+' up to date\u2026';
+  var tries=0;
+  (function go(){
+    fetch('/api/build',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({folder:FOLDER, what:want.join(',')})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(j.error){ if(++tries<15){ setTimeout(go,20000); return; } CATCHUP=null; buildState(); return; }
+        var t=setInterval(function(){
+          fetch('/api/log?since=0').then(function(r){return r.json();}).then(function(x){
+            if(!x.running){ clearInterval(t); CATCHUP=null; buildState(); }
+          });
+        },1500);
+      }).catch(function(){ CATCHUP=null; });
+  })();
+}
 function buildState(){
   if(!FOLDER) return;
   fetch('/api/outputstatus?folder='+encodeURIComponent(FOLDER))
     .then(function(r){return r.json();})
     .then(function(d){
+      stepBar(d);
       [['buildgo','workbook','Initial notes'],['cfgo','cashflow','Cash flow workbook'],
-       ['asgo','assumptions','Assumptions'],['consultgo','deck','Deck']].forEach(function(x){
+       ['asgo','assumptions','Assumptions'],['consultgo','deck','Deck'],
+       ['ddgo','duediligence','Questions and email']].forEach(function(x){
         var b=document.getElementById(x[0]), st=d[x[1]];
         if(!b || b.disabled || !st) return;
         if(st.current){
@@ -1180,6 +1246,9 @@ document.getElementById('consultgo').onclick=function(){
 };
 document.getElementById('cfgo').onclick=function(){
   runBuild('cfwhat','cflog','cfmade',this);
+};
+document.getElementById('ddgo').onclick=function(){
+  runBuild('ddwhat','ddlog','ddmade',this);
 };
 document.getElementById('asgo').onclick=function(){
   runBuild('aswhat','aslog','asmade',this);
@@ -2465,6 +2534,7 @@ OUTPUTS = {
     'workbook': ('Initial notes', '.xlsx'),
     'cashflow': ('Cash flow', '.numbers'),
     'assumptions': ('Assumptions', '.pdf'),
+    'duediligence': ('Follow-up email', '.txt'),
     'deck': ('Consult deck', '.pptx'),
 }
 
@@ -2487,36 +2557,46 @@ def output_status(folder):
                 best, what = m, p
         return best, what
 
-    inputs = []
+    docs = []
     for d in ('Original_sourcedocs', os.path.join('Documents', 'Business', 'Fees')):
         root = os.path.join(folder, d)
         if os.path.isdir(root):
-            inputs += [os.path.join(root, n) for n in os.listdir(root)
-                       if not n.startswith('.')]
-    for n in ('launchbay_tasks.json', 'launchbay_manifest.json'):
-        inputs.append(os.path.join(folder, n))
-    for n in ('ic_form.json', 'plan_inputs.json', 'cashflow_review.json'):
-        inputs.append(os.path.join(out_dir, n))
-    code = [os.path.join(HERE, n) for n in os.listdir(HERE) if n.endswith('.py')
-            and n not in ('fq_app.py', 'preflight.py', 'deploy.py')]
-    in_t, in_what = newest(inputs)
-    code_t, code_what = newest(code)
-
+            docs += [os.path.join(root, n) for n in os.listdir(root)
+                     if not n.startswith('.')]
+    A = lambda *n: [os.path.join(out_dir, x) for x in n]          # noqa: E731
+    lb = [os.path.join(folder, 'launchbay_tasks.json')]
     try:
         names = os.listdir(out_dir)
     except OSError:
         names = []
+    made = lambda prefix, ext: [os.path.join(out_dir, n) for n in names  # noqa: E731
+                                if n.startswith(prefix) and n.endswith(ext)]
+    # What each output is built from. A step is out of date only when one of
+    # ITS inputs is newer: Brogan's decisions do not touch the initial notes,
+    # but a rebuilt cash flow does touch the Assumptions and the deck.
+    deps = {
+        'workbook': docs + lb + A('ic_form.json'),
+        'cashflow': docs + A('cashflow_review.json'),
+        'assumptions': docs + A('ic_form.json', 'plan_inputs.json',
+                                'cashflow_review.json') + made('Cash flow', '.numbers'),
+        'duediligence': docs + lb + A('claude_checklist.json', 'review_decisions.json'),
+        'deck': docs + A('ic_form.json', 'plan_inputs.json', 'cashflow_review.json',
+                         'review_decisions.json') + made('Cash flow', '.numbers'),
+    }
+    code = [os.path.join(HERE, n) for n in os.listdir(HERE) if n.endswith('.py')
+            and n not in ('fq_app.py', 'preflight.py', 'deploy.py', 'review_page.py')]
+    code_t, code_what = newest(code)
+
     status = {}
     for key, (prefix, ext) in OUTPUTS.items():
-        made = [os.path.join(out_dir, n) for n in names
-                if n.startswith(prefix) and n.endswith(ext)]
-        t, _ = newest(made)
+        t, _ = newest(made(prefix, ext))
         if not t:
             status[key] = {'current': False, 'why': 'not built yet'}
             continue
         when = _dt.datetime.fromtimestamp(t).strftime('%-m/%-d %-I:%M%p').lower()
+        in_t, in_what = newest(deps.get(key, docs))
         if in_t > t:
-            why = 'newer document: %s' % os.path.basename(in_what)
+            why = 'newer: %s' % os.path.basename(in_what)
             status[key] = {'current': False, 'when': when, 'why': why}
         elif code_t > t:
             status[key] = {'current': False, 'when': when,
@@ -2524,6 +2604,13 @@ def output_status(folder):
                                   % os.path.basename(code_what)}
         else:
             status[key] = {'current': True, 'when': when, 'why': 'up to date'}
+    # Brogan's review: proposed but not yet pulled back in.
+    asked = os.path.exists(os.path.join(out_dir, 'review_questions.json'))
+    got = os.path.exists(os.path.join(out_dir, 'review_decisions.json'))
+    status['brogan'] = {'current': got, 'started': asked,
+                        'why': ('decisions pulled in' if got else
+                                'waiting on Brogan\u2019s review page' if asked
+                                else 'review page not made yet')}
     return status
 
 

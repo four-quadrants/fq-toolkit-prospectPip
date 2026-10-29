@@ -298,10 +298,18 @@ def write(folder, outdir=None):
     path = os.path.join(outdir, 'Due diligence - %s.numbers' % name)
     kept = read_back(path) if os.path.exists(path) else {}
     rows = []
+    try:
+        import review_page as _rp
+        page = _rp.decisions(folder)       # Brogan's choices on the review page
+    except Exception:                                        # noqa: BLE001
+        page = {}
     for key, q, why, src, pri, dec in findings(folder):
         if key in kept:
             q2, d2, p2 = kept[key]
             q, dec, pri = (q2 or q), (d2 or dec), (p2 or pri)
+        if key in page:
+            d3, t3 = page[key]
+            dec, q = (d3 or dec), (t3 or q)
         rows.append([key, q, why, src, pri, dec])
     order = {'High': 0, 'Normal': 1}
     # Documents and accounts first, savings last, as Brogan orders them.

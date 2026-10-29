@@ -126,7 +126,8 @@ def ask(prompt, cache_dir=None, timeout=TIMEOUT, allow=('Read',),
         cmd += ['--add-dir', d]
 
     started = time.time()
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                          stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
         raise NotAvailable((proc.stderr or proc.stdout or '').strip()
                            or 'claude exited %d' % proc.returncode)
