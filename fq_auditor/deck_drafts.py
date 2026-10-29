@@ -194,12 +194,19 @@ def documents(folder, first=''):
     except Exception:  # noqa: BLE001
         return []
     cache = os.path.join(orig, '.fq_cache')
-    taxes, other, seen = [], [], set()
+    # One entry per document, however many copies arrived (a zip unpacked
+    # beside the same files sent singly). The copy whose name was filed
+    # ("Personal - Taxes - ...") is the one that says what it is.
+    best = {}
     for m in rows:
+        k = m.get('sha256') or m['file']
+        low = m['file'].lower()
+        score = ('taxes' in low or 'investments' in low, len(low))
+        if k not in best or score > best[k][0]:
+            best[k] = (score, m)
+    taxes, other = [], []
+    for _score, m in best.values():
         name = m['file']
-        if m.get('sha256') in seen:
-            continue
-        seen.add(m.get('sha256'))
         if SKIP_DOC.search(name):
             continue
         txt = extract._cache_paths(cache, m['sha256'])[0]
@@ -215,6 +222,36 @@ def documents(folder, first=''):
         elif 'investments' in low:
             other.append((name, txt, m.get('text') or ''))
     return taxes + other
+
+
+def _where_free(text, folder):
+    """The prompt with the client folder's own path taken out, so the same
+    question asked on another machine (the share mounts differently on each
+    Mac) finds the same answer."""
+    base = re.escape(os.path.basename(os.path.normpath(folder)))
+    return re.sub(r'/[^\n]*?/' + base, '<client>', text)
+
+
+def _cached(cache, prompt, folder):
+    """An answer already given to this question, from any machine."""
+    want = _where_free(prompt, folder)
+    try:
+        names = sorted(os.listdir(cache))
+    except OSError:
+        return None
+    for n in names:
+        try:
+            with open(os.path.join(cache, n)) as fh:
+                hit = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if _where_free(hit.get('prompt') or '', folder) == want:
+            m = ask_claude.JSON_BLOCK.search(hit.get('answer') or '')
+            try:
+                return json.loads(m.group(0)) if m else None
+            except ValueError:
+                return None
+    return None
 
 
 def draft(folder, D, holes, log=print):
@@ -237,15 +274,22 @@ def draft(folder, D, holes, log=print):
                            style=_style(), holes=hole_text, pack=pack_text,
                            docs=doc_text)
     cache = os.path.join(folder, '.fq_cache', 'drafts')
-    try:
-        got = ask_claude.ask_json(
-            prompt, cache_dir=cache, timeout=TIMEOUT,
-            allow=('Read',) if docs else (),
-            add_dirs=(os.path.join(folder, 'Original_sourcedocs', '.fq_cache'),)
-            if docs else ())
-    except Exception as exc:  # noqa: BLE001 - no Claude, no drafts
-        log('  drafts skipped: %s' % exc)
-        return {}
+    got = _cached(cache, prompt, folder)
+    if got is None:
+        try:
+            got = ask_claude.ask_json(
+                prompt, cache_dir=cache, timeout=TIMEOUT,
+                allow=('Read',) if docs else (),
+                add_dirs=(os.path.join(folder, 'Original_sourcedocs',
+                                       '.fq_cache'),) if docs else ())
+        except Exception as exc:  # noqa: BLE001 - no Claude, no drafts
+            prev = _load(os.path.join(folder, '_Audit', 'deck_drafts.json'))
+            if prev:
+                log('  Claude not available here; using the drafts from the '
+                    'last build (%d boxes)' % len(prev))
+                return {h['id']: prev[h['id']] for h in holes if prev.get(h['id'])}
+            log('  drafts skipped: %s' % exc)
+            return {}
     drafts = (got or {}).get('drafts') or {}
     known = _pack_numbers(pack_text + '\n'.join(x for _n, _t, x in docs))
     out, refused = {}, []
@@ -259,9 +303,143 @@ def draft(folder, D, holes, log=print):
             out[k] = text
         else:
             refused.append((k, bad))
+    _save(os.path.join(folder, '_Audit', 'deck_drafts.json'), out)
     log('  Claude drafted %d of %d boxes%s'
         % (len(out), len(holes),
            '; %d set aside for a figure not on file (%s)'
            % (len(refused), ', '.join(b for _k, b in refused[:4]))
            if refused else ''))
+    return out
+
+
+INCOME_PROMPT = """From this dental practice owner's tax returns, read four figures
+for the most recent year on file that has BOTH the personal return and the
+practice return (all four figures from that one year). Read the text files
+listed; they are extracts of the returns and statements.
+
+{docs}
+
+Return JSON only:
+{{"year": 2025,
+  "w2": <the owner's W-2 wages from the practice, Form 1120-S officer
+         compensation or the W-2>,
+  "deferral": <the owner's own 401(k) elective deferral for a year: W-2 box
+         12 code D if a W-2 is on file; otherwise the 401(k) statement's
+         employee contributions, annualized (six months x 2), not the
+         employer match>,
+  "total_tax": <federal total tax from the personal Form 1040 plus the state
+         income tax from the state return, for the same year>,
+  "distributions": <distributions to the owner from the S corporation for the
+         year (Schedule K-1 line 16 D, or Schedule M-2)>,
+  "sources": {{"w2": "file and line", "deferral": "...", "total_tax": "...",
+              "distributions": "..."}}}}
+Use null for any figure you cannot find. Never estimate."""
+
+
+def income_facts(folder, first=''):
+    """The four figures the income structure slide needs, read from the
+    returns by Claude, each checked against the documents' own text. Cached
+    like the drafts. {} when Claude is not available."""
+    docs = [d for d in documents(folder, first)
+            if 'investments' not in d[0].lower()]
+    saved = os.path.join(folder, '_Audit', 'income_facts.json')
+    if not docs or ask_claude is None:
+        return _load(saved)
+    prompt = INCOME_PROMPT.format(
+        docs='\n'.join('- %s: read %s' % (n, t) for n, t, _x in docs))
+    cache = os.path.join(folder, '.fq_cache', 'drafts')
+    got = _cached(cache, prompt, folder)
+    if got is None:
+        try:
+            got = ask_claude.ask_json(
+                prompt, cache_dir=cache, timeout=TIMEOUT, allow=('Read',),
+                add_dirs=(os.path.join(folder, 'Original_sourcedocs',
+                                       '.fq_cache'),))
+        except Exception:  # noqa: BLE001
+            # No Claude on this machine: what the last build on one that has
+            # it read, if anything.
+            return _load(saved)
+    got = got or {}
+    known = _pack_numbers('\n'.join(x for _n, _t, x in docs))
+    out = {'year': got.get('year'), 'sources': got.get('sources') or {}}
+    for k in ('w2', 'deferral', 'total_tax', 'distributions'):
+        v = got.get(k)
+        if isinstance(v, str):
+            try:
+                v = float(v.replace('$', '').replace(',', ''))
+            except ValueError:
+                v = None
+        if isinstance(v, (int, float)) and v > 0:
+            # total tax is a sum of two figures, so it is checked by parts
+            # only when it is not itself on the page
+            if k == 'total_tax' or any(abs(v - n) <= 1 for n in known):
+                out[k] = float(v)
+    _save(saved, out)
+    return out
+
+
+def _load(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save(path, data):
+    try:
+        with open(path, 'w') as fh:
+            json.dump(data, fh, indent=1)
+    except OSError:
+        pass
+
+
+RETURNS_PROMPT = """Read these investment statements for a dental practice owner and,
+for each account below, give its return as the statements show it.
+
+ACCOUNTS (use these labels exactly)
+{labels}
+
+STATEMENTS
+{docs}
+
+For each account: the return over the longest period the statements state or
+let you compute from beginning value, ending value and net contributions, as
+an annualized percent, and the dates it covers. An account with no statement
+of its own may be measured with another account holding the same investments
+(say which). Return JSON only:
+{{"accounts": [{{"label": "...", "return_pct": -3.2, "period": "10/1/25-9/30/26",
+   "measured_with": null or "the other account's label", "basis": "where it came from"}}]}}
+Use null for return_pct when it cannot be found. Never estimate."""
+
+
+def account_returns(folder, labels, first=''):
+    """{label: {return_pct, period, measured_with, basis}} from the investment
+    statements, read by Claude and cached like the drafts."""
+    saved = os.path.join(folder, '_Audit', 'account_returns.json')
+    docs = [d for d in documents(folder, first) if 'investments' in d[0].lower()]
+    if not docs or not labels or ask_claude is None:
+        return _load(saved)
+    prompt = RETURNS_PROMPT.format(
+        labels='\n'.join('- ' + l for l in labels),
+        docs='\n'.join('- %s: read %s' % (n, t) for n, t, _x in docs))
+    cache = os.path.join(folder, '.fq_cache', 'drafts')
+    got = _cached(cache, prompt, folder)
+    if got is None:
+        try:
+            got = ask_claude.ask_json(
+                prompt, cache_dir=cache, timeout=TIMEOUT, allow=('Read',),
+                add_dirs=(os.path.join(folder, 'Original_sourcedocs',
+                                       '.fq_cache'),))
+        except Exception:  # noqa: BLE001
+            return _load(saved)
+    out = {}
+    for a in (got or {}).get('accounts') or []:
+        if a.get('label') in labels:
+            r = a.get('return_pct')
+            out[a['label']] = {'return_pct': r if isinstance(r, (int, float)) else None,
+                               'period': a.get('period'),
+                               'measured_with': a.get('measured_with'),
+                               'basis': a.get('basis')}
+    _save(saved, out)
     return out

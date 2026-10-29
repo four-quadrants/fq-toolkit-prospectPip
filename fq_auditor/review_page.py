@@ -6,7 +6,7 @@
 
 THE PAGE
 A private claude.ai page per client (an artifact with a small database), where
-The lead advisor sees the toolkit's proposal for every figure the consult deck uses, the
+the lead advisor sees the toolkit's proposal for every figure the consult deck uses, the
 workings behind them (starting portfolio, sale, savings sources, levers, the
 year-by-year savings worksheet), the concerns from the initial notes, and the
 follow-up questions. He types his own figure where he disagrees and marks each
@@ -75,14 +75,43 @@ def apply(folder, plan_json):
             schedule[int(key[5:])] = _num(raw)
             changed.append(key)
             continue
+        m = re.match(r'ret_(acct|4q)_(\d+)$', key)
+        if m:
+            try:
+                with open(os.path.join(folder, '_Audit', 'review_accounts.json')) as fh:
+                    acct_map = json.load(fh)
+            except (OSError, ValueError):
+                acct_map = {}
+            label = acct_map.get(m.group(2))
+            v = _num(raw)
+            if label and v is not None:
+                v = v * 100 if '%' in str(raw) else v      # stored as a percent
+                rets = entry.setdefault('returns', {})
+                rets.setdefault(label, {})['return_pct' if m.group(1) == 'acct'
+                                           else 'fq_pct'] = v
+                changed.append(key)
+            continue
         if key == 'consult_date':
             entry['consult_date_text'] = str(raw).strip()
             changed.append(key)
             continue
-        if key in ('retire_age', 'target_income', 'sale_net', 'start_portfolio',
-                   'current_savings', 'ideal_bank_balance', 'target_overhead'):
+        if key == 'refinance':
+            entry['refinance'] = str(raw).strip().lower()
+            changed.append(key)
+            continue
+        if key.startswith('a_') or key == 'building_value':
             v = _num(raw)
-            if key == 'target_overhead' and v and v > 1:
+            if v is not None:
+                entry[key] = v
+                changed.append(key)
+            continue
+        if key in ('retire_age', 'target_income', 'sale_net', 'start_portfolio',
+                   'current_savings', 'ideal_bank_balance', 'target_overhead',
+                   'income_w2_proposed', 'income_tax_rate_proposed',
+                   'income_w2', 'income_deferral', 'income_total_tax',
+                   'income_distributions'):
+            v = _num(raw)
+            if key in ('target_overhead', 'income_tax_rate_proposed') and v and v > 1:
                 v = v / 100.0
             if v is not None:
                 entry[key] = int(v) if key == 'retire_age' else v
@@ -99,10 +128,25 @@ def apply(folder, plan_json):
     out = {'read': datetime.datetime.now().isoformat(timespec='seconds'),
            'qdecisions': rec.get('qdecisions') or {},
            'qtext': rec.get('qtext') or {}}
+    # Slide wording: what was proposed, as edited, unless dropped.
+    try:
+        with open(os.path.join(folder, '_Audit', 'review_slides.json')) as fh:
+            proposed = json.load(fh)
+    except (OSError, ValueError):
+        proposed = None
+    if proposed is not None:
+        sd, st = rec.get('sdecisions') or {}, rec.get('stext') or {}
+        out['slides'] = {k: (None if sd.get(k) == 'Drop' else
+                             (st.get(k) if st.get(k) not in (None, '') else v))
+                         for k, v in proposed.items()}
     with open(os.path.join(folder, '_Audit', 'review_decisions.json'), 'w') as fh:
         json.dump(out, fh, indent=1)
     print('   figures applied: %s' % (', '.join(changed) or 'none'))
     print('   question decisions read: %d' % len(out['qdecisions']))
+    if 'slides' in out:
+        print('   slide wording: %d used, %d dropped'
+              % (sum(1 for v in out['slides'].values() if v),
+                 sum(1 for v in out['slides'].values() if not v)))
     return changed
 
 
@@ -174,6 +218,77 @@ def seed(folder, outdir):
              proposed=money(p.get('fq_wealth')),
              basis='From the projection; changes when the figures above change.'),
     ]
+    # Every assumption the models run on, at the firm's figure or the one
+    # already decided, for the lead advisor to change.
+    def shown(v, pct):
+        return '%.2f%%' % (v * 100) if pct else ('%g' % v)
+    for key, mod, const, label, pct in dt.ASSUMPTIONS:
+        figs.append(dict(key=key, label=label, group='Assumptions',
+                         proposed=shown(getattr(mod, const), pct),
+                         basis='Firm default.' if getattr(mod, const) ==
+                         dt._ASSUMPTION_DEFAULTS[key] else 'As decided earlier.'))
+    figs.append(dict(key='building_value', label='Building value today',
+                     group='Assumptions',
+                     proposed=money(D.get('building')) if D.get('building') else
+                     ('needed: the client owns the building' if D.get('owns_building')
+                      else 'not owned'),
+                     basis='Grown to retirement and sold with the practice.'))
+    figs.append(dict(key='refinance', label='Include the debt refinance (yes / no)',
+                     group='Assumptions', proposed='yes',
+                     basis='Counts the refinance as a savings source on the savings slide.'))
+    # The pay structure (slide 11): today's figures from the returns, and
+    # the two the proposal turns on.
+    inc = dt.income_structure(D)
+    srcs = (D.get('income_facts') or {}).get('sources') or {}
+    yr = (D.get('income_facts') or {}).get('year')
+    for key, label, val, basis in (
+            ('income_w2', 'Owner W-2 today, a year', inc and inc['w2'] * 12,
+             srcs.get('w2') or 'From the return.'),
+            ('income_deferral', 'Owner 401(k) deferral today, a year',
+             inc and inc['def'] * 12, srcs.get('deferral') or 'From the return.'),
+            ('income_total_tax', 'Total income tax, a year', inc and inc['tax'] * 12,
+             (srcs.get('total_tax') or 'Federal plus state, from the returns.')
+             + (' (%s)' % yr if yr else '')),
+            ('income_distributions', 'Distributions today, a year',
+             inc and inc['dist'] * 12, srcs.get('distributions') or 'From the return.'),
+            ('income_w2_proposed', 'Proposed W-2, a year', inc and inc['p_w2'] * 12,
+             'Today’s W-2 down to the next $5,000 a month.'),
+            ('income_tax_rate_proposed', 'Tax rate on the proposed W-2',
+             None if not inc else '%d%%' % round(inc['p_rate'] * 100),
+             'Firm default. Distributions are set so take-home stays the same.')):
+        figs.append(dict(key=key, label=label, slide=11,
+                         proposed=val if isinstance(val, str) else money(val),
+                         basis=basis))
+    # Returns against 4Q (slide 15): each account's return from its
+    # statements, and 4Q's over the same dates, which only the firm has.
+    rets = D.get('returns') or {}
+    acct_map = {}
+    for i, (label, value) in enumerate(D.get('start_parts') or []):
+        if i >= 3:
+            break
+        r = rets.get(label) or {}
+        name = re.sub(r'\s*\[.*?\]', '', label)
+        acct_map[str(i)] = label
+        if r.get('measured_with'):
+            per = 'Measured with %s' % re.sub(r'\s*\[.*?\]', '', r['measured_with'])
+            figs.append(dict(key='ret_4q_%d' % i, slide=15,
+                             label='%s: 4Q return' % name, proposed='same as that account',
+                             basis=per + '; leave blank.'))
+            continue
+        figs.append(dict(key='ret_acct_%d' % i, slide=15,
+                         label='%s: return, annualized' % name,
+                         proposed=('%.2f%%' % r['return_pct']) if r.get('return_pct') is not None
+                         else 'not on the statements',
+                         basis=('%s. %s' % (r.get('period') or 'Period not stated',
+                                            r.get('basis') or '')).strip()))
+        figs.append(dict(key='ret_4q_%d' % i, slide=15,
+                         label='%s: 4Q return, same dates' % name,
+                         proposed='needed',
+                         basis='4Q\u2019s annualized return for %s. The firm\u2019s '
+                               'figure; the slide\u2019s "vs 4Q" and "left on the '
+                               'table" are worked from it.' % (r.get('period') or 'the same period')))
+    with open(os.path.join(folder, '_Audit', 'review_accounts.json'), 'w') as fh:
+        json.dump(acct_map, fh, indent=1)
     rows = dd.findings(folder)
     rows.sort(key=lambda r: (r[0] == 'savings', r[0] == 'capacity',
                              {'High': 0}.get(r[4], 1)))
@@ -186,9 +301,39 @@ def seed(folder, outdir):
                        'priority': pri, 'decision': dec}, fh)
     with open(os.path.join(folder, '_Audit', 'review_questions.json'), 'w') as fh:
         json.dump(ids, fh, indent=1)
+    # The slide wording Claude drafted from the documents, for approval.
+    try:
+        words = dt.proposed_wording(folder, D)
+    except Exception as exc:  # noqa: BLE001 - the page works without it
+        print('   slide wording skipped: %s' % exc)
+        words = []
+    slides = {'items': [{'id': w['id'], 'slide': w['slide'],
+                         'heading': w['heading'], 'hint': w['example'],
+                         'text': w['text']} for w in words]}
+    fig_slides = sorted({f['slide'] for f in figs if f.get('slide')})
+    pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides)
+    for it in slides['items']:
+        it['pic'] = pics.get(it['slide'])
+    titles = {}
+    try:
+        from pptx import Presentation
+        tp = Presentation(dt.TEMPLATE)
+        for n in fig_slides:
+            tx = [sh.text_frame.text.strip() for sh in tp.slides[n - 1].shapes
+                  if sh.has_text_frame and sh.text_frame.text.strip()]
+            titles[n] = ' / '.join(tx[:2])[:80]
+    except Exception:  # noqa: BLE001
+        pass
+    with open(os.path.join(outdir, 'slides.json'), 'w') as fh:
+        json.dump(slides, fh)
+    with open(os.path.join(folder, '_Audit', 'review_slides.json'), 'w') as fh:
+        json.dump({w['id']: w['text'] for w in words}, fh, indent=1)
     plan = {'client': D['names'], 'surname': D['surname'], 'figures': figs,
             'concerns': [{'head': h, 'body': b} for h, b in D['adv'].get('concerns') or []],
             'decided': {}, 'qdecisions': {}, 'qtext': {},
+            'sdecisions': {}, 'stext': {},
+            'pics': {str(k): v for k, v in pics.items()},
+            'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids)}
     with open(os.path.join(outdir, 'plan.json'), 'w') as fh:
         json.dump(plan, fh)
@@ -247,6 +392,10 @@ def seed(folder, outdir):
         # regrow each at its own rate when the retirement age changes.
         'sale_practice': (D['collections'] or 0) * P.PRACTICE_MULTIPLE * (1 + P.PRACTICE_GROWTH) ** max(0, int((D['retire_age'] or 0) - (D['age'] or 0))),
         'sale_building': (D['building'] or 0) * (1 + P.BUILDING_GROWTH) ** max(0, int((D['retire_age'] or 0) - (D['age'] or 0)))}
+    work['model']['rates'] = {'inflation': S.INFLATION, 'current': S.CURRENT_RETURN,
+                              'fq': S.FQ_RETURN, 'first': S.FIRST_YEAR_FQ_RETURN,
+                              'practice_growth': P.PRACTICE_GROWTH,
+                              'building_growth': P.BUILDING_GROWTH}
     work['base'] = {'fq_at': pr.get('fq_at_retirement'),
                     'cur_at': pr.get('current_at_retirement')}
     with open(os.path.join(outdir, 'workings.json'), 'w') as fh:
@@ -254,6 +403,81 @@ def seed(folder, outdir):
     print('   %d figures, %d concerns, %d questions written to %s'
           % (len(figs), len(plan['concerns']), len(ids), outdir))
     return outdir
+
+
+def slide_pictures(folder, items, outdir, also=()):
+    """A picture of each slide that has wording to approve, from the client's
+    built deck, with every box on it outlined and numbered to match the list
+    on the review page. Returns {template slide: file name}."""
+    import shutil
+    import subprocess
+    import tempfile
+    import glob
+    from pptx import Presentation
+    from pptx.util import Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    import deck_template as dt
+    deck = sorted(glob.glob(os.path.join(folder, '_Audit', 'Consult deck - *.pptx')),
+                  key=os.path.getmtime)
+    if not deck or not (items or also):
+        return {}
+    D = dt.figures(folder, None)
+    drop = dt.dropped(D)
+    prs = Presentation(deck[-1])
+    want = {n: [] for n in also}
+    for i, it in enumerate(items, 1):
+        it['n'] = i
+        want.setdefault(it['slide'], []).append(it)
+    keep = {}
+    for n, its in want.items():
+        idx = n - 1 - sum(1 for d in drop if d < n)
+        if idx >= len(prs.slides):
+            continue
+        slide = prs.slides[idx]
+        by = {sh.name: sh for sh in slide.shapes}
+        for it in its:
+            sh = by.get(it['id'].split('.', 1)[1])
+            if sh is None:
+                continue
+            box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, sh.left, sh.top,
+                                         sh.width, sh.height)
+            box.fill.background()
+            box.line.color.rgb = RGBColor(0xE0, 0x6C, 0x00)
+            box.line.width = Pt(2.5)
+            tag = slide.shapes.add_shape(MSO_SHAPE.OVAL, sh.left - Pt(9),
+                                         sh.top - Pt(9), Pt(20), Pt(20))
+            tag.fill.solid()
+            tag.fill.fore_color.rgb = RGBColor(0xE0, 0x6C, 0x00)
+            tag.line.fill.background()
+            tf = tag.text_frame
+            tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+            tf.text = str(it['n'])
+            r = tf.paragraphs[0].runs[0]
+            r.font.size = Pt(9)
+            r.font.bold = True
+            r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        keep[idx] = n
+    tmp = tempfile.mkdtemp()
+    src = os.path.join(tmp, 'marked.pptx')
+    prs.save(src)
+    subprocess.run(['soffice', '--headless', '--convert-to', 'pdf', '--outdir', tmp, src],
+                   capture_output=True, timeout=300)
+    pdf = os.path.join(tmp, 'marked.pdf')
+    out = {}
+    if os.path.exists(pdf):
+        os.makedirs(os.path.join(outdir, 'slides'), exist_ok=True)
+        for idx, n in keep.items():
+            base = os.path.join(tmp, 's%d' % n)
+            subprocess.run(['pdftoppm', '-jpeg', '-r', '90', '-f', str(idx + 1),
+                            '-l', str(idx + 1), '-singlefile', pdf, base],
+                           capture_output=True, timeout=120)
+            if os.path.exists(base + '.jpg'):
+                name = 'slides/%d.jpg' % n
+                shutil.copy(base + '.jpg', os.path.join(outdir, name))
+                out[n] = name
+    shutil.rmtree(tmp, ignore_errors=True)
+    return out
 
 
 def main():

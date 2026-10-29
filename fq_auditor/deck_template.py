@@ -253,12 +253,46 @@ def _series_inputs(bundle, folder):
     return out
 
 
+# Every assumption the lead advisor can change on the review page: deck
+# entry key -> (module, constant, what it is, as a percent?). The default is
+# the module's own value; the review page shows it and takes his figure.
+ASSUMPTIONS = (
+    ('a_current_return', _sav, 'CURRENT_RETURN', 'Return on the current path', True),
+    ('a_fq_return', _sav, 'FQ_RETURN', 'Return with Four Quadrants', True),
+    ('a_first_year_return', _sav, 'FIRST_YEAR_FQ_RETURN',
+     'Return with Four Quadrants, first year', True),
+    ('a_inflation', _sav, 'INFLATION', 'Inflation on retirement spending', True),
+    ('a_horizon_age', _sav, 'HORIZON_AGE', 'Plan to age', False),
+    ('a_practice_multiple', _plan, 'PRACTICE_MULTIPLE',
+     'Practice value, as a share of collections', True),
+    ('a_practice_growth', _plan, 'PRACTICE_GROWTH', 'Practice value growth a year', True),
+    ('a_building_growth', _plan, 'BUILDING_GROWTH', 'Building value growth a year', True),
+    ('a_sale_net', _plan, 'SALE_NET', 'Sale kept after tax', True),
+    ('a_refi_rate', _plan, 'REFI_RATE', 'Refinance rate', True),
+    ('a_refi_years', _plan, 'REFI_YEARS', 'Refinance term, years', False),
+    ('a_refi_share', _plan, 'REFI_SHARE', 'Share of the refinance savings invested', True),
+    ('a_once_share', _plan, 'ONCE_SHARE', 'Share of one-time cash invested', True),
+)
+_ASSUMPTION_DEFAULTS = {k: getattr(m, c) for k, m, c, _l, _p in ASSUMPTIONS}
+
+
+def apply_assumptions(adv):
+    """Set the models' constants from the deck entry, back to the firm's
+    defaults first so one client's figures never carry to the next."""
+    for key, mod, const, _label, pct in ASSUMPTIONS:
+        v = N(adv.get(key)) if adv.get(key) not in (None, '') else None
+        if v is not None and pct and v > 1:
+            v = v / 100.0
+        setattr(mod, const, v if v is not None else _ASSUMPTION_DEFAULTS[key])
+
+
 def figures(folder, client):
     """Everything the slides print, from the documents, the models and the
     advisor's entry. Missing values are None and the slide says so."""
     b = _facts.gather(folder, client)
     f = {x.label: x.value for x in b.all_facts()}
     adv = _deck._advisor(folder)
+    apply_assumptions(adv)
     # The concerns are the pain points from the initial notes, settled
     # weeks earlier, not something to invent at the deck. Used unless the
     # advisor has written their own.
@@ -344,11 +378,37 @@ def figures(folder, client):
     D['levers'] = _lev.compute(lx)
 
     excl = (cash['monthly_excluding'] if read else None)
+    D['income_facts'] = {}
+    if not os.environ.get('FQ_NO_DRAFTS'):
+        try:
+            import deck_drafts
+            D['income_facts'] = deck_drafts.income_facts(folder, D['first'] or '')
+        except Exception:  # noqa: BLE001
+            pass
+    D['returns'] = {}
+    if not os.environ.get('FQ_NO_DRAFTS'):
+        try:
+            import deck_drafts
+            D['returns'] = deck_drafts.account_returns(
+                folder, [l for l, _a in D.get('start_parts') or []],
+                D['first'] or '')
+        except Exception:  # noqa: BLE001
+            pass
+    # 4Q's return over each account's period, and any corrected account
+    # return, from the review page
+    for l, v in ((adv.get('returns') or {}).items()):
+        D['returns'].setdefault(l, {}).update(
+            {k: x for k, x in v.items() if x is not None})
+    D.setdefault('schedule', D.get('schedule') or [])
+    _inc = income_structure(D)
     D['gains_proposed'] = _plan.gains(
         collections=D['collections'], current_savings=D['current_savings'],
         cash=D['cash'], ideal_balance=bal, spend_excl_monthly=excl,
         levers={k: v for k, v in D['levers'].items() if k != 'overhead'},
-        extra=adv.get('gains'))
+        extra=adv.get('gains'),
+        refi_freed=None if str(adv.get('refinance', '')).lower() in ('no', 'n', 'false', '0')
+        else (_plan.refinance(D.get('practice_debts')) or {}).get('freed'),
+        added_deferral=_inc['more_saved'] if _inc else None)
     # The table as the advisor left it in the app replaces the proposal
     # outright: rows they deleted stay deleted.
     if adv.get('gains_table'):
@@ -820,12 +880,44 @@ def slide_fills(D):
                    'strategies to maximize the financial plan.' % b_txt,
     }
 
-    # 11 income structure: today's W-2 from the P&L's doctor wages
+    # 11 income structure: today's W-2 from the P&L's doctor wages, and the
+    # proposed structure worked the way the lead advisor works it
     w2 = N((D.get('facts') or {}).get('Doctor wages'))
+    inc = income_structure(D)
+    if inc:
+        w2 = inc['w2'] * 12
     if w2:
         out.setdefault(11, {})
         out[11].update({'Text 19': '%s/mo' % M(w2 / 12.0),
                         'Text 20': '%s per year' % _k(w2)})
+    if inc:
+        def neg(v):
+            return '(%s)' % M(v)
+        k1 = lambda v: '$%.1fk' % (v / 1000.0)            # noqa: E731
+        out[11].update({
+            'Text 3': '+%s/mo business cashflow' % k1(inc['gain']),
+            'Text 4': 'with a new 401(k) in %d' % inc['plan_year'],
+            'Text 6': 'Decrease %s\u2019s W-2 (\u2212%s/yr ) and take lower, '
+                      'consistent distributions ( \u2212%s/yr ) to have fewer '
+                      'tax surprises and smoother cashflow.'
+                      % (D['first'], _k(inc['w2_cut'] * 12),
+                         _k(inc['dist_cut'] * 12)),
+            'Text 10': 'Increase the 401(k) to max with the same match, saving '
+                       '%s/yr more. All changes lower taxes over %s/yr.'
+                       % (k1(inc['more_saved']), k1(inc['tax_saved'])),
+            'Text 12': 'Begin paying distributions to cover custom quarterly '
+                       'tax estimates (example on the next slide).',
+            'Text 15': 'Personal cashflow stays identical while business '
+                       'cashflow grows by +%s/mo.' % k1(inc['gain']),
+            'Text 23': neg(inc['def']), 'Text 24': 'Taxes (%d%%)' % round(100 * inc['pct']),
+            'Text 25': neg(inc['tax']), 'Text 28': M(inc['net']),
+            'Text 31': '%s/mo' % M(inc['dist']),
+            'Text 35': '%s/mo' % M(inc['p_w2']),
+            'Text 36': '%s per year' % _k(inc['p_w2'] * 12),
+            'Text 39': neg(inc['p_def']),
+            'Text 40': 'Taxes (%d%%)' % round(100 * inc['p_rate']),
+            'Text 41': neg(inc['p_tax']), 'Text 44': M(inc['p_net']),
+            'Text 47': '%s/mo' % M(inc['p_dist'])})
 
     # 14 and 15 investments: how much is locked up, and in what. The lead advisor’s
     # Oyler slides: "94% of retirement savings sits in relatively illiquid
@@ -908,6 +1000,45 @@ def slide_fills(D):
                                              else 'Daily')
             else:
                 out[15][lab], out[15][val] = '[TBD]', '[TBD]'
+        # Against 4Q: each account's annualized return (from its statements)
+        # less 4Q's over the same dates (asked for on the review page), and
+        # what the gap cost: value x gap, summed. The lead advisor's Oyler
+        # slide: $69k x 15.64% + ($628k + $408k) x 19.35% = $211.3k, which is
+        # +19.11% of the $1.1M.
+        rets = D.get('returns') or {}
+        vs_cells = [('Text 34', 'Text 35'), ('Text 48', 'Text 49'),
+                    (None, 'Text 57')]
+        lost, any_gap = 0.0, False
+        for i, (cell, sub) in enumerate(vs_cells):
+            if i >= len(D['start_parts']):
+                break
+            l, a = D['start_parts'][i]
+            r = rets.get(l) or {}
+            if r.get('measured_with'):
+                r = dict(rets.get(r['measured_with']) or {}, **{
+                    k: v for k, v in r.items() if v is not None})
+            gap = None
+            if r.get('return_pct') is not None and r.get('fq_pct') is not None:
+                gap = float(r['return_pct']) - float(r['fq_pct'])
+                lost += a * max(0.0, -gap) / 100.0
+                any_gap = True
+            if cell:
+                out[15][cell] = ('%+.2f%%' % gap).replace('-', '\u2212') \
+                    if gap is not None else '[TBD]'
+            if sub and r.get('period'):
+                out[15][sub] = ('measured with the %s, %s'
+                                % (re.sub(r'\s*\[.*?\]', '', r['measured_with']).split(',')[0],
+                                   r['period'])
+                                if (rets.get(l) or {}).get('measured_with')
+                                else 'annualized, %s' % r['period'])
+        if any_gap:
+            pct = 100.0 * lost / D['start']
+            out[15].update({
+                'Text 3': '$%.1fk left on the table' % (lost / 1000.0),
+                'Text 59': '$%.1fk' % (lost / 1000.0),
+                'Text 61': 'More %s would have had achieving 4Q\u2019s returns on '
+                           'an annualized basis, +%.2f%% more money.'
+                           % (D['first'], pct)})
 
     # 16 savings projection: the advisor's sources; totals from the schedule
     # 16 the savings projection, from the gains: what each is worth a year
@@ -918,7 +1049,7 @@ def slide_fills(D):
     sch = sorted(D['schedule'])
     # Only when the schedule came from these gains: beside an advisor's own
     # schedule they would describe a plan nobody chose.
-    gl = [g for g in D['gains']] if D.get('schedule_derived') else []
+    gl = _slide16_rows(D['gains'])
     if gl:
         y1 = [('Text 10', 'Text 12', 'Text 14'), ('Text 16', 'Text 18', 'Text 20'),
               ('Text 22', 'Text 24', 'Text 26'), ('Text 28', 'Text 30', 'Text 32'),
@@ -929,7 +1060,7 @@ def slide_fills(D):
                 g = gl[i]
                 vals = [g['label'], M(g['gain']), M(_plan.invested(g, 0))]
             else:
-                vals = [ask('another source'), '[TBD]', '[TBD]']
+                vals = ['', '', '']
             for n, v in zip(cells, vals):
                 out[16][n] = v
         full = len(gl) <= len(y1)
@@ -945,8 +1076,7 @@ def slide_fills(D):
                   M(sum(g['gain'] for g in rec)), M(same)),
                  ('Practice improvements, second year', '\u2013', M(step))]
         for i, cells in enumerate(y2):
-            vals = rows2[i] if i < len(rows2) else (
-                ask('another source'), '[TBD]', '[TBD]')
+            vals = rows2[i] if i < len(rows2) else ('', '', '')
             for n, v in zip(cells, vals):
                 out[16][n] = v
         out[16]['Text 89'] = M(sum(g['gain'] for g in rec)) if full else '[TBD]'
@@ -958,6 +1088,10 @@ def slide_fills(D):
         p = D.get(which)
         if not p:
             continue
+        out.setdefault(slide, {})['Text 4'] = (
+            'retirement income' if not D.get('proj2') else
+            'retirement income \u00b7 %s practice value'
+            % ('smaller' if slide == 17 else 'larger'))
         inc = D[inc_key]
         q, y0, ry, ey = p['fq'], p['first_year'], p['retire_year'], \
             p['end_year']
@@ -1004,7 +1138,10 @@ def slide_fills(D):
              else ''),
             'Text 75': str(age_at(ey)), 'Text 76': str(ey), 'Text 77': '$0',
             'Text 78': M(q[ey]), 'Text 79': M(exp_at(ey)),
-            'Text 81': ('Funded to %d at %s/yr.' % (age_at(ey), M(inc)))
+            'Text 81': ('Funded to %d at %s/yr.%s' % (
+                age_at(ey), M(inc),
+                ' Even at the smaller practice value.'
+                if slide == 17 and D.get('proj2') else ''))
             if q[ey] > -1000 else
             ('Runs short in %s at %s/yr.' % (_sav.runout_year(
                 {k: v for k, v in q.items() if k > ry}) or ey, M(inc))),
@@ -1014,7 +1151,7 @@ def slide_fills(D):
             if slide == 17 else
                        'Same savings path, a higher sale price.',
         })
-        out[slide] = fill
+        out[slide].update(fill)
     return out
 
 
@@ -1102,20 +1239,97 @@ def _drop(prs, index):
 
 
 # The fee slide is set by the lead advisor for each client: left as TBD.
-NOT_DRAFTED = {19}
+NOT_DRAFTED = {7, 19}   # 7: accounting writes the tax red flags
 
 
-def _drafts(folder, D, prs, fills, drop):
-    """Ask Claude for every box that would otherwise go out as a placeholder."""
-    if os.environ.get('FQ_NO_DRAFTS'):
-        return {}
+# 401(k) employee limits (2026): base, catch-up at 50, the larger catch-up
+# at 60 to 63. The plan year's own limits replace these when published.
+K401_BASE, K401_CATCHUP, K401_CATCHUP_60 = 24500, 8000, 11250
+PROPOSED_TAX_RATE = 0.40      # the lead advisor's Oyler slide: "Taxes (40%)"
+EXTRA_DEFERRAL_TAX = 0.30     # tax saved on the added deferral, his 30%
+
+
+def income_structure(D):
+    """Today's pay and the proposed pay, a month at a time, as on the lead
+    advisor's Oyler slide: W-2 down to the next $5,000 a month, the 401(k) to
+    the maximum, taxes at 40% of W-2 less the deferral, and distributions set
+    so the household takes home exactly what it does today. Every input can
+    be overridden in the deck entry (review page). None when a figure is
+    missing, and the slide keeps its placeholders."""
+    adv = D['adv']
+    f = dict(D.get('income_facts') or {})
+    for k in ('w2', 'deferral', 'total_tax', 'distributions'):
+        if adv.get('income_' + k) is not None:
+            f[k] = N(adv['income_' + k])
+    if not f.get('w2'):
+        f['w2'] = N((D.get('facts') or {}).get('Doctor wages'))
+    if not (f.get('w2') and f.get('total_tax') and f.get('distributions')):
+        return None
+    w2, dfr = f['w2'] / 12.0, (f.get('deferral') or 0) / 12.0
+    tax, dist = f['total_tax'] / 12.0, f['distributions'] / 12.0
+    net = w2 - dfr - tax
+    p_w2 = N(adv.get('income_w2_proposed'))
+    p_w2 = p_w2 / 12.0 if p_w2 else None
+    if not p_w2:
+        p_w2 = (w2 // 5000) * 5000
+        if p_w2 >= w2:
+            p_w2 = w2 - 2500
+    age = (D.get('age') or 0) + 1
+    cap = K401_BASE + (K401_CATCHUP_60 if 60 <= age <= 63 else
+                       K401_CATCHUP if age >= 50 else 0)
+    p_def = max(dfr, N(adv.get('income_deferral_proposed')) or cap) / 12.0 \
+        if not adv.get('income_deferral_proposed') else \
+        N(adv['income_deferral_proposed']) / 12.0
+    rate = N(adv.get('income_tax_rate_proposed')) or PROPOSED_TAX_RATE
+    rate = rate / 100.0 if rate > 1 else rate
+    p_tax = (p_w2 - p_def) * rate
+    p_net = p_w2 - p_def - p_tax
+    p_dist = net + dist - p_net
+    if p_dist < 0:
+        return None
+    sch = D.get('schedule') or []
+    return dict(w2=w2, **{'def': dfr}, tax=tax, pct=tax / (w2 - dfr),
+                net=net, dist=dist, p_w2=p_w2, p_def=p_def, p_rate=rate,
+                p_tax=p_tax, p_net=p_net, p_dist=p_dist,
+                w2_cut=w2 - p_w2, dist_cut=dist - p_dist,
+                gain=(w2 - p_w2) + (dist - p_dist),
+                more_saved=(p_def - dfr) * 12,
+                tax_saved=(p_def - dfr) * 12 * EXTRA_DEFERRAL_TAX,
+                plan_year=sch[0][0] if sch else datetime.date.today().year + 1,
+                year=f.get('year'))
+
+
+def _slide16_rows(gains, slots=6):
+    """The year-one rows of the savings slide, at most six, in the order the
+    lead advisor lays them out: what is saved today, one-time cash, the
+    refinance, the practice levers (folded into one row, as on his slides),
+    overhead, then the household's monthly surplus."""
+    gl = [g for g in gains or [] if (g.get('gain') or 0) > 0]
+    lev = [g for g in gl if g['kind'] == 'practice' and g['key'] != 'overhead']
+    if len(lev) > 1:
+        folded = dict(key='levers', kind='practice',
+                      label=', '.join(g['label'] for g in lev),
+                      gain=sum(g['gain'] for g in lev),
+                      basis='The practice levers together.')
+        folded['invested'] = [sum(_plan.invested(g, i) for g in lev)
+                              for i in range(3)]
+        gl = [g for g in gl if g not in lev] + [folded]
+    order = {'current': 0, 'practice_surplus': 1, 'personal_surplus': 2,
+             'refinance': 3, 'levers': 4, 'overhead': 5, 'personal_monthly': 6}
+    gl.sort(key=lambda g: order.get(g['key'], 4.5))
+    return gl[:slots]
+
+
+def holes(D, prs, fills, drop):
+    """Every box that would otherwise go out as a placeholder, with the slide
+    heading and, from the examples file, what that box held in a past deck."""
     try:
         with open(os.path.join(os.path.dirname(TEMPLATE),
                                'deck_examples.json')) as fh:
             examples = json.load(fh)
     except (OSError, ValueError):
         examples = {}
-    holes = []
+    out = []
     for n, slide in enumerate(prs.slides, 1):
         if n in drop or n in NOT_DRAFTED:
             continue
@@ -1132,22 +1346,15 @@ def _drafts(folder, D, prs, fills, drop):
             else:
                 hole = shapes.get(sh.name, default) == 'advisor'
             if hole:
-                holes.append({'id': '%d.%s' % (n, sh.name), 'slide': n,
-                              'heading': heading.replace('"', "'"),
-                              'example': examples.get(
-                                  '%d.%s' % (n, sh.name)) or '(none)'})
-    try:
-        import deck_drafts
-    except ImportError:
-        return {}
-    return deck_drafts.draft(folder, D, holes)
+                out.append({'id': '%d.%s' % (n, sh.name), 'slide': n,
+                            'heading': heading.replace('"', "'"),
+                            'example': examples.get(
+                                '%d.%s' % (n, sh.name)) or '(none)'})
+    return out
 
 
-def render(folder, client, out, template=TEMPLATE):
-    D = figures(folder, client)
-    fills = slide_fills(D)
-    prs = Presentation(template)
-    prompts = 0
+def dropped(D):
+    """Template slides left out for this client."""
     drop = []
     if not D['debt_service']:
         drop.append(10)
@@ -1156,6 +1363,46 @@ def render(folder, client, out, template=TEMPLATE):
         drop.append(12)
     if not D.get('proj2'):
         drop.append(18)
+    return drop
+
+
+def proposed_wording(folder, D):
+    """Claude's drafts for the empty boxes: [{id, slide, heading, example,
+    text}]. Used by the review page, where the lead advisor approves them."""
+    prs = Presentation(TEMPLATE)
+    hs = holes(D, prs, slide_fills(D), dropped(D))
+    import deck_drafts
+    got = deck_drafts.draft(folder, D, hs)
+    return [dict(h, text=got[h['id']]) for h in hs if h['id'] in got]
+
+
+def _drafts(folder, D, prs, fills, drop):
+    """The wording for the empty boxes. Once the lead advisor has reviewed it,
+    what he approved (and nothing he dropped); before that, Claude's drafts,
+    marked in the notes as not yet reviewed."""
+    try:
+        with open(os.path.join(folder, '_Audit', 'review_decisions.json')) as fh:
+            rev = json.load(fh)
+    except (OSError, ValueError):
+        rev = {}
+    if 'slides' in rev:
+        return {k: v for k, v in (rev['slides'] or {}).items() if v}
+    if os.environ.get('FQ_NO_DRAFTS'):
+        return {}
+    try:
+        import deck_drafts
+    except ImportError:
+        return {}
+    return deck_drafts.draft(folder, D, holes(D, prs, fills, drop))
+
+
+def render(folder, client, out, template=TEMPLATE):
+    D = figures(folder, client)
+    fills = slide_fills(D)
+    prs = Presentation(template)
+    prompts = 0
+    drop = dropped(D)
+    adv = D['adv']
 
     drafts = _drafts(folder, D, prs, fills, drop)
 

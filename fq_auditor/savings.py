@@ -69,9 +69,10 @@ def _expense(exp0, y, y0):
 
 
 def current_path(start, f, deposits, retire_year, expenses, y0, end,
-                 r=CURRENT_RETURN, compound_negative=False):
+                 r=None, compound_negative=False):
     """Year-end values on the current path. deposits is {year: amount}, with the
     sale in the retirement year and any pension in the years after it."""
+    r = CURRENT_RETURN if r is None else r
     out = {}
     v = start * (1 + r * f)
     out[y0] = v
@@ -87,9 +88,12 @@ def current_path(start, f, deposits, retire_year, expenses, y0, end,
 
 
 def fq_path(start, f, deposits, retire_year, expenses, y0, end,
-            r=FQ_RETURN, r1=FIRST_YEAR_FQ_RETURN, compound_negative=False):
+            r=None, r1=None, compound_negative=False):
     """Year-end values on the Four Quadrants path. deposits as above, from the
-    advisor's savings schedule."""
+    advisor's savings schedule. Rates are read when called, so the advisor's
+    own figures (set by deck_template.apply_assumptions) are used."""
+    r = FQ_RETURN if r is None else r
+    r1 = FIRST_YEAR_FQ_RETURN if r1 is None else r1
     out = {}
     v = start * (1 + r1 * f) + deposits.get(y0, 0)
     out[y0] = v
@@ -172,7 +176,7 @@ def step_schedule(steps, first, last):
 
 def project(start, consult_date, age_now, retire_age, current_savings,
             current_expenses, fq_schedule, fq_income, sale_net=0, pension=0,
-            pension_from=None, horizon_age=HORIZON_AGE, f=None, r1=None):
+            pension_from=None, horizon_age=None, f=None, r1=None):
     """Both paths and the headline figures, for the deck.
 
     start             today's portfolio, from the Assumptions sections 4 and 5
@@ -195,6 +199,7 @@ def project(start, consult_date, age_now, retire_age, current_savings,
     if f == 0:
         y0, f = y0 + 1, 1.0
         r1 = FQ_RETURN if r1 is None else r1
+    horizon_age = horizon_age or HORIZON_AGE
     retire = consult_date.year + (retire_age - age_now)
     end = consult_date.year + (horizon_age - age_now)
     pension_from = pension_from or retire + 1

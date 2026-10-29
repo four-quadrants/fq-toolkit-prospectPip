@@ -38,6 +38,7 @@ PERSONAL_CUSHION_MONTHS = 2  # personal cash kept back before a surplus
 RAMP_PRACTICE = (0.10, 0.20, 0.30)   # practice improvements, by plan year
 RAMP_CASH = (0.50, 0.50, 0.50)       # cash the household already has coming
 ONCE_SHARE = 0.50                    # one-time items, year 1 only
+REFI_SHARE = 0.25                    # Oyler: $96,000 freed, $24,000 invested
 ROUND_TO = 3000
 
 
@@ -51,13 +52,14 @@ def practice_value(collections):
 
 
 def sale(collections, years, building=None, debt_at_sale=0.0,
-         growth=PRACTICE_GROWTH):
+         growth=None):
     """Gross and net proceeds at retirement.
 
     The building only when the client owns it and a value has been entered:
     many rent, and an owned building with no value is a gap the Assumptions
     already prints, not a zero to assume.
     """
+    growth = PRACTICE_GROWTH if growth is None else growth
     pv = practice_value(collections)
     if pv is None or years is None:
         return None, None
@@ -70,7 +72,7 @@ def sale(collections, years, building=None, debt_at_sale=0.0,
 
 def gains(collections=None, current_savings=None, cash=None,
           ideal_balance=None, spend_excl_monthly=None, levers=None,
-          extra=None):
+          extra=None, refi_freed=None, added_deferral=None):
     """The list the savings projection slide is built from.
 
     Each entry: key, label, gain (a year's cashflow), kind ('base', 'practice',
@@ -80,9 +82,17 @@ def gains(collections=None, current_savings=None, cash=None,
     """
     out = []
     if current_savings:
-        out.append(dict(key='current', label='Current savings',
-                        gain=current_savings, kind='base',
-                        basis='What is saved today, all of it kept.'))
+        if added_deferral:
+            out.append(dict(key='current',
+                            label='Current savings (w/new income & 401(k))',
+                            gain=current_savings + added_deferral, kind='base',
+                            basis='What is saved today, plus $%s a year more '
+                                  'into the 401(k) under the new pay structure.'
+                                  % '{:,.0f}'.format(added_deferral)))
+        else:
+            out.append(dict(key='current', label='Current savings',
+                            gain=current_savings, kind='base',
+                            basis='What is saved today, all of it kept.'))
     if collections:
         out.append(dict(key='overhead', label='−3% overhead',
                         gain=collections * OVERHEAD_STEP, kind='practice',
@@ -116,14 +126,22 @@ def gains(collections=None, current_savings=None, cash=None,
                 gain=personal_bal - cushion, kind='once',
                 basis='Personal balances of $%s less two months of spending.'
                       % '{:,.0f}'.format(personal_bal)))
-        monthly = sum((a.get('surplus') or 0) for a in cash['accounts']
-                      if a['entity'] == 'Personal' and a.get('readable'))
+        # The household's month-to-month surplus is not listed: the lead
+        # advisor's decks never count it as a source (it is where the
+        # distributions land, and it is spent), and counting it put Oyler's
+        # first-year savings at $262,500 against his $120,800.
+        monthly = 0
         if monthly > 0:
             out.append(dict(
                 key='personal_monthly', label='Personal monthly surplus',
                 gain=monthly * 12, kind='cash',
                 basis='Average personal surplus of $%s a month.'
                       % '{:,.0f}'.format(monthly)))
+    if refi_freed and refi_freed > 0:
+        out.append(dict(key='refinance', label='Potential practice debt refinance',
+                        gain=refi_freed * 12, kind='refi',
+                        basis='Consolidating the higher-rate practice loans frees '
+                              '$%s a month.' % '{:,.0f}'.format(refi_freed)))
     for g in (extra or []):
         out.append(dict(key=g.get('key') or g.get('label'), label=g['label'],
                         gain=g.get('gain') or 0,
@@ -144,6 +162,8 @@ def invested(g, year_index):
         return g['gain']
     if k == 'once':
         return _round(g['gain'] * ONCE_SHARE, 5000) if year_index == 0 else 0
+    if k == 'refi':
+        return _round(g['gain'] * REFI_SHARE)
     ramp = RAMP_PRACTICE if k == 'practice' else RAMP_CASH
     return _round(g['gain'] * ramp[i])
 
@@ -160,7 +180,9 @@ REFI_YEARS = 10
 REFI_MIN_BALANCE = 20000
 
 
-def _payment(balance, rate=REFI_RATE, years=REFI_YEARS):
+def _payment(balance, rate=None, years=None):
+    rate = REFI_RATE if rate is None else rate
+    years = REFI_YEARS if years is None else years
     r, n = rate / 12.0, years * 12
     return balance * r / (1 - (1 + r) ** -n)
 

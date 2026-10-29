@@ -364,3 +364,21 @@ Python, where it used to suggest `--break-system-packages`.
   python3 _spec/build_deck_examples.py "<the lead advisor deck>.pptx" Oyler Brian
   It is NOT in git (json). HANDOFF: copy assets/deck_examples.json and consult_template.pptx to the analyst's machine.
 - The sandbox claude is not logged in, so drafts were only tested with a stub. First live run is on the firm's Mac.
+
+## Friday Oct 30 plan (handoff Monday)
+
+Done Thursday: review page has slide-by-slide pictures, assumptions group (all rates and rules), pay structure
+(slide 11, from Claude reading the returns), 4Q return prompts (slide 15), slide 16 sources from the model, fee and
+tax slides left for the lead advisor / accounting. Oyler vs the real deck: 356 of 494 boxes identical, 27 blank by
+design (7 tax, 6 fees, 5 4Q, 9 insurance-policy rows), 111 differ (mostly judgment: concerns wording, levers chosen,
+custom slide 8 wording, distributions year).
+
+Friday, in order:
+1. Oyler: rebuild (401(k) deferral from the statement), check slide 11 and 16 again.
+2. Spaulding gaps: levers slide empty (no lever inputs found), investments slide empty (start_parts empty though
+   start = $312,080). Same check on Rebol.
+3. App: rename Build Deck to "Draft the deck for review" / "Build the final deck"; step bar Review dot.
+4. Runbook: "load [client]'s review page", "pull in [client]'s review"; one review page per client (copy of the
+   Oyler page HTML, new artifact per client).
+5. Run Spaulding, Rebol, Prather end to end in the app; load their review pages.
+6. Setup guide for the analyst's Mac; scheduled LaunchBay pull; commit.
