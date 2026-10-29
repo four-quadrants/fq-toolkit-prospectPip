@@ -300,7 +300,7 @@ def gather(folder, client=None):
             name = r.get('creditor') or 'unnamed'
             if r.get('account_last4'):
                 name += ' x%s' % r['account_last4']
-            # "Florida Mortgage (Regions x3779)", as Brogan names them.
+            # "Florida Mortgage (Regions x3779)", as the lead advisor names them.
             if r.get('what'):
                 where = STATES.get(r.get('state') or '', '')
                 name = '%s%s (%s)' % (where + ' ' if where else '',
@@ -523,7 +523,7 @@ def gather(folder, client=None):
          {y: tax.get(y, {}).get('officer_comp') for y in years}, MONEY),
     ]
     # ------------------------------------------------- pain points, last
-    # Where Brogan puts them: the dentist's own words, then the consult
+    # Where the lead advisor puts them: the dentist's own words, then the consult
     # themes each with the figure behind it, then fee range and timeline.
     try:
         import painpoints as _pp

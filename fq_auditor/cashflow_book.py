@@ -6,7 +6,7 @@ Filling the template produced an unreadable file. Its Monthly average row
 averages itself, its Difference row points at an empty row, it has room for
 three accounts so a fourth and fifth came out unformatted, and the toolkit's
 adjustments were being written onto formula cells and silently dropped.
-Austin's call: a clean layout the toolkit owns.
+The firm's call: a clean layout the toolkit owns.
 
 THE LAYOUT
   Summary     one line per side (Personal, Practice, each LLC): average
@@ -319,7 +319,7 @@ def write(entities, out, template=None):
 def read_back(path):
     """{sheet: {account: {period: {field: value}}}} from a saved workbook.
 
-    The analyst's figures, read by row label. Fields match
+    The analyst’s figures, read by row label. Fields match
     cashflow_review.FIELDS: transfers_in, transfers_out, adj_lines (the
     Adjust out row) and adj_in_lines (the Adjust in row).
     """

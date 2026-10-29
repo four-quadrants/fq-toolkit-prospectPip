@@ -81,7 +81,7 @@ def build(folder):
     _tx.match_across(moves)
     _mark_scheduled(folder, moves)
     entities = {}
-    # The analyst's review of the last workbook, read back before building
+    # The analyst’s review of the last workbook, read back before building
     # (cashflow_review.py) and applied at the end, so nothing downstream
     # uses the unreviewed reading.
     try:
@@ -306,7 +306,7 @@ def _card_gap(moves, periods, row):
 def _statement_months(rows):
     """How many months the statements stand for, the way the firm counts.
 
-    One per monthly statement, whatever its exact days (Brogan divides
+    One per monthly statement, whatever its exact days (the lead advisor divides
     Oyler's x0054 by four statements, not 3.98 months), but a quarterly
     statement is three: x0222's first statement runs 2 April to 1 July,
     and counting it as one month put $27,000 of premiums into one period.
@@ -450,7 +450,7 @@ def for_assumptions(folder):
             periods = len(acct['periods'])
             if not periods:
                 continue
-            # Per statement, as the firm averages (Brogan's Assumptions divide
+            # Per statement, as the firm averages (the lead advisor’s Assumptions divide
             # by the number of statements, not the days they span): Oyler's
             # x0054 deposits read $47,598 over 3.98 months against his
             # $47,359 over four statements.
@@ -482,7 +482,7 @@ def for_assumptions(folder):
             }
             if seen:
                 # One-off outflows come out of the account's expense line too,
-                # as Brogan takes them out: Oyler's x0054 read $49,749 a month
+                # as the lead advisor takes them out: Oyler's x0054 read $49,749 a month
                 # with the $100,000 in it, against his $23,785.
                 once = sum(acct.get('one_offs') or ())
                 if once:

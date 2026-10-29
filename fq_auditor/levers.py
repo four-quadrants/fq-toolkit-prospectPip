@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Practice opportunities: Bryan's lever model, for the consult deck.
+"""Practice opportunities: The analyst’s lever model, for the consult deck.
 
 Ported from the `practice improvements` tab of `_spec/initial notes-kinsler.xlsx`
 formula by formula. `_spec/verify_levers.py` reruns it on Kinsler's own inputs
@@ -61,7 +61,7 @@ def compute(x):
     """x is a dict of inputs; any may be None. Returns the ranked levers."""
     g = x.get
     # The goal overhead is the advisor's call on the deck (Rebol 62%,
-    # Spaulding 60%, Kinsler 51%); Bryan's model defaults it to 50%. Every
+    # Spaulding 60%, Kinsler 51%); the analyst’s model defaults it to 50%. Every
     # block hands the owner what is left after it, so it drives them all.
     target = g('target_overhead') or TARGET_OH
     owner = 1 - target
@@ -81,7 +81,7 @@ def compute(x):
     adj, net = g('adjust_pct'), g('net_production')
     if adj is not None and net and adj < ADJ_THRESHOLD and \
             not g('adjust_rule_below_threshold'):
-        # Bryan's sheet would take ten points off any adjustment rate below
+        # The analyst’s sheet would take ten points off any adjustment rate below
         # 25%, which on a fee-for-service practice (Oyler, 5%) proposes
         # dropping carriers it does not take. Below the threshold there is
         # no plan-mix lever; his rule is kept behind a switch.
@@ -140,7 +140,7 @@ def compute(x):
         out['fees'] = _ok(v, 'Fees %.1f%% below the benchmark on the %.0f%% '
                           'of production that is fee-for-service.'
                           % (100 * off, 100 * ffs))
-        # Bryan computes it but holds it out of the top five when the FFS
+        # The analyst computes it but holds it out of the top five when the FFS
         # share is his assumption rather than the practice's figure
         # ("hold - needs FFS %"). Same here.
         if g('ffs_share_assumed'):

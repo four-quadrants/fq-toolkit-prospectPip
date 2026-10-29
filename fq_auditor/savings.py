@@ -2,7 +2,7 @@
 """The retirement projections on the consultation deck.
 
 Three slides come out of this: CURRENT RETIREMENT STRATEGY, the "on pace for
-$X/yr" line under it, and YOUR FOUR QUADRANTS SAVINGS FUTURE. Brogan builds them
+$X/yr" line under it, and YOUR FOUR QUADRANTS SAVINGS FUTURE. The lead advisor builds them
 by hand in `savings worksheet.numbers`, one per client.
 
 HOW THIS WAS ESTABLISHED
@@ -135,7 +135,7 @@ def solve_income(start, f, deposits, retire_year, y0, end, r1=None,
                  step=1000):
     """The retirement income the Four Quadrants path pays to the horizon: the
     largest first-year figure, in $1,000s, that leaves the portfolio at or
-    above zero. Not typed by the advisor: this reproduces Brogan's target on
+    above zero. Not typed by the advisor: this reproduces the lead advisor’s target on
     Rebol ($466,000), Spaulding ($571,000), Kinsler ($564,000) and Bassett
     ($324,000) exactly."""
     r1 = FIRST_YEAR_FQ_RETURN if r1 is None else r1

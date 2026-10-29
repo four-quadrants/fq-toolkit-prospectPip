@@ -121,7 +121,7 @@ def pain_concerns(bundle, limit=5):
 
 def _fit_card(i, row):
     """The fourth concern card's text box shrinks anything past one short
-    line to fit (Austin, 29 Oct: the Debt line went tiny). Keep it to the
+    line to fit (the firm, 29 Oct: the Debt line went tiny). Keep it to the
     first clause there."""
     head, body = row
     if i == 3 and len(body) > 70:
@@ -145,7 +145,7 @@ def client_head(head):
 
 
 def client_voice(head, body):
-    """The analyst's evidence line, said to the client for the slide.
+    """The analyst’s evidence line, said to the client for the slide.
 
     The pain points block is written for the team ("liquid if walking away
     today: 'Not enough'"); the concerns slide is read by the dentist."""
@@ -195,7 +195,7 @@ def client_voice(head, body):
     if not bits:
         return body
     # The cards hold about 110 characters at their font; past that the line
-    # runs off the card (Austin, 29 Oct, the Debt card). Keep whole clauses.
+    # runs off the card (the firm, 29 Oct, the Debt card). Keep whole clauses.
     text = bits[0]
     for b in bits[1:]:
         if len(text) + 2 + len(b) > 105:
@@ -208,7 +208,7 @@ def _series_inputs(bundle, folder):
     """The lever inputs the initial notes already hold: patients, new patient
     share and net production per patient for the last two FULL years (the
     current year is a year to date), hygiene share, the IC form's days, and
-    the fee study. Without them the deck showed two levers where Brogan
+    the fee study. Without them the deck showed two levers where the lead advisor
     shows five."""
     out = {}
     this_year = str(datetime.date.today().year)
@@ -268,7 +268,7 @@ def figures(folder, client):
         adv['concerns_from'] = 'initial notes'
     else:
         # Concerns carried from the review page are still the team's wording
-        # unless Brogan rewrote them; say them to the client.
+        # unless the lead advisor rewrote them; say them to the client.
         adv = dict(adv)
         adv['concerns'] = [_fit_card(i, (client_head(c[0]),
                             client_voice(c[0], c[1] if len(c) > 1 else '')))
@@ -441,7 +441,7 @@ def placeholder_style(shape, short):
     """Quiet the marker: grey, small, never wrapping.
 
     "[TBD]" in a 28pt orange figure cell read as a headline and wrapped to
-    "[TB D]" (Austin, 29 Oct). A figure cell now shows a small grey TBD; a
+    "[TB D]" (the firm, 29 Oct). A figure cell now shows a small grey TBD; a
     text box keeps its [ADVISOR: ...] note, grey and at body size, so the
     slide still says what to write without shouting it.
     """
@@ -459,7 +459,7 @@ def placeholder_style(shape, short):
 
 
 def _split_label(shape, force=False):
-    """Brogan's red flags read "Label: detail" with only the label bold.
+    """The lead advisor’s red flags read "Label: detail" with only the label bold.
     set_text clones the first (bold) run for the whole line; split it."""
     import copy as _copy
     p = shape.text_frame.paragraphs[0]
@@ -565,7 +565,7 @@ def slide_fills(D):
             'income': '%s/yr' % M(D['income']),
             'income_line': 'Retirement income with %s retiring at age %d'
                            % (first, ra),
-            # Against what the household spends today, as Brogan computes
+            # Against what the household spends today, as the lead advisor computes
             # it (Oyler: $599,000 over $404,592 = +48%), not against the
             # income the current path could sustain.
             'income_up': (_signed(D['income'] / D['spend'] - 1) if D.get('spend')
@@ -632,7 +632,7 @@ def slide_fills(D):
             out[3][b] = ask('in the client’s words')
 
     # 7 and 8 tax and accounting. Page 8 is the firm's standing language:
-    # Brogan's Oyler, Meier and Kinsler decks say the same five things with
+    # The lead advisor’s Oyler, Meier and Kinsler decks say the same five things with
     # the name changed. Page 7's red flags are the client's own, but three
     # lines recur on every deck, and the toolkit's findings supply the books
     # line and the tax-surprise line.
@@ -724,7 +724,7 @@ def slide_fills(D):
             cur, goal = now_goal.get(key, ('TBD', 'TBD'))
             rows.append((label, cur or 'TBD', goal or 'TBD', v / owner, v))
     rows.sort(key=lambda r: -r[4])
-    # Five rows, as Brogan shows them. A lever already at goal is still a
+    # Five rows, as the lead advisor shows them. A lever already at goal is still a
     # finding worth a row ("adjustments 5.3%, below where dropping carriers
     # pays"; "fees already above the market"), and it beats an empty line.
     extra = []
@@ -806,7 +806,7 @@ def slide_fills(D):
 
     # 13 cash flow process: the ideal balance, wherever it appears
     # One month of practice expenses on the most recent reliable overhead,
-    # which is the firm's rule (Austin, 21 October): the overhead numerator
+    # which is the firm's rule (the firm, 21 October): the overhead numerator
     # of the newest full-year P&L over twelve, rounded up to the next $10k.
     # Rebol: $2,098,078 / 12 = $174,840, so $180k, as on his deck.
     bal = D.get('ideal_balance')
@@ -827,7 +827,7 @@ def slide_fills(D):
         out[11].update({'Text 19': '%s/mo' % M(w2 / 12.0),
                         'Text 20': '%s per year' % _k(w2)})
 
-    # 14 and 15 investments: how much is locked up, and in what. Brogan's
+    # 14 and 15 investments: how much is locked up, and in what. The lead advisor’s
     # Oyler slides: "94% of retirement savings sits in relatively illiquid
     # private placements"; a bar of Reef IRA 57%, Reef non-qualified 37%,
     # the rest 6%; "7 mutual funds" under the 401(k).
@@ -913,7 +913,7 @@ def slide_fills(D):
     # 16 the savings projection, from the gains: what each is worth a year
     # and the proposed share of it invested. Rows the gains do not fill stay
     # [TBD] for the advisor, and the totals are only printed when every row
-    # behind them is filled (Austin's test edit: a total beside [TBD] rows
+    # behind them is filled (the firm's test edit: a total beside [TBD] rows
     # reads as a figure nobody can account for).
     sch = sorted(D['schedule'])
     # Only when the schedule came from these gains: beside an advisor's own
@@ -1081,7 +1081,7 @@ NOTES = {
        'retirement wealth are from savings.py: the current path at 8.5% on '
        'today’s savings, the Four Quadrants path at 9% on the advisor’s '
        'schedule.',
-    9: 'The overhead goal is 50% (Bryan’s model) unless the advisor sets one. '
+    9: 'The overhead goal is 50% (the analyst’s model) unless the advisor sets one. '
        'The firm has not settled the long-term goal, so check it before '
        'presenting. Levers from levers.py. Overhead to the goal is '
        'savings, not revenue, so it adds nothing to the revenue column. The '
@@ -1101,6 +1101,10 @@ def _drop(prs, index):
     prs.slides._sldIdLst.remove(sld)
 
 
+# The fee slide is set by the lead advisor for each client: left as TBD.
+NOT_DRAFTED = {19}
+
+
 def _drafts(folder, D, prs, fills, drop):
     """Ask Claude for every box that would otherwise go out as a placeholder."""
     if os.environ.get('FQ_NO_DRAFTS'):
@@ -1113,7 +1117,7 @@ def _drafts(folder, D, prs, fills, drop):
         examples = {}
     holes = []
     for n, slide in enumerate(prs.slides, 1):
-        if n in drop:
+        if n in drop or n in NOT_DRAFTED:
             continue
         default, shapes = SPEC.get(n, ('keep', {}))
         mine = fills.get(n, {})

@@ -118,7 +118,7 @@ def read_debt_sheet(path, rows):
     Interest Rate, Minimum Payment, Extra Amount, Notes. Spaulding filled
     this one in and the reader, which only knew the "Creditor" template,
     returned nothing: no practice debt and no personal debt in her notes.
-    A row marked "Personal/Practice" is counted as personal; Brogan's own
+    A row marked "Personal/Practice" is counted as personal; the lead advisor’s own
     $728k on 8 loans for her practice leaves it out.
     """
     head = None
@@ -232,7 +232,7 @@ def read_statements(folder):
             if m:
                 rec[field] = _num(m.group(1))
         # What it is, so the plan can say "Florida Mortgage (Regions x3779)"
-        # the way Brogan writes it, rather than a lender and four digits.
+        # the way the lead advisor writes it, rather than a lender and four digits.
         rec['what'] = 'Mortgage' if re.search(r'mortgage', text, re.I) else 'Loan'
         prop = re.search(r'property\s+address\s*:?\s*(.{0,90})', text, re.I)
         if prop:

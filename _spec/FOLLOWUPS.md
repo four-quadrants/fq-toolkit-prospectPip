@@ -1,6 +1,6 @@
-# Brogan's follow-up emails: what they ask, and what in the documents asks it
+# The lead advisor's follow-up emails: what they ask, and what in the documents asks it
 
-Read 22 October 2026 from the five emails Austin saved in
+Read 22 October 2026 from the five emails the firm saved in
 `~/Desktop/FQ_Toolkit/FollowUps` on 8 October (Kinsler, Oyler, Rebol, Meier,
 Wright). They were saved on the old Mac but never worked into the pipeline.
 This is the pattern, so the due diligence step can draft the next one.
@@ -57,4 +57,4 @@ savings questions are standing items with the client's figures filled in.
 
 Each drafted question carries the finding behind it (document, page, figure),
 the analyst strikes or answers what they can, and the rest goes into this
-email for Brogan to proof and Chad to send.
+email for the lead advisor to proof and the onboarding specialist to send.

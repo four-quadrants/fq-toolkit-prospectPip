@@ -4,7 +4,7 @@
     python3 inputs.py "<client folder>"                       # show them
     python3 inputs.py "<client folder>" --set residence_value \
             --value 675000 --as-of 2026-10-13 \
-            --url "https://www.zillow.com/..." --by "Austin Hooker"
+            --url "https://www.zillow.com/..." --by "<your name>"
 
 WHY THIS EXISTS
 Some figures a plan needs cannot be read out of a document, because no

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read the analyst's changes back out of the cash flow workbook.
+"""Read the analyst’s changes back out of the cash flow workbook.
 
     python3 cashflow_review.py "<client folder>"        # show what was changed
 
@@ -21,10 +21,10 @@ statement cannot attach an old decision to the wrong month.
 
 WHAT COUNTS
 In each account's four period columns:
-    Transfers In, Transfers Out      the analyst's figure replaces ours
+    Transfers In, Transfers Out      the analyst’s figure replaces ours
     the adjustment lines             a change adds to the adjustments out
     Total Adjustments OUT / IN       where the sheet has no formula there,
-                                     the analyst's figure replaces ours
+                                     the analyst’s figure replaces ours
 Anything else on the sheet is not read: changing an ending balance does not
 change a statement.
 
@@ -152,7 +152,7 @@ def harvest(folder):
 
 
 def apply(folder, entities):
-    """Put the analyst's figures into the built entities, in place."""
+    """Put the analyst’s figures into the built entities, in place."""
     dec = load_decisions(folder)
     if not dec:
         return 0

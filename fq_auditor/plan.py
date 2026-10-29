@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The proposed plan's inputs, worked out rather than typed.
 
-What Brogan types into his savings worksheet turns out to be mostly arithmetic
+What the lead advisor types into his savings worksheet turns out to be mostly arithmetic
 on figures the toolkit already reads (`_spec/savings/WORKSHEET.md`). This file
 does that arithmetic, so the advisor reviews a prefilled plan instead of
 building one:
@@ -169,7 +169,7 @@ def refinance(rows, this_year=None):
     """Which practice loans look like refinance candidates, and what a
     consolidation would do to the monthly payment.
 
-    Brogan's Oyler deck: "Six loans, four to refinance", $17,169/mo today,
+    The lead advisor’s Oyler deck: "Six loans, four to refinance", $17,169/mo today,
     "$7-9k/mo" after, "$8-10k/mo" freed. His four are the loans worth
     consolidating: a real balance, not about to mature, and either costly
     (5% or more), revolving (a line of credit), or with no stated rate. A

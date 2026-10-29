@@ -1,4 +1,4 @@
-# Brogan's savings worksheet: what is typed and what is computed
+# The lead advisor's savings worksheet: what is typed and what is computed
 
 Read from the formulas of three Excel exports (Oyler, Kinsler, Meier), 21
 October 2026. The worksheets themselves sit beside this file and are not in
@@ -20,7 +20,7 @@ git; the findings are.
 
 ## Ideal practice bank balance
 
-One month of practice expenses on the most recent reliable overhead (Austin,
+One month of practice expenses on the most recent reliable overhead (the firm,
 21 October). The toolkit takes the overhead numerator of the newest full-year
 P&L over twelve, rounded up to the next $10k. Rebol gives $180k, as on his
 deck. Oyler gives $280k against $200k on his deck, and Spaulding $60k against
@@ -28,7 +28,7 @@ $75k, so which overhead figure counts as "reliable" is still open.
 
 ## Overhead goal
 
-Not settled at the firm. The deck uses Bryan's 50% unless the advisor sets one,
+Not settled at the firm. The deck uses the analyst's 50% unless the advisor sets one,
 and says so in the presenter note.
 
 ## Typed by the advisor
@@ -77,9 +77,9 @@ schedule summed from them, and the retirement income that schedule pays
 the schedule came from them.
 
 Oyler, fed only the documents plus current savings ($47,500) and a building
-value ($4.5m), against Brogan:
+value ($4.5m), against the lead advisor:
 
-| | Toolkit | Brogan |
+| | Toolkit | the lead advisor |
 |---|---|---|
 | Sale, gross | $9.07m (10 years at 3% and 2%) | $9.515m on the deck; his formula reads a fixed row, not the retirement year |
 | Sale, net | $6.35m, no debt deducted | $5.563m, less the stale $1.19m debt block |

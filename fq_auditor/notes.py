@@ -75,7 +75,7 @@ def narrative_documents(folder, limit=3, chars=4000):
             name = os.path.basename(path).lower()
             if not any(w in name for w in NARRATIVE):
                 continue
-            if 'brogan' in name or 'initial notes' in name:
+            if 'initial notes' in name:
                 continue        # that is the output, not an input
             key = os.path.basename(path)
             if key in seen:

@@ -57,7 +57,7 @@ live under `Brogan/Prospects/2026`.
 
 ## Step 3 — Install the toolkit
 
-Austin will send you a zip called something like `FQ Toolkit a1b2c3d.zip`.
+The firm will send you a zip called something like `FQ Toolkit a1b2c3d.zip`.
 
 1. Double-click it to unzip. You get a folder called **FQ Toolkit**.
 2. Open that folder.
@@ -69,7 +69,7 @@ Austin will send you a zip called something like `FQ Toolkit a1b2c3d.zip`.
 
 It copies everything to `FQ_Toolkit` on your Desktop and opens that folder.
 
-**Updating later** is the same thing again — Austin sends a newer zip, you
+**Updating later** is the same thing again — the firm sends a newer zip, you
 unzip and run the installer. It keeps the working folder you had chosen, so you
 do not have to set it up again. If you are ever unsure which version you are
 running, open `VERSION.txt` and read it to him.
@@ -192,5 +192,5 @@ step 2.
 
 **A document comes out unrecognised** — usually a scan too faint to read, or a
 document type the classifier has not been taught yet. It appears in the
-unexpected section rather than being silently ignored. Send it to Austin and it
+unexpected section rather than being silently ignored. Send it to the firm and it
 can be added.

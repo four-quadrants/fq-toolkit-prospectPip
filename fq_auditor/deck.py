@@ -100,7 +100,7 @@ def _start_portfolio(folder):
     holdings that are investments rather than bank balances.
 
     Oyler: Vestwell 401k $69,120 + Provident IRA $628,000 + Reef $408,526,
-    which is Brogan's `(69120+628000+408525)` to within the dollar he rounded.
+    which is the lead advisor’s `(69120+628000+408525)` to within the dollar he rounded.
     Bank cash is left out, as on every firm deck read ("Current portfolio
     value $289,545 (excl. HSA)").
     """
@@ -312,7 +312,7 @@ def gather(folder, client=None, today=None):
         body=[lv['caveat']] if rows else [],
         needs=['%s: needs %s' % (_lev.LABELS[k], ', '.join(n))
                for k, n in lv['waiting']],
-        note='levers.py, Bryan\'s model, at a %.0f%% goal overhead. Current '
+        note='levers.py, the analyst\'s model, at a %.0f%% goal overhead. Current '
              'overhead %s on the P&L. Revenue %s.'
              % (100 * (target_oh or _lev.TARGET_OH),
                 ('%.1f%%' % (100 * oh)) if oh else 'not read',
@@ -348,7 +348,7 @@ def gather(folder, client=None, today=None):
                 ['Proposed distributions', _m(_num(inc.get('distributions')))],
                 ['Deferrals + match, current', _m(cur_def)],
                 ['Deferrals + match, proposed', _m(new_def)]]},
-            note='Tax saving at 30% of the added deferral, as Brogan\'s '
+            note='Tax saving at 30% of the added deferral, as the lead advisor\'s '
                  'worksheet computes it (=C210*0.3).'))
     else:
         slides.append(Slide('income', 'NEW INCOME / SAVINGS',
@@ -486,7 +486,7 @@ def gather(folder, client=None, today=None):
 
     # ---- 14 annual savings projection -------------------------------------
     if sched:
-        # The steps only: a row per change, not a row per year. Brogan's
+        # The steps only: a row per change, not a row per year. The lead advisor’s
         # schedule for Rebol is fourteen years in six amounts.
         steps, last = [], None
         for y, a in sorted(sched):

@@ -8,14 +8,14 @@ WHAT IT MAKES
       it is being asked and the document behind it, for the ANALYST first:
       the Decision column says Send, Strike (not needed) or Answered (the
       analyst settled it from the file). Edit it in Numbers and save.
-  _Audit/Follow-up email - <Surname>.txt     Brogan's follow-up email with
+  _Audit/Follow-up email - <Surname>.txt     the lead advisor’s follow-up email with
       every question still marked Send, numbered, in his wording, ready to
       paste into Outlook.
 
-Rebuilding keeps the analyst's decisions and any rewording of a question:
+Rebuilding keeps the analyst’s decisions and any rewording of a question:
 they are read back from the saved workbook by the question's key.
 
-WHERE THE QUESTIONS COME FROM (see _spec/FOLLOWUPS.md, Brogan's five emails)
+WHERE THE QUESTIONS COME FROM (see _spec/FOLLOWUPS.md, the lead advisor’s five emails)
   accounts not on file      transfers to or from an account with no statements
   new borrowing             a loan landing in a personal account
   loans without details     a loan being paid that no schedule describes
@@ -23,7 +23,7 @@ WHERE THE QUESTIONS COME FROM (see _spec/FOLLOWUPS.md, Brogan's five emails)
                             practice (Oyler: $2,928.13 from American Pacific)
   one-off movements         large single outflows; CHECK FIRST, often known
   documents still missing   Claude's reading of the checklist
-  capacity                  always asked, in Brogan's words
+  capacity                  always asked, in the lead advisor’s words
   retirement savings        always last, with the figure the plan uses
 """
 import os
@@ -174,7 +174,7 @@ def findings(folder):
     # One-off movements: personal accounts only, and only what is big
     # against the account's own month. The practice account pays payroll
     # and suppliers in five figures every week; flagging those produced 25
-    # "check first" rows on Oyler. Brogan asks about one or two at most.
+    # "check first" rows on Oyler. The lead advisor asks about one or two at most.
     for (side, key), rows in g.items():
         if side != 'Personal':
             continue
@@ -300,7 +300,7 @@ def write(folder, outdir=None):
     rows = []
     try:
         import review_page as _rp
-        page = _rp.decisions(folder)       # Brogan's choices on the review page
+        page = _rp.decisions(folder)       # the lead advisor’s choices on the review page
     except Exception:                                        # noqa: BLE001
         page = {}
     for key, q, why, src, pri, dec in findings(folder):
@@ -312,7 +312,7 @@ def write(folder, outdir=None):
             dec, q = (d3 or dec), (t3 or q)
         rows.append([key, q, why, src, pri, dec])
     order = {'High': 0, 'Normal': 1}
-    # Documents and accounts first, savings last, as Brogan orders them.
+    # Documents and accounts first, savings last, as the lead advisor orders them.
     rows.sort(key=lambda r: (r[0] == 'savings', r[0] == 'capacity',
                              order.get(r[4], 1)))
 

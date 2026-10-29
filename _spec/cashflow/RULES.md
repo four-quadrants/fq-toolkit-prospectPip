@@ -1,12 +1,12 @@
 # Cash flow: the rules, as the firm applies them
 
-Settled with Austin, 15 October 2026, by reading four of the firm's own
-expense workbooks (Oyler, Bassett, Kinsler, Meier) and Brogan's published
+Settled with the firm, 15 October 2026, by reading four of the firm's own
+expense workbooks (Oyler, Bassett, Kinsler, Meier) and the lead advisor's published
 Oyler Assumptions, then checking each conclusion against him.
 
 Written down because the arithmetic is easy and the rules are not. Every
 figure below was either derived from a formula in a real workbook or
-answered directly by Austin; nothing here is inferred from how the output
+answered directly by the firm; nothing here is inferred from how the output
 looks.
 
 ---
@@ -66,7 +66,7 @@ own accounts is not a deposit.
 
 **2b. Personal to business is KEPT in expenses.** Money Brian puts into
 his own practice account stays as spending, even though it is still his.
-Austin's ruling, 19 October: Brogan left both the $10,000 "Short term
+The firm's ruling, 19 October: The lead advisor left both the $10,000 "Short term
 loan" and the $50,000 "Loan" to x4728 in expenses, and that is the firm's
 treatment. The workbook notes each one rather than applying it silently,
 because it is the one place an obvious transfer is deliberately not
@@ -89,7 +89,7 @@ if it came from the practice. Direction is not symmetric.
 ## Periods are statement periods, not calendar months
 
 The plan uses whatever period the statement covers, typically the 26th to
-the 25th, not a calendar month. Austin's ruling, 19 October.
+the 25th, not a calendar month. The firm's ruling, 19 October.
 
 The reason is reconciliation: beginning plus additions less ending is
 exact for the period the statement actually covers, and nothing has to be
@@ -98,7 +98,7 @@ transactions across boundaries and estimating balances mid-month, and the
 figures would stop being derivable from the documents.
 
 The cost is that figures do not line up with a month-by-month view. On
-Oyler this shows as $2,500 and $4,000 differences against Brogan's August
+Oyler this shows as $2,500 and $4,000 differences against the lead advisor's August
 and September columns, which are calendar months. Those differences are
 expected and are not errors.
 
@@ -111,7 +111,7 @@ moving, and marked as inferred rather than stated.
 
 This is doing real work and should be watched. On Oyler it covers thirteen
 payments worth $34,000, and it is what makes June and July reconcile to
-Brogan's figures exactly. A bank holding accounts on both sides is skipped,
+The lead advisor's figures exactly. A bank holding accounts on both sides is skipped,
 since naming it would then say nothing about where the money went.
 
 ## A period is not a month
@@ -180,12 +180,12 @@ quietly.
 
 ## Credit card smoothing
 
-Kept as Brogan does it: each period's card payment is compared to the
+Kept as the lead advisor does it: each period's card payment is compared to the
 average across periods, and the difference is carried back as an adjustment
 so one heavy month does not distort the figure.
 
-Austin's reasoning for keeping it, which is worth recording: not because it
-is obviously right, but because changing too much of Brogan's method in one
+The firm's reasoning for keeping it, which is worth recording: not because it
+is obviously right, but because changing too much of the lead advisor's method in one
 go is its own risk. It appears on the Adjustments sheet marked "By rule" so
 it is at least visible, which it is not today.
 
@@ -223,7 +223,7 @@ The tool applies the same rule to every period and every account. Any
 departure is a row on the Adjustments sheet with a reason attached and the
 analyst's decision recorded against it.
 
-This exists because of something found in Brogan's own draft. In the Oyler
+This exists because of something found in the lead advisor's own draft. In the Oyler
 surplus block, three of the four periods compute expenses as `=C7-C8`
 (less transfers out) while the fourth is `=F7-F8-F17` (less transfers out
 AND less $117,806 of other adjustments). Nobody appears to have chosen that
@@ -247,7 +247,7 @@ review shrinks each cycle instead of repeating.
 
 ## Two things proven against the firm's own output
 
-**The method reproduces Brogan's published figures.** US Bank x1145
+**The method reproduces the lead advisor's published figures.** US Bank x1145
 computes to $2,291 deposit, $661 expense, +$1,630 surplus, matching his
 line exactly. Civista x0222 gives $3,333 / $9,086 / -$5,753, exact. US
 Bank x2683 gives -$936 against his -$935.

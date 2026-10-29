@@ -335,7 +335,7 @@ if __name__ == '__main__':
 # --------------------------------------------------------------------------
 # the portal conversation
 # --------------------------------------------------------------------------
-# Comments are not only the client answering. Chad wrote "the only things we're
+# Comments are not only the client answering. The onboarding specialist wrote "the only things we're
 # missing are the Personal Debt Schedule" on Oyler a week before the auditor
 # reached the same conclusion by reading documents, and Kelly wrote "I don't
 # get paystubs" against an item the auditor still reports as missing. Both are

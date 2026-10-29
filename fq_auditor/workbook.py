@@ -20,7 +20,7 @@ prose, in its own row, marked as a note rather than a figure.
 EVERY FIGURE CARRIES ITS SOURCE
 Not as a comment somebody has to hover, but as two columns on the row itself,
 and again on the Source Map tab. A row with no source is yellow and says what
-is needed. That is Bryan's convention from the Kinsler build, kept because it
+is needed. That is the analyst’s convention from the Kinsler build, kept because it
 works.
 """
 import os

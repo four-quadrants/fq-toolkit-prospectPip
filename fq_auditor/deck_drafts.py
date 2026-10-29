@@ -64,9 +64,9 @@ def fact_pack(D, extra=None):
 
 
 def _extra(folder):
-    """Due diligence findings and Brogan's decisions, when they exist."""
+    """Due diligence findings and the lead advisor’s decisions, when they exist."""
     out = {}
-    for name, key in (('review_decisions.json', 'brogan_decisions'),
+    for name, key in (('review_decisions.json', 'advisor_decisions'),
                       ('ic_form.json', 'intake_form')):
         p = os.path.join(folder, '_Audit', name)
         try:
@@ -121,7 +121,7 @@ def _pack_numbers(pack_text):
 def grounded(text, known):
     """Every figure in the draft is in the pack, give or take rounding."""
     for v, _pct, raw in _numbers(text):
-        if v <= 12 or 1990 <= v <= 2100:
+        if (v <= 12 and not _pct) or 1990 <= v <= 2100:
             continue  # counts, ages in single digits, years
         if not any(abs(v - k) <= max(0.015 * abs(k), 0.6) for k in known):
             return False, raw
@@ -142,10 +142,20 @@ the example's facts; a figure must come from the FACT PACK.
 STYLE
 {style}
 
+THE CLIENT'S DOCUMENTS
+Text extracts of the returns and investment statements. Read the ones you
+need, the way an advisor would before writing these slides: for the tax
+slide, look for what the lead advisor looks for (books vs return, depreciation and
+fixed assets, owner health insurance, the state pass-through entity tax
+election, meals and travel, when the returns were filed, balances owed or
+refunded); for the investment slides, holdings, returns and liquidity.
+{docs}
+
 HARD RULES
-- Use only facts and figures that appear in the FACT PACK. Do not compute new
+- Use only facts and figures that appear in the FACT PACK or in the
+  documents above. Do not compute new
   figures except simple rounding ($1,105,645 may be $1.1M).
-- If the pack does not support a hole, return null for it. A null is better
+- If neither supports a hole, return null for it. A null is better
   than a guess; the advisor fills it.
 - Keep each draft at or under the example's length.
 - No em dashes. Plain sentences. Address the client as "you" where the
@@ -169,6 +179,44 @@ def _style():
         return ''
 
 
+SKIP_DOC = re.compile(r'\bK-?1\b|_K1_|EF Forms|PreparerFileCopy|\.png$', re.I)
+
+
+def documents(folder, first=''):
+    """The returns and statements a draft may quote, as (name, text file,
+    text). The text files are the toolkit's own extracts, so Claude reads
+    plain text rather than rendering a 90-page PDF, and the same text is what
+    the figures are checked against."""
+    import extract
+    orig = os.path.join(folder, 'Original_sourcedocs')
+    try:
+        rows = extract.extract_folder(orig, progress=False)
+    except Exception:  # noqa: BLE001
+        return []
+    cache = os.path.join(orig, '.fq_cache')
+    taxes, other, seen = [], [], set()
+    for m in rows:
+        name = m['file']
+        if m.get('sha256') in seen:
+            continue
+        seen.add(m.get('sha256'))
+        if SKIP_DOC.search(name):
+            continue
+        txt = extract._cache_paths(cache, m['sha256'])[0]
+        if not os.path.exists(txt):
+            continue
+        low = name.lower()
+        if 'taxes' in low or re.search(r'\b(1040|1120)', low):
+            # Children's returns are not the client's tax story.
+            if 'personal returns' in low and first and \
+                    first.lower() not in low.split('personal returns')[-1][:40]:
+                continue
+            taxes.append((name, txt, m.get('text') or ''))
+        elif 'investments' in low:
+            other.append((name, txt, m.get('text') or ''))
+    return taxes + other
+
+
 def draft(folder, D, holes, log=print):
     """holes: list of dicts {id, slide, heading, example}. Returns {id: text}.
 
@@ -182,17 +230,24 @@ def draft(folder, D, holes, log=print):
     hole_text = '\n'.join(
         '- id {id} | slide {slide} "{heading}" | example: {example}'.format(**h)
         for h in holes)
+    docs = documents(folder, D.get('first') or '')
+    doc_text = '\n'.join('- %s: read %s' % (n, t) for n, t, _x in docs) \
+        or '(none)'
     prompt = PROMPT.format(names=D.get('names') or 'the client',
-                           style=_style(), holes=hole_text, pack=pack_text)
+                           style=_style(), holes=hole_text, pack=pack_text,
+                           docs=doc_text)
     cache = os.path.join(folder, '.fq_cache', 'drafts')
     try:
-        got = ask_claude.ask_json(prompt, cache_dir=cache, timeout=TIMEOUT,
-                                  allow=())
+        got = ask_claude.ask_json(
+            prompt, cache_dir=cache, timeout=TIMEOUT,
+            allow=('Read',) if docs else (),
+            add_dirs=(os.path.join(folder, 'Original_sourcedocs', '.fq_cache'),)
+            if docs else ())
     except Exception as exc:  # noqa: BLE001 - no Claude, no drafts
         log('  drafts skipped: %s' % exc)
         return {}
     drafts = (got or {}).get('drafts') or {}
-    known = _pack_numbers(pack_text)
+    known = _pack_numbers(pack_text + '\n'.join(x for _n, _t, x in docs))
     out, refused = {}, []
     ids = {h['id'] for h in holes}
     for k, text in drafts.items():

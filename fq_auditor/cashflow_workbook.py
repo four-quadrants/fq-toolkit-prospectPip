@@ -12,16 +12,16 @@ attaching comments. So the firm's own template is the skeleton.
 
 That turned out better than the alternative. The workbook keeps the
 layout, column widths and formatting the team already reads, and the
-output is a file Brogan recognises rather than something new to learn.
+output is a file the lead advisor recognises rather than something new to learn.
 
 WHERE THE REASONING GOES
-In cell comments, which is where Will already puts his. An adjustment is
+In cell comments, which is where the analyst already puts theirs. An adjustment is
 written as a figure in the row it belongs to, with a comment on that cell
 saying why. Nothing has to be read off a separate sheet, and the reason
 travels with the number.
 
 Comments need an author who already exists in the file: the library cannot
-invent one. The template carries Austin Hooker, which is why it had to be
+invent one. The old template carried one staff author, which is why it had to be
 commented on once by hand before any of this could work.
 
 ALL SHEETS BEHAVE THE SAME
@@ -72,7 +72,7 @@ SURPLUS_STRIDE = 7      # heading, account, four periods, average
 
 FIRST_ACCOUNT_COL = 2   # column C
 ACCOUNT_WIDTH = 4       # four periods per account
-AUTHOR = 'Austin Hooker'
+AUTHOR = 'Four Quadrants'
 
 def money(v):
     """A figure as it should sit in the sheet.

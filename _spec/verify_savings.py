@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rerun savings.py against Brogan's worksheet for every signed client.
+"""Rerun savings.py against the lead advisor’s worksheet for every signed client.
 
     python3 _spec/verify_savings.py [<Signed folder>]
 

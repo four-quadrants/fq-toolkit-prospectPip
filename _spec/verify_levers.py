@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rerun levers.py on Bryan's Kinsler inputs and check it against his sheet.
+"""Rerun levers.py on the analyst’s Kinsler inputs and check it against his sheet.
 
     python3 _spec/verify_levers.py
 

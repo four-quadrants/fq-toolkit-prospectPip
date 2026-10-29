@@ -8,7 +8,7 @@ the thing to understand before anything else here makes sense.
 
 | Step | Who | Where |
 |---|---|---|
-| 1. Pull the list from LaunchBay | Austin | Claude |
+| 1. Pull the list from LaunchBay | the firm | Claude |
 | 2. Download the documents | anyone | app, Download tab |
 | 3. Run the audit | anyone | app, Audit tab |
 | 4. Review and decide | analyst | app, Review tab |
@@ -17,7 +17,7 @@ the thing to understand before anything else here makes sense.
 
 ---
 
-## 1. Pull the list from LaunchBay — Austin only
+## 1. Pull the list from LaunchBay — the firm only
 
 Ask Claude: **"pull [client] from LaunchBay"**.
 
@@ -150,7 +150,7 @@ for the same kind of document, the auditor refuses to guess and asks you.
 
 **A document that classified as `unknown`.** Usually a scan too faint to read, or
 a type the classifier has not been taught. It appears under "provided but not on
-the checklist" rather than being silently dropped. Send it to Austin.
+the checklist" rather than being silently dropped. Send it to the firm.
 
 ---
 

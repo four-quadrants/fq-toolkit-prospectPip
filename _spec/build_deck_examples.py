@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Box-by-box examples for the deck drafts, from one of Brogan's decks.
+"""Box-by-box examples for the deck drafts, from one of the lead advisor’s decks.
 
-    python3 _spec/build_deck_examples.py "<Brogan's deck>.pptx"
+    python3 _spec/build_deck_examples.py "<the lead advisor’s deck>.pptx"
 
 Writes fq_auditor/assets/deck_examples.json: for every template slide and
-shape, the words Brogan wrote there, with every figure turned into # and the
+shape, the words the lead advisor wrote there, with every figure turned into # and the
 client's names into Client. The drafts see these as a guide to what each box
 is for and how long it runs. The file stays local (the .gitignore allowlist
 keeps .json out of git) because the wording still describes that client.

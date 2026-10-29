@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move the toolkit between Macs as a zip you hand over.
 
-    python3 deploy.py package                 # Austin: build the zip to send
+    python3 deploy.py package                 # maintainer: build the zip to send
     python3 deploy.py install                 # Them: unzip, then run this
     python3 deploy.py status                  # what version is installed here
 

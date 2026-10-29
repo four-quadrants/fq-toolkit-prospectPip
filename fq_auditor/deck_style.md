@@ -1,4 +1,4 @@
-How Brogan writes a consult deck (from his own decks, no client details):
+How the lead advisor writes a consult deck (from his own decks, no client details):
 
 - Headlines are short and concrete, and lead with the figure: "94% of
   retirement savings sits in relatively illiquid private placements."

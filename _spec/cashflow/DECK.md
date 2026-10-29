@@ -1,8 +1,8 @@
 # The consultation deck: where every number on it comes from
 
 Worked out 20 October by reading the redesigned deck
-(`Oyler Consultation-ah version.key`), Brogan's savings worksheet, and
-Bryan's Kinsler workbook. Written down because the answer took a morning
+(`Oyler Consultation-ah version.key`), the lead advisor's savings worksheet, and
+The analyst's Kinsler workbook. Written down because the answer took a morning
 to establish and would take another morning to establish twice.
 
 ## Reading a Keynote file without Keynote
@@ -30,11 +30,11 @@ Quadrants results, how we invest, client process and agreement.
 
 **Derivable from what the toolkit already builds, seven slides.**
 Corporate debt structuring is the debt schedule. Investments current is
-sections 4 and 5 of the Assumptions. Practice opportunities is Bryan's
+sections 4 and 5 of the Assumptions. Practice opportunities is the analyst's
 lever model, below. Cashflow management, biggest concerns, and the two tax
 review slides.
 
-**From Brogan's savings worksheet and the personal return, seven slides.**
+**From the lead advisor's savings worksheet and the personal return, seven slides.**
 
 `Consult info/savings worksheet.numbers`, with an Excel export in Downloads
 from 13 October that is more useful because the formulas survive the export.
@@ -49,7 +49,7 @@ Its inputs are mostly ours already:
 - starting portfolio `(69120+628000+408525)`, the Vestwell 401k, the
   Provident IRA and the Reef stake, which the Assumptions already carries
   to the dollar
-- retirement expenses year one `33716*12`, Brogan's personal spending
+- retirement expenses year one `33716*12`, the lead advisor's personal spending
   including liabilities; ours computes $32,958 for the same thing
 - expenses inflate 3.2%, returns 8.5% current against 9.0% proposed, all
   already in the FIRM constants
@@ -67,7 +67,7 @@ withholding $169k, estimates $111k, same $280k owed, $0 balance. Three
 figures off the personal return and one choice about how to split the same
 bill. Nobody models anything.
 
-## Bryan's lever model
+## The analyst's lever model
 
 The `practice improvements` tab of `initial notes-kinsler.xlsx`. Each block
 takes incremental production to incremental revenue to the owner at a 50%

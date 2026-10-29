@@ -95,7 +95,7 @@ def step_cashflow(folder, client, outdir):
     out = os.path.join(outdir, 'Cash flow - %s.numbers'
                        % _surname(folder, client))
     path, overflow, _spare = _cwb.write(entities, out)
-    # The baseline the analyst's changes are read against next time.
+    # The baseline the analyst’s changes are read against next time.
     try:
         import cashflow_review as _review
         _review.snapshot(folder, path)

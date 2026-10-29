@@ -163,7 +163,7 @@ y = ytop - 207
 y = h2(y, 'What the firm produces alongside it, and whose job it is today')
 DELIVERABLES = [
     ('Prospect Summary', 'ONBOARDING SPECIALIST  \u00b7  builds as documents arrive',
-     'Replaces initial notes-brogan. Tells the team what is here, what is '
+     'Replaces the old initial notes workbook. Tells the team what is here, what is '
      'missing and what needs judgement. It fills in as more documents come '
      'in, and it is what the offer call is made on.', BLUE),
     ('Assumptions, to ~80%', 'ONBOARDING SPECIALIST  \u00b7  after #4',

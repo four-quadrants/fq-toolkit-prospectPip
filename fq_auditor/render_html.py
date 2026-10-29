@@ -294,15 +294,15 @@ def plan_destination(doc):
     # The firm's own working files and the call notes are not the client's
     # documents, and they were the largest share of "decide these": 37 of
     # Oyler's 66 were decks, savings worksheets, the Assumptions drafts, the
-    # Otter call summaries, the IC form and the answers to Brogan's questions.
+    # Otter call summaries, the IC form and the answers to the lead advisor’s questions.
     # They go back to the two folders the firm already keeps them in.
     # ACH forms sit flat in Documents/, beside Business and Personal, not
-    # inside either (Austin, 22 October): one authorises payments for both.
+    # inside either (the firm, 22 October): one authorises payments for both.
     if re.search(r'\bach\b', fname, re.I) or dtype == 'ach_form':
         return (DOCS_DIR, 'ACH form, kept flat in Documents beside Business '
                           'and Personal', False)
 
-    # Legal papers about the household: Personal/Misc (Austin, 22 October).
+    # Legal papers about the household: Personal/Misc (the firm, 22 October).
     if re.search(r'divorce|decree|separation agreement|prenup', fname, re.I):
         return ('/'.join((DOCS_DIR, 'Personal', 'Misc')),
                 'a legal document about the household', False)
@@ -2637,7 +2637,7 @@ def build_html(res, client, checklist_source, path, decisions=None, cache_dir=No
 
     a('</div></details>')
 
-    # The residual PII panel is gone from the page (Austin, 22 October:
+    # The residual PII panel is gone from the page (the firm, 22 October:
     # unnecessary at this stage and distracting). The scan still runs and still
     # gates the client email; it just no longer takes a panel of the review.
 

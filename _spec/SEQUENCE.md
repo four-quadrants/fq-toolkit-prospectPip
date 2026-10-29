@@ -1,6 +1,6 @@
 # The prospect sequence, as the firm runs it
 
-Settled with Austin, 22 October 2026, from the 9 October pipeline map
+Settled with the firm, 22 October 2026, from the 9 October pipeline map
 (`FQ_Pipeline_Map.pdf`) with his corrections. The app is laid out to follow
 this, not the other way round.
 
@@ -19,7 +19,7 @@ this, not the other way round.
 ## The rule for judgement calls (step 8)
 
 Every judgement call has to be traceable to its source document and
-explicable in arithmetic to Brogan or the onboarding specialist. Not "the
+explicable in arithmetic to the lead advisor or the onboarding specialist. Not "the
 model says": the figure, where it came from, and the sum that produced it.
 For example:
 
@@ -33,8 +33,8 @@ from what is on file does it go to the prospect.
 
 ## The questions for the prospect (also step 8)
 
-Modelled on Brogan's own follow-up emails (Oyler, 7 October: written by
-Brogan, proofed and sent by Chad, cc Kevin, Will and Brogan; answered in
+Modelled on the lead advisor's own follow-up emails (Oyler, 7 October: written by
+The lead advisor, proofed and sent by the onboarding specialist, cc the team, the analyst and the lead advisor; answered in
 line by the prospect on 11 October). Nearly every one of his questions comes
 from something the documents show:
 
@@ -53,7 +53,7 @@ from something the documents show:
 
 So the toolkit drafts the list (each question with the finding behind it), the
 analyst strikes or answers what they can, and what is left becomes the email
-in Brogan's format for Chad to send. The prospect's answers come back as an
+in the lead advisor's format for the onboarding specialist to send. The prospect's answers come back as an
 email and are filed with the documents.
 
 ## Credit reports

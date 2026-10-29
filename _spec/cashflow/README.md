@@ -4,7 +4,7 @@ Drop files here so the cash flow reader can be built from how the firm
 actually does this, rather than from a method invented to fit the output.
 
 The target is the per-account line that appears in section 5 of the
-Assumptions, which on Brogan's Oyler plan reads:
+Assumptions, which on the lead advisor's Oyler plan reads:
 
     Personal Money Market (US Bank x1145):  $1,581
     —Average deposit $2,291, Average adjusted expense $123 (after xfers),

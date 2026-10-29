@@ -1001,7 +1001,7 @@ label.ck span{font-size:11.5px;color:#8A9099}
     <div class="card">
       <b style="color:#16324F">Questions for the prospect</b>
       <div class="sub" style="margin:2px 0 0">Drafted from what the documents show, in
-        Brogan's follow-up format. Brogan marks each Send, Answered or Strike on his
+        The lead advisor’s follow-up format. The lead advisor marks each Send, Answered or Strike on his
         review page; once Claude has pulled his decisions in, rebuild for the email.</div>
       <div id="ddwhat" class="hide"><input type="checkbox" value="duediligence" checked></div>
       <div class="row"><span style="flex:1"></span>
@@ -1103,16 +1103,16 @@ var AUTO={}, CATCHUP=null;
 function stepBar(d){
   var bar=document.getElementById('stepbar'); if(!FOLDER){ bar.classList.add('hide'); return; }
   var steps=[['Initial notes','workbook','build'],['Cash flow','cashflow','assume'],
-             ['Assumptions','assumptions','assume'],['Brogan\u2019s review','brogan','consult'],
+             ['Assumptions','assumptions','assume'],['Advisor review','review','consult'],
              ['Questions + email','duediligence','consult'],['Deck','deck','deck']];
   var h='<b>'+esc(FOLDER.split('/').pop())+'</b>';
   steps.forEach(function(st){
     var x=d[st[1]]||{}, cls, note;
-    if(st[1]==='brogan'){ cls=x.current?'ok':(x.started?'wait':''); note=x.why; }
+    if(st[1]==='review'){ cls=x.current?'ok':(x.started?'wait':''); note=x.why; }
     else if(x.current){ cls='ok'; note='built '+x.when; }
     else if(x.when){ cls='need'; note='needs a rebuild: '+x.why; }
     else { cls=''; note='not built yet'; }
-    // A dot and the name only; the reason is in the tooltip (Austin: the
+    // A dot and the name only; the reason is in the tooltip (the firm: the
     // explanations made the bar wrap and look wonky).
     h+='<span class="st '+cls+'" data-tab="'+st[2]+'" title="'+esc(st[0]+': '+note)+'"><span class="dot"></span>'+st[0]+'</span>';
   });
@@ -1269,7 +1269,7 @@ function cfStatus(){
     });
 }
 // Where this client stands before the plan is worked out: filed or not, the
-// cash flow built or not, and how many of the analyst's changes were read.
+// cash flow built or not, and how many of the analyst’s changes were read.
 function consultStatus(){
   var el=document.getElementById('consultstatus');
   fetch('/api/consultstatus?folder='+encodeURIComponent(FOLDER))
@@ -2539,6 +2539,42 @@ OUTPUTS = {
 }
 
 
+CODE_ROOTS = {
+    'workbook': ('facts', 'workbook'),
+    'cashflow': ('cashflow', 'cashflow_book', 'cashflow_review'),
+    'assumptions': ('facts', 'assumptions', 'assumptions_pdf'),
+    'duediligence': ('duediligence',),
+    'deck': ('deck_template', 'deck_drafts'),
+}
+
+
+def code_closure(roots):
+    """The toolkit modules these import, directly or not (function-level
+    imports included), found by reading the code rather than running it."""
+    import ast
+    seen, todo = set(), list(roots)
+    while todo:
+        m = todo.pop()
+        if m in seen:
+            continue
+        path = os.path.join(HERE, m + '.py')
+        try:
+            with open(path) as fh:
+                tree = ast.parse(fh.read())
+        except (OSError, SyntaxError):
+            continue
+        seen.add(m)
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [a.name.split('.')[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                names = [node.module.split('.')[0]]
+            todo += [n for n in names
+                     if os.path.exists(os.path.join(HERE, n + '.py'))]
+    return sorted(seen)
+
+
 def output_status(folder):
     """For each build button: is its output there, and newer than everything
     it is built from (the client's documents, typed answers, the IC form
@@ -2572,7 +2608,7 @@ def output_status(folder):
     made = lambda prefix, ext: [os.path.join(out_dir, n) for n in names  # noqa: E731
                                 if n.startswith(prefix) and n.endswith(ext)]
     # What each output is built from. A step is out of date only when one of
-    # ITS inputs is newer: Brogan's decisions do not touch the initial notes,
+    # ITS inputs is newer: The lead advisor’s decisions do not touch the initial notes,
     # but a rebuilt cash flow does touch the Assumptions and the deck.
     deps = {
         'workbook': docs + lb + A('ic_form.json'),
@@ -2583,9 +2619,10 @@ def output_status(folder):
         'deck': docs + A('ic_form.json', 'plan_inputs.json', 'cashflow_review.json',
                          'review_decisions.json') + made('Cash flow', '.numbers'),
     }
-    code = [os.path.join(HERE, n) for n in os.listdir(HERE) if n.endswith('.py')
-            and n not in ('fq_app.py', 'preflight.py', 'deploy.py', 'review_page.py')]
-    code_t, code_what = newest(code)
+    # Only the code each output is actually built with: a change to the deck
+    # code no longer turns the initial notes orange.
+    code_for = {k: [os.path.join(HERE, m + '.py') for m in code_closure(roots)]
+                for k, roots in CODE_ROOTS.items()}
 
     status = {}
     for key, (prefix, ext) in OUTPUTS.items():
@@ -2598,18 +2635,19 @@ def output_status(folder):
         if in_t > t:
             why = 'newer: %s' % os.path.basename(in_what)
             status[key] = {'current': False, 'when': when, 'why': why}
-        elif code_t > t:
+        elif newest(code_for.get(key, []))[0] > t:
+            code_t, code_what = newest(code_for.get(key, []))
             status[key] = {'current': False, 'when': when,
                            'why': 'the toolkit changed since (%s)'
                                   % os.path.basename(code_what)}
         else:
             status[key] = {'current': True, 'when': when, 'why': 'up to date'}
-    # Brogan's review: proposed but not yet pulled back in.
+    # The lead advisor’s review: proposed but not yet pulled back in.
     asked = os.path.exists(os.path.join(out_dir, 'review_questions.json'))
     got = os.path.exists(os.path.join(out_dir, 'review_decisions.json'))
-    status['brogan'] = {'current': got, 'started': asked,
+    status['review'] = {'current': got, 'started': asked,
                         'why': ('decisions pulled in' if got else
-                                'waiting on Brogan\u2019s review page' if asked
+                                'waiting on the lead advisor’s review page' if asked
                                 else 'review page not made yet')}
     return status
 

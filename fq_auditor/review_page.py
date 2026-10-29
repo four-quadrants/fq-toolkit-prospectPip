@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Brogan's consult review page: what goes onto it, and what comes back.
+"""The lead advisor’s consult review page: what goes onto it, and what comes back.
 
     python3 review_page.py seed  "<client folder>" --out <dir>
     python3 review_page.py apply "<client folder>" <plan_figures.json>
 
 THE PAGE
 A private claude.ai page per client (an artifact with a small database), where
-Brogan sees the toolkit's proposal for every figure the consult deck uses, the
+The lead advisor sees the toolkit's proposal for every figure the consult deck uses, the
 workings behind them (starting portfolio, sale, savings sources, levers, the
 year-by-year savings worksheet), the concerns from the initial notes, and the
 follow-up questions. He types his own figure where he disagrees and marks each
@@ -15,7 +15,7 @@ question Send, Answered or Strike.
 WHY TWO STEPS
 The toolkit has no claude.ai login; only Claude can read and write the page's
 database. So Claude runs `seed` and loads the JSON it writes into the page,
-and after Brogan has decided, Claude saves the page's "plan/figures" record to
+and after the lead advisor has decided, Claude saves the page's "plan/figures" record to
 a file and runs `apply`, which writes his decisions where the toolkit reads
 them:
   _Audit/plan_inputs.json, key "deck"   his figures and the concerns, which
@@ -24,7 +24,7 @@ them:
                                           which the follow-up email uses
 
 THE RECORD THAT SAVES
-Everything Brogan changes lives on the one "plan/figures" record: "decided"
+Everything the lead advisor changes lives on the one "plan/figures" record: "decided"
 (his figures), "concerns", "qdecisions" and "qtext" (question decision and
 wording, by question id). The page writes nothing else, because in the
 Claude app's viewer the store hands back read-only objects and the
@@ -58,7 +58,7 @@ def _num(text):
 
 
 def apply(folder, plan_json):
-    """Write Brogan's decisions from the page into the client folder."""
+    """Write the lead advisor’s decisions from the page into the client folder."""
     import inputs as _inputs
     with open(plan_json) as fh:
         got = json.load(fh)
@@ -93,7 +93,7 @@ def apply(folder, plan_json):
         entry['concerns'] = [[c.get('head', ''), c.get('body', '')]
                              for c in rec['concerns'] if c.get('head')]
         changed.append('concerns')
-    _inputs.put(folder, 'deck', entry, by='Brogan, on the consult review page',
+    _inputs.put(folder, 'deck', entry, by='the lead advisor, on the consult review page',
                 note='decided on the review page')
 
     out = {'read': datetime.datetime.now().isoformat(timespec='seconds'),
@@ -257,7 +257,7 @@ def seed(folder, outdir):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Brogan’s consult review page')
+    ap = argparse.ArgumentParser(description='the lead advisor’s consult review page')
     sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('seed')
     s.add_argument('folder')

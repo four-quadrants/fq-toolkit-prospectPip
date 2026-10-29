@@ -45,7 +45,7 @@ def _form_text(path):
 
 
 # The form's fixed statements, the answer that makes each one a pain, and how
-# Brogan would put it. The answer alone ("True. I am not satisfied.") loses
+# The lead advisor would put it. The answer alone ("True. I am not satisfied.") loses
 # what he is not satisfied with.
 STATEMENTS = [
     ('willing to settle', 'True', 'not willing to settle where things are'),
@@ -135,7 +135,7 @@ def call_needs(folder):
 
 
 def themes(form, form_path, p, t, latest, series, fee, debt_head, folder=None):
-    """[(theme, evidence or None, source)] in the order Brogan lists them."""
+    """[(theme, evidence or None, source)] in the order the lead advisor lists them."""
     s = {name: vals for name, vals, _fmt in series}
     out = []
 

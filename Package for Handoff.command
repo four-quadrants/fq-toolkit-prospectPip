@@ -1,5 +1,5 @@
 #!/bin/bash
-# Austin only. Builds the zip to send to someone who needs the toolkit.
+# Maintainer only. Builds the zip to send to someone who needs the toolkit.
 #
 # Code only — never client documents. Writes the zip to your Desktop, ready to
 # drag into an email or AirDrop. Run it after you have committed and pushed, so

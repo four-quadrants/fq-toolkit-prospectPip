@@ -494,7 +494,7 @@ def fee_study_table(folder):
     """Fee positioning worked out from the study's own table, when the file
     name does not carry the result ("Fee Study - 28801.pdf").
 
-    Brogan's figure is the mean of each code's (practice - benchmark) /
+    The lead advisor’s figure is the mean of each code's (practice - benchmark) /
     benchmark, leaving out codes that fall off the bottom or top of the
     NDAS table (P10 or below, P95 or above). Checked against his notes:
     Rebol -11.26% (three codes at P10 left out), Spaulding -4.79% (none).

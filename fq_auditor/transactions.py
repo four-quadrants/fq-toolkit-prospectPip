@@ -13,7 +13,7 @@ Transfers are different. A transfer is one movement among many, so it
 cannot be derived from a total; it has to be found. And until it is found,
 money Brian moved between his own accounts is counted as spending. On
 Civista x0054 that is $59,000 across four months, which is the difference
-between a monthly figure of $77,874 and Brogan's $23,124.
+between a monthly figure of $77,874 and the lead advisor’s $23,124.
 
 TWO LAYOUTS, AND WHY NOT MORE
 Civista prints date, description and amount on consecutive lines; the
@@ -92,7 +92,7 @@ BORROW_WORDS = ('loan', 'advance', 'draw', 'line of credit', 'heloc',
 # verified figure from $13,892 to $12,973: his "Electronic Withdrawal ... To
 # U.S. BANK ... WEB PYMT" lines then fell through to the card-payment
 # smoothing. Borrowing on a debit has no effect on the figures, so the
-# substring stays until the card rule is settled against Brogan's workbook.
+# substring stays until the card rule is settled against the lead advisor’s workbook.
 BORROW_RE = re.compile(r'\bloc\b', re.I)
 
 
@@ -623,7 +623,7 @@ def apply_rules(rows, sides, banks=None):
     The third is the one that matters and the one a naive detector gets
     wrong. Every incoming movement looks like a transfer, so excluding all
     of them strips the practice distributions that are the household's
-    actual income. Brogan's workbook shows zero transfers in on the
+    actual income. The lead advisor’s workbook shows zero transfers in on the
     personal account for exactly this reason.
 
     `sides` maps an account's last four digits to 'Personal' or 'Business'.
@@ -738,7 +738,7 @@ def apply_rules(rows, sides, banks=None):
             # other transfer between accounts he owns.
             #
             # This was briefly implemented the other way round, on my own
-            # bad reading of the firm's workbook. Brogan's "Transfers Out"
+            # bad reading of the firm's workbook. The lead advisor’s "Transfers Out"
             # row does not contain the practice loans, so I reported that
             # he had left them in expenses. He had not: his Total
             # Adjustments OUT is SUM(C11:C16), which adds the Adjustments

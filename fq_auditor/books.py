@@ -5,7 +5,7 @@
 
 WHY THE DETAIL ROWS
 Overhead is a ratio of two totals and says nothing about what is inside them.
-The analyst's notes on this client are mostly about what is inside:
+The analyst’s notes on this client are mostly about what is inside:
 
     Spends 72k and 115k on "consulting" in 2024 and 2025 -- what is this for?
     Net income on the 2024 and 2025 books does not match the returns.

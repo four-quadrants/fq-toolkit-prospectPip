@@ -6,7 +6,7 @@ Written Friday 16 October. Read this first.
 
 ## THE DECISION, BEFORE ANY CODE
 
-Austin has to rule on this, and it changes arithmetic rather than
+The firm has to rule on this, and it changes arithmetic rather than
 plumbing. Five minutes with the actual Civista x0222 statements settles it.
 
 Four statements were read for that account:
@@ -22,9 +22,9 @@ Three of them begin on the same day. The deposits run 10,000 then 19,000
 then 29,000, which reads as one period reported three times, each
 statement covering everything since 2 July rather than a fresh month.
 
-**Our tool excludes the last two as cumulative. Brogan used all three.**
+**Our tool excludes the last two as cumulative. The lead advisor used all three.**
 
-- If Brogan is right, the overlap rule is wrong and should come out. It
+- If the lead advisor is right, the overlap rule is wrong and should come out. It
   currently sits in `statements.gather()`.
 - If the tool is right, his $9,086 a month for that account counts the
   same deposits repeatedly, and the personal expense total is overstated.
@@ -39,10 +39,10 @@ Note the tool also read an Apr-to-Jul statement he did not use at all.
 
 **Moonridge account number.** Four statements exist and read fine, but the
 account number is not being picked up, so they group under a key taken
-from the folder instead. Brogan has them as Wells Fargo x6986. Our
+from the folder instead. The lead advisor has them as Wells Fargo x6986. Our
 comparison showed Moonridge with no periods at all as a result.
 
-**x0222 periods**, per whatever Austin decides above.
+**x0222 periods**, per whatever the firm decides above.
 
 ### 2. The transaction line reader (the real work)
 
@@ -62,7 +62,7 @@ call" column exists for. Do not aim for a clean answer.
 ### 3. Re-run the comparison
 
 The test of whether we reproduce the firm. Civista x0054 should fall from
-$77,874 a month to roughly Brogan's $23,124 once transfers come out. The
+$77,874 a month to roughly the lead advisor's $23,124 once transfers come out. The
 comparison script from Friday is worth keeping.
 
 ### 4. Back to the Assumptions
@@ -78,7 +78,7 @@ The pipeline runs end to end: statements in, a live Numbers workbook out,
 on the firm's own template, with formulas intact and the reasoning in cell
 comments.
 
-The comparison against Brogan's own workbook:
+The comparison against the lead advisor's own workbook:
 
 - **US Bank x1145** matches on all four periods, to the cent
 - **Civista x0054** matches except for ten cents of his rounding
