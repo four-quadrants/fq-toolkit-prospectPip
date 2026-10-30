@@ -25,6 +25,7 @@ practice, and each property company on its own sheet. Which side an account
 is on comes from where the document was filed and is cross-checked against
 the holder printed on the statement.
 """
+import re
 import os
 import sys
 import argparse
@@ -60,9 +61,9 @@ def _entity_of(side, key):
     if side == 'Personal':
         return 'Personal'
     name = str(key)
-    if not name.isdigit():
-        return name            # Moonridge, Eden, and friends, named by folder
-    return 'Practice'
+    if name.isdigit() or re.match(r'x\d{3,}$', name, re.I):
+        return 'Practice'      # an account number, not a company
+    return name                # Moonridge, Eden, and friends, named by folder
 
 
 def build(folder):

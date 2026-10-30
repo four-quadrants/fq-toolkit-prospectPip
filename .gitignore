@@ -18,6 +18,7 @@
 !*.py
 !*.md
 !Cena_5.html
+!fq_auditor/assets/review_page.html
 !.gitignore
 
 # 4. belt and braces: never these, even if a rule above would allow them

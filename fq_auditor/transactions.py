@@ -281,6 +281,38 @@ def _read_register(lines, year=None, account=None):
     return out
 
 
+HUNT_CREDIT = re.compile(r'^\s*deposit\s*/\s*credit activity', re.I)
+HUNT_DEBIT = re.compile(r'^\s*(other\s+)?withdrawal\s*/\s*debit activity|^\s*checks?\b.*\(-\)', re.I)
+HUNT_STOP = re.compile(r'balance activity|^\s*investments are offered|in the event of errors|'
+                       r'^\s*online statement period', re.I)
+HUNT_LINE = re.compile(r'^\s*(\d{1,2})/(\d{1,2})\s+(.*?[^\d.,\s].*?)\s+\$?(-?[\d,]+\.\d{2})\s*$')
+
+
+def _read_huntington(lines, year, account):
+    """Huntington, read from the page layout: a "Deposit / Credit Activity
+    (+)" block and an "Other Withdrawal / Debit Activity (-)" block, one
+    transaction a line, "05/28 SERENITY CREEK D PAYROLL ... 9,595.00"
+    (Spaulding's checking and Isla's custodial savings)."""
+    out, section = [], None
+    for line in lines:
+        if HUNT_CREDIT.search(line):
+            section = 'credit'
+            continue
+        if HUNT_DEBIT.search(line):
+            section = 'debit'
+            continue
+        if HUNT_STOP.search(line):
+            section = None
+            continue
+        if not section:
+            continue
+        m = HUNT_LINE.match(line)
+        if m and not re.match(r'^\s*date\b', line, re.I):
+            month, day, desc, amount = m.groups()
+            out.append(_row(month, day, desc, amount, section, year, account))
+    return out
+
+
 def read(text, year=None, account=None, holder=None):
     """Every transaction this reader can see, in order.
 
@@ -289,6 +321,10 @@ def read(text, year=None, account=None, holder=None):
     depend on this, so a missed line costs a transfer, not a balance.
     """
     lines = [l.rstrip() for l in (text or '').split('\n')]
+    if any('huntington' in l.lower() for l in lines[:40]):
+        got = _read_huntington(lines, year, account)
+        if got:
+            return got
     if _is_usbank(lines):
         return _read_usbank(lines, year, account, holder)
     if _is_register(lines):
@@ -449,15 +485,25 @@ def gather(folder):
     out = {}
     for key, rows in found.items():
         for row in rows:
-            text = _text_for(folder, row['file'], row.get('text_path'))
-            if text is None:
-                continue
             year = row['ends'].year if row['ends'] else None
-            got = read(text, year, row.get('account') or key[1],
-                       row.get('holder'))
+            if row.get('claude_tx') is not None:
+                # Read by Claude and tied out to the statement's totals
+                got = []
+                for t in row['claude_tx']:
+                    t = dict(t)
+                    t.update(classify(t['description'], row.get('account') or key[1],
+                                      row.get('holder')))
+                    got.append(t)
+            else:
+                text = _text_for(folder, row['file'], row.get('text_path'))
+                if text is None:
+                    continue
+                got = read(text, year, row.get('account') or key[1],
+                           row.get('holder'))
             # Same fallback as the balances: where the cached text is in
             # drawing order and yields nothing, rebuild it from the page.
-            if not got and row.get('source') and _st._is_pdf(row['source']):
+            if not got and row.get('claude_tx') is None and row.get('source') \
+                    and _st._is_pdf(row['source']):
                 again = _st.layout_text(row['source'])
                 if again:
                     got = read(again, year, row.get('account') or key[1],

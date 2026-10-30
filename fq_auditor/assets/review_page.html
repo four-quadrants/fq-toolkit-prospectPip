@@ -1,0 +1,707 @@
+<title>Consult Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: one working column, plan figures as a ledger, then concerns, then the questions list */
+:root{
+  --bg:#F5F7F9; --card:#FFFFFF; --ink:#16324F; --text:#22303D; --muted:#5F6E7C;
+  --line:#DCE3EA; --accent:#E8792B; --accent-soft:#FDEBDD; --pale:#EAF3F9;
+  --ok:#1E7A46; --ok-soft:#E3F3E9; --off:#8A939C; --off-soft:#EEF0F2;
+  --display:"Barlow Semi Condensed","Barlow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1A25; --card:#16232F; --ink:#CFE2F1; --text:#DCE4EB; --muted:#93A3B1;
+  --line:#2A3A49; --accent:#F08A3E; --accent-soft:#3A2617; --pale:#1B2E3F;
+  --ok:#5CC48A; --ok-soft:#153222; --off:#8A939C; --off-soft:#222D37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1A25; --card:#16232F; --ink:#CFE2F1; --text:#DCE4EB; --muted:#93A3B1;
+  --line:#2A3A49; --accent:#F08A3E; --accent-soft:#3A2617; --pale:#1B2E3F;
+  --ok:#5CC48A; --ok-soft:#153222; --off:#8A939C; --off-soft:#222D37; color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:16px/1.5 var(--body)}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:28px}
+header{display:grid;gap:6px}
+.eyebrow{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 34px/1.1 var(--display);color:var(--ink);margin:0;text-wrap:balance}
+.lede{color:var(--muted);max-width:66ch;margin:0}
+.status{font-size:13px;color:var(--muted)}
+.status b{color:var(--ink)}
+.status .bad{color:var(--accent);font-weight:600}
+.status{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:6px 0;z-index:5;font-size:14px}
+section{display:grid;gap:12px}
+h2{font:700 20px/1.2 var(--display);color:var(--ink);margin:0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+h2 small{font:500 13px var(--body);color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.ledger{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font:600 12px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.num{text-align:right;white-space:nowrap;font-weight:600;color:var(--ink)}
+td .basis{font-size:13px;color:var(--muted);margin-top:2px}
+input[type=text]{font:inherit;width:100%;min-width:0;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text)}
+input[type=text]:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input.set{border-color:var(--accent);background:var(--accent-soft)}
+.yours{width:160px}
+textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);resize:vertical;min-height:2.6em}
+.concerns{display:grid;gap:10px;padding:14px}
+.concern{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:10px;align-items:start}
+.concern .n{font:700 20px var(--display);color:var(--accent);text-align:right;padding-top:4px}
+.concern .fields{display:grid;gap:6px;min-width:0}
+.qs{display:grid;gap:10px}
+.q{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
+.q.strike{opacity:.7}
+.q .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.q .n{font:700 18px var(--display);color:var(--ink);min-width:1.6em}
+.chip{font:600 11px var(--display);letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:var(--pale);color:var(--ink)}
+.chip.hi{background:var(--accent-soft);color:var(--accent)}
+.why{font-size:13px;color:var(--muted)}
+.pick{margin-left:auto;font:600 13px var(--display);color:var(--muted);display:flex;gap:6px;align-items:center}
+.pick select{font:600 14px var(--body);padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button{font:600 13px var(--display);padding:6px 12px;border:0;background:var(--card);color:var(--muted);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{color:#fff}
+.seg button[aria-pressed="true"]::before{content:"\2713  "}
+.seg button[aria-pressed="true"].send{background:var(--accent)}
+.seg button[aria-pressed="true"].answered{background:var(--ok)}
+.seg button[aria-pressed="true"].strike{background:#6B7683}
+.q.answered{border-left:4px solid var(--ok)}
+.q.send{border-left:4px solid var(--accent)}
+.q.strike{border-left:4px solid #6B7683}
+.q.strike textarea{text-decoration:line-through}
+.empty{padding:18px;color:var(--muted)}
+.pad{padding:16px;display:grid;gap:8px;min-width:0}
+.pad .empty{padding:0}
+h3{font:700 16px/1.2 var(--display);color:var(--ink);margin:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-variant-numeric:tabular-nums}
+.kv .v{text-align:right;font-weight:600;color:var(--ink)}
+.kv .t{border-top:1px solid var(--line);padding-top:6px;font-weight:700;color:var(--ink)}
+.formula{font-size:13px;color:var(--muted)}
+td.r,th.r{text-align:right;white-space:nowrap}
+tr.ret td{background:var(--accent-soft);font-weight:700}
+td.needs{color:var(--muted);font-style:italic}
+.wi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.wi-grid label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input.wi,input.wcell{border-color:var(--accent);background:var(--accent-soft);font-variant-numeric:tabular-nums}
+input.wcell{width:110px;text-align:right;padding:5px 7px}
+.wi-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:6px}
+.tile{border:1px solid var(--line);border-radius:9px;padding:10px 12px;display:grid;gap:2px}
+.tile .k{font:600 12px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font:700 22px var(--display);color:var(--ink);font-variant-numeric:tabular-nums}
+.tile .s{font-size:12px;color:var(--muted)}
+.tile.good .v{color:var(--ok)} .tile.warn .v{color:var(--accent)}
+.row-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.primary-btn{font:600 14px var(--display);padding:9px 16px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+.ghost-btn{font:600 14px var(--display);padding:9px 16px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+
+.note{font-size:13px;color:var(--muted)}
+.rn{width:96px;text-align:right}
+.rmeta{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.rnote{flex:1;min-width:180px}
+.ybtn{font:inherit;font-size:12px;padding:2px 8px;border:1px solid var(--line,#ccc);background:transparent;border-radius:5px;cursor:pointer}
+.ybtn[aria-pressed=true]{background:#16324F;color:#fff;border-color:#16324F}
+.rl{width:100%}
+tr.off td{opacity:.55}
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:4px;overflow-x:auto;background:var(--bg,#fff);border-bottom:1px solid var(--line,#ddd);padding:8px 0;margin:0 0 18px}
+.tabs button{font:inherit;font-size:14px;font-weight:600;padding:8px 14px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected=true]{background:#16324F;color:#fff}
+.m-c{display:none} body:not(.mode-analysis) .m-a{display:none} body:not(.mode-analysis) .m-c{display:inline}
+.tabs .tc{font-weight:400;opacity:.8;font-size:12px}
+section[data-tab].tab-off{display:none}
+.qans{margin-top:6px;background:var(--pale,#f6f3ee)}
+.grp td{background:var(--soft,#f4f1ec);font-weight:700;padding-top:14px}
+.slidegroup{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start;margin:0 0 28px}
+.slidepicwrap{position:sticky;top:12px}
+@media (max-width:820px){.rn{width:96px;text-align:right}
+.rmeta{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.rnote{flex:1;min-width:180px}
+.ybtn{font:inherit;font-size:12px;padding:2px 8px;border:1px solid var(--line,#ccc);background:transparent;border-radius:5px;cursor:pointer}
+.ybtn[aria-pressed=true]{background:#16324F;color:#fff;border-color:#16324F}
+.rl{width:100%}
+tr.off td{opacity:.55}
+.grp td{background:var(--soft,#f4f1ec);font-weight:700;padding-top:14px}
+.slidegroup{grid-template-columns:1fr}.slidepicwrap{position:static}}
+.slidepic{display:block;width:100%;height:auto;border:1px solid var(--line,#ddd);border-radius:8px;margin:0 0 10px}
+.slidehead{font-size:14px;margin:14px 0 6px;color:var(--muted);text-transform:none}
+@media (max-width:620px){.yours{width:110px} h1{font-size:28px} .seg{margin-left:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Due diligence · Four Quadrants</div>
+    <h1 id="title">Consult review</h1>
+    <p class="lede">The toolkit's proposal for each figure the consult deck is built from, the client's biggest concerns, the slide wording Claude drafted, and the follow-up questions. Leave a box blank to accept the proposal. Everything saves as you go.</p>
+    <div class="status" id="status">Loading the plan…</div>
+    <div class="note" id="heard">Checking the connection…</div>
+  </header>
+  <nav class="tabs" role="tablist" aria-label="Review sections">
+    <button type="button" data-tabgo="found" data-modes="analysis" aria-selected="true">1 What we found</button>
+    <button type="button" data-tabgo="qs" data-modes="analysis consult" aria-selected="false"><span class="m-a">2 Questions</span><span class="m-c">1 Open questions</span> <span class="tc" id="tc-qs"></span></button>
+    <button type="button" data-tabgo="email" data-modes="analysis" aria-selected="false">3 Email</button>
+    <button type="button" data-tabgo="plan" data-modes="consult" aria-selected="false">2 Plan</button>
+    <button type="button" data-tabgo="recs" data-modes="consult" aria-selected="false">3 Recommendations <span class="tc" id="tc-recs"></span></button>
+    <button type="button" data-tabgo="proj" data-modes="consult" aria-selected="false">4 Projections</button>
+    <button type="button" data-tabgo="slides" data-modes="consult" aria-selected="false">5 Slides <span class="tc" id="tc-slides"></span></button>
+  </nav>
+
+  <section data-tab="found">
+    <h2>What the documents show <small>Check these before the plan is built on them</small></h2>
+    <p class="note">Read from the statements, returns and credit reports, each with where it came from. Anything wrong or missing: say so in a note or a question to the client.</p>
+    <div id="found"><div class="card empty">Appears once the analyst loads this client.</div></div>
+    <h2 style="margin-top:26px">Notes for the team <small>Read before the plan is built</small></h2>
+    <div class="card pad"><textarea id="gnote2" rows="3" placeholder="What looks off, what to ask, what to keep in mind for the plan." aria-label="Notes" style="width:100%"></textarea></div>
+  </section>
+
+  <section data-tab="email">
+    <h2>The email to the client <small>Written from the questions marked Send</small></h2>
+    <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Edit anything here; your edits are kept. <b>Start over from the questions</b> rewrites it if you change the questions afterwards.</p>
+    <div class="card pad"><textarea id="emailtext" rows="22" style="width:100%" aria-label="Email to the client"></textarea>
+    <div class="row-actions"><button type="button" id="emailcopy" class="primary-btn">Copy the email</button><button type="button" id="emailredo" class="ghost-btn">Start over from the questions</button></div></div>
+  </section>
+
+  <section data-tab="plan">
+    <h2>Notes for the team <small>Read before the deck is built</small></h2>
+    <div class="card pad"><textarea id="gnote" rows="3" placeholder="Anything that should shape the plan or the deck: what to hold back, what to lead with, conditions, timing. Claude reads this when it pulls in the review." aria-label="Notes for the team" style="width:100%"></textarea></div>
+  </section>
+
+  <section data-tab="plan">
+    <h2>The plan <small>Your figure replaces the proposal</small></h2>
+    <div class="card ledger">
+      <table>
+        <thead><tr><th>Figure</th><th style="text-align:right">Proposed</th><th>Your figure</th></tr></thead>
+        <tbody id="figs"><tr><td colspan="3" class="empty">The plan figures appear here once the analyst loads them.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="recsec" data-tab="recs">
+    <h2>Recommendations <small id="reccount"></small></h2>
+    <p class="note">The firm's usual recommendations, from past consults. The ones this client's documents point to are ticked, with the figure and the reason. Untick what does not fit, tick anything else that does and fill in its figures, or add your own. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
+    <div class="card ledger"><table>
+      <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
+      <tbody id="recs"><tr><td colspan="5" class="empty">The recommendations appear here once the analyst loads them.</td></tr></tbody>
+    </table>
+    <div class="row-actions"><button type="button" id="recadd" class="ghost-btn">Add a recommendation</button></div></div>
+  </section>
+
+  <section id="workings" data-tab="proj">
+    <h2>How the numbers are built <small>The worksheet behind the figures above</small></h2>
+    <div class="grid2">
+      <div class="card pad"><h3>Starting portfolio</h3><div id="w-start" class="empty">Appears once the analyst loads the workings.</div></div>
+      <div class="card pad"><h3>The sale at retirement</h3><div id="w-sale" class="empty">Appears once the analyst loads the workings.</div></div>
+    </div>
+    <div class="card pad" id="whatif">
+      <h3>What if: try different figures</h3>
+      <p class="note">Change anything in the amber boxes and the worksheet below recalculates at once, on the same arithmetic as the deck. Nothing is saved until you press <b>Use these figures</b>.</p>
+      <div class="wi-grid">
+        <label>Retirement age<input type="text" id="wi-retire" class="wi"></label>
+        <label>Target retirement income, a year<input type="text" id="wi-income" class="wi"></label>
+        <label>Sale at retirement, net<input type="text" id="wi-sale" class="wi"></label>
+        <label>Saved a year today (current path)<input type="text" id="wi-cur" class="wi"></label>
+        <label>Overhead target<input type="text" id="wi-oh" class="wi"></label>
+      </div>
+      <div class="formula" id="wi-oh-note"></div>
+      <h3 style="margin-top:6px">Where the savings come from</h3>
+      <p class="note">What each source frees up a year and what the toolkit proposes to invest from it. The schedule under it is what the plan uses: change any step to map out a bigger or smaller increase.</p>
+      <div class="ledger" id="w-gains"></div>
+      <div class="ledger" id="wi-later"></div>
+      <div class="wi-results" id="wi-results"></div>
+      <div class="row-actions"><button type="button" id="wi-use" class="primary-btn">Use these figures</button><button type="button" id="wi-reset" class="ghost-btn">Back to the proposal</button></div>
+    </div>
+    <div class="card pad"><h3>Practice levers</h3><p class="note">What each lever is worth a year to the owner, from the practice's own numbers. A lever with no figure says what it still needs.</p><div class="ledger" id="w-levers"></div></div>
+    <div class="card pad"><h3>Savings worksheet</h3><p class="note" id="w-proj-note"></p><div class="ledger" id="w-proj"></div></div>
+  </section>
+
+  <section data-tab="plan">
+    <h2>Biggest concerns <small>From the initial notes' pain points; edit the wording for the slide</small></h2>
+    <div class="card concerns" id="concerns"><div class="empty">The concerns appear here once the analyst loads them.</div></div>
+  </section>
+
+  <section data-tab="slides">
+    <h2>Slide by slide <small id="scount"></small></h2>
+    <p class="note">Most of the deck fills itself from the numbers. Below are only the slides with something to check: the figures a slide is built on, and any box Claude drafted from the returns and statements. Each slide is shown beside its items, with those boxes outlined in orange and numbered. <b>Use</b>: goes on the slide as written (edit it freely). <b>Drop</b>: the box stays blank, to fill in later. The deck is an ordinary PowerPoint file, so anything can still be changed after it is built.</p>
+    <div id="slides"><div class="card empty">The slides appear here once the analyst loads them.</div></div>
+  </section>
+
+  <section data-tab="qs">
+    <h2>Follow-up questions <small id="qcount"></small></h2>
+    <p class="note"><b>First, before the plan.</b> Mark each question; once you are done, the analyst asks Claude to pull in the questions and the email goes to the client. When answers come back (portal, email or new documents), record them here or the team files the documents; the analyst then asks Claude to refresh this page, and the plan, recommendations and slides are worked out again with the answers in, keeping everything you already decided.<br><b>Send</b>: goes in the email to the client. <b>Answered</b>: the team settled it from the file, so it is not asked. <b>Strike</b>: not needed, drop it. <b>Check first</b>: look before deciding. Edit the wording freely.</p>
+    <div class="qs" id="qs"><div class="card empty">The questions appear here once the analyst loads them.</div></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var db=null, plan=null, qs=[], timers={}, pending={};
+  var $=function(id){return document.getElementById(id)};
+  // The store hands over read-only objects: a field set on one is silently
+  // dropped. Every read is copied, so the page can label and edit it.
+  function data(snap){ if(!snap) return null; var d=(typeof snap.data==='function')?snap.data():(snap.data!==undefined?snap.data:snap);
+    try{ return d==null?d:JSON.parse(JSON.stringify(d)); }catch(e){ return d; } }
+  function exists(snap){ if(!snap) return false; if(typeof snap.exists==='function') return snap.exists(); if(snap.exists!==undefined) return snap.exists; return !!data(snap); }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function say(t){ $('status').innerHTML=t; }
+
+  function renderPlan(){
+    if(!plan) return;
+    $('title').textContent=(plan.client||'Client')+' · consult review';
+    document.title=(plan.surname||'Client')+' Consult Review';
+    var lastG=null;
+    var rows=(plan.figures||[]).filter(function(f){return !f.slide}).map(function(f,i){
+      var mine=(plan.decided||{})[f.key];
+      var g=(f.group&&f.group!==lastG)?'<tr class="grp"><td colspan="3">'+esc(f.group)+'<div class="basis">Every rate and rule the plan runs on. Type your own to change it; the deck and the worksheet follow.</div></td></tr>':''; lastG=f.group||lastG;
+      return g+'<tr><td><b>'+esc(f.label)+'</b><div class="basis">'+esc(f.basis||'')+'</div></td>'+
+        '<td class="num">'+esc(f.proposed)+'</td>'+
+        '<td class="yours"><input type="text" id="fig-'+esc(f.key)+'" data-key="'+esc(f.key)+'" class="'+(mine?'set':'')+'" value="'+esc(mine||'')+'" placeholder="accept" aria-label="Your figure for '+esc(f.label)+'"></td></tr>';
+    }).join('');
+    $('figs').innerHTML=rows||'<tr><td colspan="3" class="empty">No figures yet.</td></tr>';
+
+    var con=plan.concerns||[];
+    $('concerns').innerHTML=con.length?con.map(function(c,i){
+      return '<div class="concern"><div class="n">'+(i+1)+'</div><div class="fields">'+
+        '<input type="text" id="con-h-'+i+'" data-i="'+i+'" data-f="head" value="'+esc(c.head)+'" aria-label="Concern '+(i+1)+' heading">'+
+        '<textarea id="con-b-'+i+'" data-i="'+i+'" data-f="body" rows="2" aria-label="Concern '+(i+1)+' detail">'+esc(c.body)+'</textarea></div></div>';
+    }).join(''):'<div class="empty">No concerns loaded.</div>';
+    $('concerns').querySelectorAll('[data-i]').forEach(function(el){
+      el.addEventListener('input',function(){
+        var i=+el.dataset.i; plan.concerns[i][el.dataset.f]=el.value;
+        pending.con=true;
+        debounce('con',function(){ write('plan/figures',{concerns:plan.concerns},function(){pending.con=false;}); });
+      });
+    });
+  }
+
+  function $m(v){ return v==null?'':'$'+Math.round(v).toLocaleString('en-US'); }
+  function pct(v){ return (v*100).toFixed(1).replace(/\.0$/,'')+'%'; }
+  function renderWorkings(w){
+    if(!w) return;
+    var s=(w.start_parts||[]).map(function(p){return '<div>'+esc(p[0])+'</div><div class="v">'+$m(p[1])+'</div>'}).join('');
+    $('w-start').className='kv'; $('w-start').innerHTML=s+'<div class="t">Starting portfolio</div><div class="v t">'+$m(w.start)+'</div>';
+    var a=w.sale||{};
+    var sale='<div>Collections</div><div class="v">'+$m(a.collections)+'</div>'+
+      '<div>Practice value at '+Math.round((a.multiple||0.65)*100)+'%</div><div class="v">'+$m(a.collections*(a.multiple||0.65))+'</div>'+
+      '<div>Grown '+pct(a.growth)+' a year for '+a.years+' years</div><div class="v">'+$m(a.collections*(a.multiple||0.65)*Math.pow(1+a.growth,a.years))+'</div>'+
+      (a.building?'<div>Building, grown '+pct(a.building_growth)+'</div><div class="v">'+$m(a.building*Math.pow(1+a.building_growth,a.years))+'</div>':'<div class="needs">Building value</div><div class="v">needed</div>')+
+      '<div>Gross at retirement</div><div class="v">'+$m(a.gross)+'</div>'+
+      '<div class="t">Net after tax ('+Math.round(a.net_factor*100)+'%)</div><div class="v t">'+$m(a.net)+'</div>'+
+      (a.advisor?'<div>Figure in the plan entry</div><div class="v">'+$m(a.advisor)+'</div>':'');
+    $('w-sale').className='kv'; $('w-sale').innerHTML=sale;
+    $('w-levers').innerHTML='<table><thead><tr><th>Lever</th><th class="r">A year</th><th>Basis</th></tr></thead><tbody>'+
+      (w.levers||[]).map(function(l){return '<tr><td><b>'+esc(l.label)+'</b></td><td class="r">'+(l.value==null?'—':$m(l.value))+'</td><td class="'+(l.value==null?'needs':'')+'">'+esc(l.basis)+'</td></tr>'}).join('')+'</tbody></table>';
+    WK=w; if(!WI) wiReset(); wiRender();
+  }
+
+// Port of savings.py: both paths, year-end values.
+function fqModel(P){
+  var R=P.rates||{}, INF=R.inflation!=null?R.inflation:0.032, RC=R.current!=null?R.current:0.085, RQ=R.fq!=null?R.fq:0.09, R1=R.first!=null?R.first:0.085, H=P.horizon||90;
+  var cd=new Date(P.consult_date+'T00:00:00'); var y0=cd.getFullYear();
+  var end=new Date(y0,11,31); var left=(end-cd)/864e5/365; var f=Math.floor(left*4)/4;
+  var r1=R1; if(f===0){ y0=y0+1; f=1; r1=RQ; }
+  var retire=cd.getFullYear()+(P.retire_age-P.age), last=cd.getFullYear()+(H-P.age);
+  function steps(list,first,lastY){ var o={}; list=list.slice().sort(function(a,b){return a[0]-b[0]});
+    for(var y=first;y<=lastY;y++){ var live=list.filter(function(s){return s[0]<=y}); if(live.length) o[y]=live[live.length-1][1]; } return o; }
+  var cur=steps([[y0,P.current_savings]],y0,retire); cur[retire]=(cur[retire]||0)+P.sale_net;
+  var fqd=steps(P.schedule,y0,retire); fqd[retire]=(fqd[retire]||0)+(P.sale_net_fq!=null?P.sale_net_fq:P.sale_net);
+  function exp(e,y){ return e*Math.pow(1+INF,y-y0); }
+  var c={}, q={}, v=P.start*(1+RC*f); c[y0]=v;
+  for(var y=y0+1;y<=last;y++){ var d=cur[y]||0; if(y<=retire) v=(v+d)*(1+RC); else { var x=v-exp(P.spend,y); v=(x>0?x*(1+RC):x)+d; } c[y]=v; }
+  v=P.start*(1+r1*f)+(fqd[y0]||0); q[y0]=v;
+  for(y=y0+1;y<=last;y++){ d=fqd[y]||0; if(y<=retire) v=v*(1+RQ)+d; else { x=v-exp(P.income,y); v=(x>0?x*(1+RQ):x)+d; } q[y]=v; }
+  function runout(p){ for(var k=y0;k<=last;k++) if(p[k]<0) return k; return null; }
+  return {y0:y0,retire:retire,end:last,current:c,fq:q,cur_dep:cur,fq_dep:fqd,cur_at:c[retire],fq_at:q[retire],cur_runout:runout(c),fq_runout:runout(q),fq_end:q[last]};
+}
+
+
+  // ---- what if ---------------------------------------------------------
+  var WK=null, WI=null;
+  function n(v){ var t=String(v==null?'':v).replace(/[$,\s]/g,''); var k=/k$/i.test(t), m=/m$/i.test(t), p=/%$/.test(t);
+    var x=parseFloat(t.replace(/[kKmM%]$/,'')); if(isNaN(x)) return null; if(k)x*=1e3; if(m)x*=1e6; if(p)x/=100; return x; }
+  function wiReset(){
+    if(!WK||!WK.model) return; var M=WK.model;
+    WI={retire:M.retire_age, income:M.income, sale:M.sale_net, cur:M.current_savings, oh:M.target_overhead,
+        sched:(M.schedule||[]).map(function(r){return r.slice()})};
+    $('wi-retire').value=WI.retire; $('wi-income').value=$m(WI.income); $('wi-sale').value=$m(WI.sale);
+    $('wi-cur').value=$m(WI.cur); $('wi-oh').value=Math.round(WI.oh*100)+'%';
+  }
+  function wiSchedule(){
+    return WI.sched.map(function(r){return [r[0],r[1]||0]});
+  }
+  function wiRender(){
+    if(!WK||!WK.model||!WI) return; var M=WK.model, g=WK.gains||[];
+    // the sources, as the toolkit proposes them (reference); the schedule
+    // below is what the plan uses, and what can be changed
+    var tot=[0,0,0];
+    var rows=g.map(function(x){ (x.invested||[]).forEach(function(v,i){tot[i]+=v||0});
+      return '<tr><td><b>'+esc(x.label)+'</b><div class="basis">'+esc(x.basis||'')+'</div></td><td class="r">'+$m(x.gain)+'</td>'+
+      (x.invested||[]).map(function(v){return '<td class="r">'+$m(v)+'</td>'}).join('')+'</tr>'; }).join('');
+    $('w-gains').innerHTML='<table><thead><tr><th>Source</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr></thead><tbody>'+rows+
+      '<tr class="ret"><td>Proposed to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
+    var a2=document.activeElement, typing=a2&&a2.classList&&a2.classList.contains('wcell');
+    if(!typing) $('wi-later').innerHTML='<table><thead><tr><th>4Q savings schedule (what the plan uses)</th><th class="r">From</th><th class="r">Saved a year</th></tr></thead><tbody>'+
+      WI.sched.map(function(r,k){return '<tr><td>Step '+(k+1)+'</td><td class="r">'+r[0]+'</td><td class="r"><input type="text" class="wcell" id="sch-'+k+'" data-l="'+k+'" value="'+$m(r[1])+'" aria-label="Savings from '+r[0]+'"></td></tr>'}).join('')+'</tbody></table>';
+    // overhead
+    var ohGain=Math.max(0,(M.overhead-WI.oh))*M.net_collections;
+    $('wi-oh-note').textContent='Overhead is '+pct(M.overhead)+' today. At '+pct(WI.oh)+' that is '+$m(ohGain)+' a year to the owner; each point lower is '+$m(0.01*M.net_collections)+'.';
+    // projection
+    var P={rates:M.rates, consult_date:M.consult_date, age:M.age, retire_age:WI.retire, start:M.start, current_savings:WI.cur,
+           spend:M.spend, schedule:wiSchedule(), income:WI.income, sale_net:WI.sale, horizon:M.horizon||90};
+    var r=fqModel(P), base=WK.base||{};
+    var lasts=r.fq_end>=-1000;
+    $('wi-results').innerHTML=
+      '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">'+(r.cur_runout?'Runs out in '+r.cur_runout:'Lasts to age '+(M.horizon||90))+'</span></div>'+
+      '<div class="tile good"><span class="k">With 4Q at retirement</span><span class="v">'+$m(r.fq_at)+'</span><span class="s">Retiring in '+r.retire+' at '+WI.retire+'</span></div>'+
+      '<div class="tile"><span class="k">Difference</span><span class="v">'+$m(r.fq_at-r.cur_at)+'</span><span class="s">vs the proposal: '+$m(r.fq_at-(base.fq_at||r.fq_at))+'</span></div>'+
+      '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(WI.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
+    $('w-proj-note').textContent='Current path at '+pct(0.085)+'; 4Q path at '+pct(0.09)+' ('+pct(0.085)+' in the first year). Spending today '+$m(M.spend)+' a year, grown at 3.2%.';
+    var yrs=[]; for(var y=r.y0;y<=Math.min(r.end,r.retire+3);y++) yrs.push(y);
+    $('w-proj').innerHTML='<table><thead><tr><th>Year</th><th class="r">Current: saved</th><th class="r">Current: portfolio</th><th class="r">4Q: saved</th><th class="r">4Q: portfolio</th></tr></thead><tbody>'+
+      yrs.map(function(y){return '<tr class="'+(y===r.retire?'ret':'')+'"><td>'+y+'</td><td class="r">'+$m(r.cur_dep[y]||0)+'</td><td class="r">'+$m(r.current[y])+'</td><td class="r">'+$m(r.fq_dep[y]||0)+'</td><td class="r">'+$m(r.fq[y])+'</td></tr>'}).join('')+'</tbody></table>';
+    WI.last=r;
+  }
+  document.addEventListener('input',function(e){
+    var t=e.target; if(!WI||!t) return;
+    if(t.id==='wi-retire'){ var v=n(t.value);
+      if(v){ WI.retire=Math.round(v);
+        // As in the lead advisor's worksheet, the sale grows each year to retirement
+        // (practice 3%, building 2%), so it moves with the retirement age
+        // unless a sale figure has been typed.
+        if(!WI.saleTyped && WK.model){ var M=WK.model, k=WI.retire-M.retire_age;
+          var pr=M.sale_practice||0, bu=M.sale_building||0, tot=(pr+bu)||0;
+          var RT=M.rates||{}, gp=1+(RT.practice_growth!=null?RT.practice_growth:0.03), gb=1+(RT.building_growth!=null?RT.building_growth:0.02);
+          var g=tot?(pr*Math.pow(gp,k)+bu*Math.pow(gb,k))/tot:Math.pow(gp,k);
+          WI.sale=M.sale_net*g; var se=$('wi-sale'); if(se) se.value=$m(WI.sale); } } }
+    else if(t.id==='wi-income'){ v=n(t.value); if(v!=null) WI.income=v; }
+    else if(t.id==='wi-sale'){ WI.saleTyped=true; v=n(t.value); if(v!=null) WI.sale=v; }
+    else if(t.id==='wi-cur'){ v=n(t.value); if(v!=null) WI.cur=v; }
+    else if(t.id==='wi-oh'){ v=n(t.value); if(v!=null){ if(v>1) v=v/100; WI.oh=v; } }
+    else if(t.dataset && t.dataset.l!=null){ v=n(t.value); WI.sched[+t.dataset.l][1]=v||0; }
+    else return;
+    wiRender();
+  });
+  document.addEventListener('click',function(e){
+    var t=e.target; if(!t) return;
+    if(t.id==='wi-reset'){ wiReset(); if(WI) WI.saleTyped=false; var a=document.activeElement; if(a&&a.blur) a.blur(); wiRender(); say('Back to the proposal.'); }
+    if(t.id==='wi-use' && WI && plan){
+      plan.decided=plan.decided||{};
+      plan.decided.retire_age=String(WI.retire); plan.decided.target_income=$m(WI.income);
+      plan.decided.sale_net=$m(WI.sale); plan.decided.current_savings=$m(WI.cur);
+      plan.decided.target_overhead=Math.round(WI.oh*100)+'%';
+      wiSchedule().forEach(function(r){ plan.decided['save_'+r[0]]=$m(r[1]); });
+      pending.figs=true;
+      write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'the what-if figures, now the plan');
+      renderPlan();
+    }
+  });
+
+  function renderQs(){
+    setTimeout(function(){ showEmail(false); },0);
+    var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
+    qs.forEach(function(q){ if(qd[q.id]) q.decision=qd[q.id]; if(qt[q.id]!=null) q.text=qt[q.id]; });
+    var send=qs.filter(function(q){return q.decision==='Send'}).length;
+    $('qcount').textContent=qs.length?(send+' of '+qs.length+' going in the email'):'';
+    if(!qs.length) return;
+    $('qs').innerHTML=qs.map(function(q){
+      var d=q.decision||'Send';
+      var b=function(name,cls){return '<button type="button" class="'+cls+'" data-id="'+esc(q.id)+'" data-d="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
+      return '<div class="q '+({'Send':'send','Answered':'answered','Strike':'strike'}[d]||'')+'"><div class="top"><span class="n">'+esc(q.n)+'</span>'+
+        (q.priority==='High'?'<span class="chip hi">Priority</span>':'')+
+        (d==='Check first'?'<span class="chip">Check first</span>':'')+
+        '<span class="seg">'+b('Send','send')+b('Answered','answered')+b('Strike','strike')+'</span></div>'+
+        '<textarea id="q-'+esc(q.id)+'" data-id="'+esc(q.id)+'" rows="3" aria-label="Question '+esc(q.n)+'">'+esc(q.text)+'</textarea>'+
+        '<textarea class="qans" data-qa="'+esc(q.id)+'" rows="2" placeholder="The client\'s answer, when it comes back" aria-label="Answer to question '+esc(q.n)+'">'+esc(((plan&&plan.qanswers)||{})[q.id]||'')+'</textarea>'+
+        '<div class="why">Why: '+esc(q.why)+' <span>· '+esc(q.source)+'</span></div></div>';
+    }).join('');
+    $('qs').querySelectorAll('textarea').forEach(function(el){
+      el.addEventListener('input',function(){
+        var q=qs.find(function(x){return x.id===el.dataset.id}); q.text=el.value;
+        plan.qtext=plan.qtext||{}; plan.qtext[q.id]=q.text; pending.qt=true;
+        debounce('qt',function(){ write('plan/figures',{qtext:plan.qtext},function(){pending.qt=false;},'Question '+q.n+' reworded'); });
+      });
+    });
+  }
+
+  document.addEventListener('input',function(e){
+    var el=e.target; if(!el||!el.dataset||!el.dataset.key||!plan) return;
+    el.classList.toggle('set',!!el.value.trim());
+    plan.decided=plan.decided||{}; plan.decided[el.dataset.key]=el.value.trim(); pending.figs=true;
+    debounce('figs',function(){ write('plan/figures',{decided:plan.decided},function(){pending.figs=false;}); });
+  });
+  // ---- recommendations ----------------------------------------------
+  function m0(v){ return (v==null||v==='')?'':$m(v); }
+  function renderRecs(){
+    if(!plan||!plan.recommendations) return;
+    var st=plan.recs||{}, cu=plan.recs_custom||[];
+    var rows=plan.recommendations.map(function(r){ return {r:r, k:r.key, custom:false}; })
+      .concat(cu.map(function(c,i){ return {r:c, k:'custom_'+i, custom:true}; }));
+    var on=0;
+    $('recs').innerHTML=rows.map(function(x){
+      var r=x.r, s=st[x.k]||{}, inv=r.invested||[];
+      var isOn=('on' in s)?s.on:(x.custom||r.suggested); if(isOn) on++;
+      var v=function(f,def){ return esc(s[f]!=null?s[f]:def); };
+      var lab=x.custom?'<input type="text" class="rl" data-rk="'+x.k+'" data-f="label" value="'+v('label',r.label||'')+'" placeholder="Your recommendation" aria-label="Recommendation">':
+        '<b>'+esc(s.label||r.label)+'</b>'+(r.basis?'<div class="basis">'+esc(r.basis)+'</div>':'')+'';
+      // Buttons, not a dropdown: in the Claude app's viewer a dropdown's
+      // choice never reached the page (found 29 Oct).
+      var cur=String(s.year||r.year||1);
+      var ysel=[['1','Year 1'],['2','Year 2'],['3','Year 3'],['later','Later']].map(function(o){
+        return '<button type="button" class="ybtn" data-ry="'+x.k+'" data-v="'+o[0]+'" aria-pressed="'+(cur===o[0])+'">'+o[1]+'</button>'; }).join('');
+      var note='<input type="text" class="rnote" data-rk="'+x.k+'" data-f="note" value="'+v('note','')+'" placeholder="Note (why, when, conditions)" aria-label="Note">';
+      return '<tr class="'+(isOn?'':'off')+'"><td><input type="checkbox" data-rk="'+x.k+'" data-f="on" '+(isOn?'checked':'')+' aria-label="Include"></td>'+
+        '<td>'+lab+'<div class="rmeta">Starts in '+ysel+note+'</div></td>'+
+        '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="gain" value="'+v('gain',m0(r.gain))+'" placeholder="amount" aria-label="A year"></td>'+
+        '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="inv1" value="'+v('inv1',m0(inv[0]))+'" placeholder="0" aria-label="Year 1"></td>'+
+        '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="inv2" value="'+v('inv2',m0(inv[1]))+'" placeholder="0" aria-label="Year 2"></td></tr>';
+    }).join('');
+    $('reccount').textContent=on+' of '+rows.length+' in the plan';
+  }
+  function recSave(){ pending.rec=true; debounce('rec',function(){ write('plan/figures',{recs:plan.recs, recs_custom:plan.recs_custom||[]},function(){pending.rec=false;},'recommendations'); }); }
+  document.addEventListener('change',function(e){
+    var el=e.target; if(!el||!el.dataset||!el.dataset.rk||el.type!=='checkbox'||!plan) return;
+    plan.recs=plan.recs||{}; plan.recs[el.dataset.rk]=Object.assign({},plan.recs[el.dataset.rk]||{},{on:el.checked});
+    recSave(); renderRecs();
+  });
+  document.addEventListener('click',function(e){
+    var el=e.target && e.target.closest && e.target.closest('button[data-ry]'); if(!el||!plan) return;
+    plan.recs=plan.recs||{}; var o=Object.assign({},plan.recs[el.dataset.ry]||{}); o.year=el.dataset.v; plan.recs[el.dataset.ry]=o;
+    recSave(); renderRecs();
+  });
+  document.addEventListener('input',function(e){
+    var el=e.target; if(!el||!el.dataset||!el.dataset.rk||el.type==='checkbox'||el.tagName==='SELECT'||!plan) return;
+    plan.recs=plan.recs||{}; var o=Object.assign({},plan.recs[el.dataset.rk]||{}); o[el.dataset.f]=el.value; plan.recs[el.dataset.rk]=o;
+    recSave();
+  });
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='recadd'||!plan) return;
+    plan.recs_custom=(plan.recs_custom||[]).concat([{label:'',year:2}]); recSave(); renderRecs();
+  });
+  document.addEventListener('input',function(e){
+    if(!e.target||e.target.id!=='gnote'||!plan) return;
+    plan.notes=e.target.value; pending.note=true;
+    debounce('note',function(){ write('plan/figures',{notes:plan.notes},function(){pending.note=false;},'notes'); });
+  });
+  var SL=[];
+  function figRow(f){
+    var mine=(plan.decided||{})[f.key];
+    return '<tr><td><b>'+esc(f.label)+'</b><div class="basis">'+esc(f.basis||'')+'</div></td>'+
+      '<td class="num">'+esc(f.proposed)+'</td>'+
+      '<td class="yours"><input type="text" id="fig-'+esc(f.key)+'" data-key="'+esc(f.key)+'" class="'+(mine?'set':'')+'" value="'+esc(mine||'')+'" placeholder="accept" aria-label="Your figure for '+esc(f.label)+'"></td></tr>';
+  }
+  function renderSlides(){
+    if(!plan) return;
+    var sd=plan.sdecisions||{}, st=plan.stext||{};
+    var figs=(plan.figures||[]).filter(function(f){return f.slide});
+    var nums={}; SL.forEach(function(x){nums[x.slide]=1}); figs.forEach(function(f){nums[f.slide]=1});
+    var order=Object.keys(nums).map(Number).sort(function(a,b){return a-b});
+    if(!order.length) return;
+    var use=SL.filter(function(x){return (sd[x.id]||'Use')==='Use'}).length;
+    $('scount').textContent=SL.length?(use+' of '+SL.length+' drafted boxes going on the slides'):'';
+    $('slides').innerHTML=order.map(function(n){
+      var its=SL.filter(function(x){return x.slide===n}), fs=figs.filter(function(f){return f.slide===n});
+      var any=its[0]||{}, pic=any.pic||(plan.pics||{})[n], head=any.heading||(plan.slide_titles||{})[n]||('Slide '+n);
+      var right='';
+      if(fs.length) right+='<div class="ledger"><table><thead><tr><th>Figure</th><th style="text-align:right">Proposed</th><th>Your figure</th></tr></thead><tbody>'+fs.map(figRow).join('')+'</tbody></table></div>';
+      right+=its.map(function(x){
+        var d=sd[x.id]||'Use', t=(st[x.id]!=null&&st[x.id]!=='')?st[x.id]:x.text;
+        var b=function(name,cls){return '<button type="button" class="'+cls+'" data-sid="'+esc(x.id)+'" data-s="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
+        return '<div class="q '+(d==='Drop'?'strike':'send')+'"><div class="top"><span class="n">'+esc(x.n||'')+'</span><span class="seg">'+b('Use','send')+b('Drop','strike')+'</span></div>'+
+          '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea>'+
+          '<div class="why">What goes here: '+esc(x.hint||'')+'</div></div>';
+      }).join('');
+      return '<div class="slidegroup"><div class="slidepicwrap"><h3 class="slidehead">'+esc(head)+'</h3>'+
+        (pic?'<img class="slidepic" src="'+esc(pic)+'" alt="The slide, with each box to check outlined and numbered">':'<div class="empty">Picture appears after the deck is built.</div>')+
+        '</div><div class="slideitems">'+right+'</div></div>';
+    }).join('');
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target && e.target.closest && e.target.closest('button[data-s]');
+    if(!el||!plan) return;
+    plan.sdecisions=plan.sdecisions||{}; plan.sdecisions[el.dataset.sid]=el.dataset.s; pending.sd=true;
+    write('plan/figures',{sdecisions:plan.sdecisions},function(){pending.sd=false;},'Slide box set to '+el.dataset.s);
+    renderSlides();
+  });
+  document.addEventListener('input',function(e){
+    var el=e.target; if(!el||el.tagName!=='TEXTAREA'||!el.dataset||!el.dataset.sid||!plan) return;
+    plan.stext=plan.stext||{}; plan.stext[el.dataset.sid]=el.value; pending.st=true;
+    debounce('st',function(){ write('plan/figures',{stext:plan.stext},function(){pending.st=false;},'slide wording edited'); });
+  });
+
+  document.addEventListener('input',function(e){
+    var el=e.target; if(!el||!el.dataset||!el.dataset.qa||!plan) return;
+    plan.qanswers=plan.qanswers||{}; plan.qanswers[el.dataset.qa]=el.value; pending.qa=true;
+    debounce('qa',function(){ write('plan/figures',{qanswers:plan.qanswers},function(){pending.qa=false;},'answer saved'); });
+  });
+  function debounce(k,fn){ clearTimeout(timers[k]); timers[k]=setTimeout(fn,700); }
+  function write(path,patch,done,what){
+    if(!db){ say('<span class="bad">Not saved: this view has no connection to the saved data.</span>'); return; }
+    say('Saving\u2026');
+    var t=setTimeout(function(){ say('<span class="bad">Still saving after 10 seconds ('+esc(what||'change')+'). The app may be waiting for permission to save; look for a prompt.</span>'); },10000);
+    try{
+      db.doc(path).update(patch).then(function(){ clearTimeout(t); if(done) done();
+        say('<b>Saved</b>: '+esc(what||'your change')+'.'); })
+      .catch(function(e){ clearTimeout(t);
+        say('<span class="bad">Not saved ('+esc(what||'change')+'): '+esc((e&&(e.code||e.name))||'')+' '+esc(e&&e.message||e)+'</span>'); });
+    }catch(e){ clearTimeout(t); say('<span class="bad">Not saved: '+esc(e&&e.message||e)+'</span>'); }
+  }
+
+  // ---- what we found (analysis review) ----------------------------------
+  function renderFound(){
+    if(!plan||!plan.findings) return; var F=plan.findings;
+    var tbl=function(title,head,rows){ return '<div class="card ledger" style="margin-bottom:14px"><h3 style="margin:10px 12px">'+title+'</h3><table><thead><tr>'+head.map(function(h,i){return '<th'+(i&&/\$|Balance|Value|Payment|Surplus/.test(h)?' class="r"':'')+'>'+h+'</th>'}).join('')+'</tr></thead><tbody>'+(rows.join('')||'<tr><td colspan="'+head.length+'" class="empty">None found</td></tr>')+'</tbody></table></div>'; };
+    var h='';
+    h+=tbl('Investment accounts',['Account','Value','From'],(F.accounts||[]).map(function(a){return '<tr class="'+(a.counted?'':'off')+'"><td><b>'+esc(a.label)+'</b>'+(a.counted?'':' <span class="basis">(not counted toward retirement)</span>')+'</td><td class="r">'+$m(a.value)+'</td><td class="basis">'+esc(a.basis)+'</td></tr>'}));
+    h+=tbl('Debts',['Loan','Balance','Payment','From'],(F.debts||[]).map(function(d){return '<tr><td><b>'+esc(d.side)+': '+esc(d.label)+'</b><div class="basis">'+esc(d.what||'')+(d.rate?' · '+(d.rate*100).toFixed(2)+'%':'')+'</div></td><td class="r">'+$m(d.balance)+'</td><td class="r">'+$m(d.payment)+'</td><td class="basis">'+esc(d.basis)+'</td></tr>'}));
+    if((F.cards||[]).length) h+=tbl('Credit cards with a balance (listed, not counted as debt)',['Card','Balance','Limit'],F.cards.map(function(c){return '<tr><td>'+esc(c.label)+'</td><td class="r">'+$m(c.balance)+'</td><td class="r">'+$m(c.limit)+'</td></tr>'}));
+    h+=tbl('Pay, from the returns',['Figure','Value','From'],(F.pay||[]).map(function(x){return '<tr><td><b>'+esc(x.label)+'</b></td><td class="r">'+(x.value==null?'<span class="needs">not found</span>':$m(x.value))+'</td><td class="basis">'+esc(x.basis)+'</td></tr>'}));
+    h+=tbl('Bank accounts (cash flow)',['Account','Balance','Surplus a month'],(F.cash||[]).map(function(c){return '<tr><td>'+esc(c.label)+'</td><td class="r">'+$m(c.balance)+'</td><td class="r">'+$m(c.surplus)+'</td></tr>'}));
+    if(F.spend) h+='<p class="note">Household spending, a year: <b>'+$m(F.spend)+'</b></p>';
+    $('found').innerHTML=h;
+  }
+  document.addEventListener('input',function(e){
+    if(!e.target||e.target.id!=='gnote2'||!plan) return;
+    plan.notes=e.target.value; pending.note=true;
+    debounce('note',function(){ write('plan/figures',{notes:plan.notes},function(){pending.note=false;},'notes'); });
+  });
+  // The firm's follow-up email, from the questions marked Send.
+  function buildEmail(){
+    var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
+    var send=qs.filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'; });
+    var first=((plan&&plan.client)||'').replace(/^Dr\.?\s+/,'').split(/\s|&/)[0]||'there';
+    var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var now=new Date(), due=new Date(now.getTime()+7*864e5);
+    var hi=[]; send.forEach(function(q,i){ if(q.priority==='High') hi.push(i+1); });
+    var lines=['Hi '+first+',','',
+      'Happy '+days[now.getDay()]+'; our team has been going through all of the information that you have provided for the consultation with a fine toothed comb over the past weeks/days.  In doing so, they have developed some questions/items that they wanted to have me follow up on.  I\u2019ve cut/paste their questions below:',''];
+    send.forEach(function(q,i){ lines.push((i+1)+'. '+(qt[q.id]!=null?qt[q.id]:q.text)); lines.push(''); });
+    lines.push('I think this is all the clarity we have on my end for now; as you can see, we\u2019ve gone over everything pretty detailed so far, but still may have a few minor clarifications in the near future depending on the answers. Please feel free to piecemeal the information as you get it instead of waiting and sending all at once (you can either use the portal or just email them to me directly, whatever is easiest/quickest).  From a priority standpoint, we\u2019re most concerned about #'+(hi.length?hi.join(', '):'1')+' first and foremost.  Lastly, please email this information by '+days[due.getDay()]+', '+(due.getMonth()+1)+'/'+due.getDate()+', at 5:00pm EST if not sooner so my team can continue their research and stay on schedule for the '+(((plan&&plan.decided)||{}).consult_date||'[CONSULT DATE]')+' consultation.  Additionally, if you think there will be a problem with getting this back to us by then, please let me know ASAP.  Thanks in advance and don\u2019t hesitate to reach out if you have further clarifications.');
+    return lines.join('\n');
+  }
+  function showEmail(force){
+    var et=$('emailtext'); if(!et||!plan) return;
+    if(document.activeElement===et && !force) return;
+    if(force||!plan.email_edited){ et.value=buildEmail(); }
+    else { et.value=plan.email||''; }
+  }
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='emailredo'||!plan) return;
+    plan.email_edited=false; plan.email=''; showEmail(true);
+    write('plan/figures',{email:'',email_edited:false},null,'email rewritten from the questions');
+  });
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='emailcopy') return;
+    var t=$('emailtext'); t.select();
+    try{ navigator.clipboard.writeText(t.value).then(function(){ say('<b>Copied</b>: paste it into a new email.'); },function(){ document.execCommand('copy'); say('<b>Copied</b>.'); }); }
+    catch(err){ try{ document.execCommand('copy'); say('<b>Copied</b>.'); }catch(e2){ say('Select the text and copy it.'); } }
+  });
+  document.addEventListener('input',function(e){
+    if(!e.target||e.target.id!=='emailtext'||!plan) return;
+    plan.email=e.target.value; plan.email_edited=true; pending.email=true;
+    debounce('email',function(){ write('plan/figures',{email:plan.email,email_edited:true},function(){pending.email=false;},'email edited'); });
+  });
+  function applyMode(){
+    var mode=(plan&&plan.mode)||'consult';
+    document.body.classList.toggle('mode-analysis',mode==='analysis');
+    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0; });
+    var cur=document.querySelector('[data-tabgo][aria-selected=true]');
+    if(!cur||cur.hidden){ var first=document.querySelector('[data-tabgo]:not([hidden])'); if(first) showTab(first.dataset.tabgo); }
+    var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+' · Four Quadrants';
+  }
+  // ---- tabs ------------------------------------------------------------
+  function showTab(t){
+    document.querySelectorAll('section[data-tab]').forEach(function(sec){ sec.classList.toggle('tab-off', sec.dataset.tab!==t); });
+    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.setAttribute('aria-selected', String(b.dataset.tabgo===t)); });
+    try{ localStorage.setItem('review-tab', t); }catch(e){}
+    window.scrollTo(0,0);
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('[data-tabgo]'); if(b) showTab(b.dataset.tabgo);
+  });
+  (function(){ var t='found'; try{ t=localStorage.getItem('review-tab')||'found'; }catch(e){} showTab(t); })();
+  function tabCounts(){
+    var set=function(id,txt){ var el=$(id); if(el) el.textContent=txt; };
+    set('tc-recs', ($('reccount')||{}).textContent ? '· '+$('reccount').textContent.split(' in ')[0] : '');
+    set('tc-slides', SL.length? '· '+SL.length : '');
+    set('tc-qs', qs.length? '· '+qs.length : '');
+  }
+  setInterval(tabCounts, 1500);
+  var BUILD='v25';
+  // One click handler for every decision button, on the document, so a
+  // button rebuilt while a question loads still works when clicked.
+  document.addEventListener('click',function(e){
+    var el=e.target && e.target.closest && e.target.closest('button[data-d]');
+    if(!el) return;
+    try{
+      var q=qs.find(function(x){return x.id===el.dataset.id});
+      if(!q){ say('<span class="bad">Not saved: question '+esc(el.dataset.id)+' not found on the page.</span>'); return; }
+      q.decision=el.dataset.d;
+      plan.qdecisions=plan.qdecisions||{}; plan.qdecisions[q.id]=q.decision;
+      pending.qd=true;
+      write('plan/figures',{qdecisions:plan.qdecisions},function(){pending.qd=false;},
+            'Question '+q.n+' set to '+q.decision);
+      renderQs();
+    }catch(err){ say('<span class="bad">Not saved: '+esc(err&&err.message||err)+'</span>'); }
+  });
+  ['click','change','input'].forEach(function(type){
+    document.addEventListener(type,function(e){
+      var t=e.target||{}; var id=t.id||t.dataset&&t.dataset.id||t.tagName;
+      $('heard').textContent='Page heard: '+type+' on '+id+' \u00b7 '+BUILD;
+    },true);
+  });
+  claude.use('db').then(function(d){
+    db=d;
+    if(db){ try{ db.doc('diag/'+BUILD+'-'+Date.now()).set({build:BUILD,ua:navigator.userAgent,at:new Date().toISOString()})
+      .then(function(){ $('heard').textContent='Connected and able to save \u00b7 '+BUILD; })
+      .catch(function(e){ $('heard').textContent='Connected but saving is refused: '+((e&&(e.code||e.message))||e)+' \u00b7 '+BUILD; }); }catch(e){} }
+    if(!db){ say('Read-only view: sign in to claude.ai with edit access to make decisions.'); return; }
+    db.doc('plan/figures').onSnapshot(function(snap){
+      if(!exists(snap)){ say('Waiting for the analyst to load this client.'); return; }
+      var incoming=data(snap);
+      // Keep what this viewer has typed but not yet saved, and never redraw
+      // the box someone is typing in.
+      if(plan && pending.figs) incoming.decided=plan.decided;
+      if(plan && pending.con) incoming.concerns=plan.concerns;
+      if(plan && pending.qd) incoming.qdecisions=plan.qdecisions;
+      if(plan && pending.qt) incoming.qtext=plan.qtext;
+      if(plan && pending.sd) incoming.sdecisions=plan.sdecisions;
+      if(plan && pending.st) incoming.stext=plan.stext;
+      if(plan && pending.rec){ incoming.recs=plan.recs; incoming.recs_custom=plan.recs_custom; }
+      if(plan && pending.note) incoming.notes=plan.notes;
+      if(plan && pending.qa) incoming.qanswers=plan.qanswers;
+      if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; }
+      var a=document.activeElement;
+      if(plan && a && a.closest && (a.closest('#figs')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
+      plan=incoming; applyMode(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
+      showEmail(false);
+      ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=plan.notes||''; });
+      var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();
+      if(!/Saved|Not saved|Still saving/.test($('status').textContent)) say('<b>Up to date</b> · decisions save as you go.');
+    });
+    db.doc('plan/slides').onSnapshot(function(snap){ if(!exists(snap)) return;
+      SL=((data(snap)||{}).items)||[]; var a=document.activeElement;
+      if(!(a&&a.dataset&&a.dataset.sid)) renderSlides(); });
+    db.doc('plan/workings').onSnapshot(function(snap){ if(exists(snap)) renderWorkings(data(snap)); });
+    // Each question is listened to as its own document, by the ids the plan
+    // lists. The collection listener never delivered in the Claude app, so
+    // the list stayed empty and there was nothing to click.
+    var subscribed={}, byId={};
+    function watchQuestions(ids){
+      (ids||[]).forEach(function(id){
+        if(subscribed[id]) return; subscribed[id]=true;
+        db.doc('questions/'+id).onSnapshot(function(s){
+          if(!exists(s)) return;
+          var v=data(s)||{}; v.id=id; byId[id]=v;
+          var a=document.activeElement;
+          if(a && a.tagName==='TEXTAREA' && (a.dataset.id||a.dataset.qa)) return;
+          qs=Object.keys(byId).map(function(k){return byId[k]}).sort(function(x,y){return (x.n||0)-(y.n||0)});
+          renderQs();
+        });
+      });
+    }
+    db.doc('plan/figures').onSnapshot(function(s){ if(exists(s)) watchQuestions((data(s)||{}).question_ids); });
+  });
+})();
+</script>

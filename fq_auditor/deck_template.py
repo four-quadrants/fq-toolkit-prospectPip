@@ -228,6 +228,16 @@ def _series_inputs(bundle, folder):
     pp2 = last_two('net production / patient')
     if pp2:
         out['net_per_patient_prior'], out['net_per_patient'] = pp2
+    else:
+        # From the practice's own production export, over the patients seen
+        try:
+            pi = _deck.annual_pi(folder)
+            ys = [y for y in sorted(pi) if not pi[y]['partial'] and pats.get(y)]
+            if len(ys) >= 2:
+                out['net_per_patient_prior'] = pi[ys[-2]]['net'] / pats[ys[-2]]
+                out['net_per_patient'] = pi[ys[-1]]['net'] / pats[ys[-1]]
+        except Exception:                                    # noqa: BLE001
+            pass
     hyg = last_two('hygiene % of production')
     if hyg:
         out['hygiene_share'] = hyg[-1]
@@ -286,7 +296,21 @@ def apply_assumptions(adv):
         setattr(mod, const, v if v is not None else _ASSUMPTION_DEFAULTS[key])
 
 
+_FIGURES = {}
+
+
 def figures(folder, client):
+    """Once per run: the review page asks for the same figures four times
+    (the plan, the wording, the pictures, the workings), at 40 seconds each."""
+    key = (os.path.abspath(folder), client)
+    if key not in _FIGURES:
+        _FIGURES[key] = _figures(folder, client)
+    D = _FIGURES[key]
+    apply_assumptions(D['adv'])
+    return copy.deepcopy(D)
+
+
+def _figures(folder, client):
     """Everything the slides print, from the documents, the models and the
     advisor's entry. Missing values are None and the slide says so."""
     b = _facts.gather(folder, client)
@@ -331,8 +355,13 @@ def figures(folder, client):
     start, parts = _deck._start_portfolio(folder)
     D['start'] = N(adv.get('start_portfolio')) or start
     D['start_parts'] = parts
+    # The account table on the investments slide has three rows: the three
+    # largest accounts, in the order the plan lists them (Rebol has six, and
+    # his two Schwab IRAs hold most of the money).
+    top = sorted(range(len(parts)), key=lambda i: -parts[i][1])[:3]
+    D['slide_parts'] = [parts[i] for i in sorted(top)]
     D['age'] = N(f.get('Age')) or N(adv.get('age'))
-    D['retire_age'] = N(adv.get('retire_age')) or N(f.get('Retirement age goal'))
+    D['retire_age'] = N(adv.get('retire_age')) or _deck.retire_age_of(f.get('Retirement age goal'))
     D['current_savings'] = N(adv.get('current_savings'))
     D['income'] = N(adv.get('target_income'))
     D['schedule'] = [tuple(x) for x in (adv.get('savings_schedule') or [])]
@@ -413,6 +442,7 @@ def figures(folder, client):
     # outright: rows they deleted stay deleted.
     if adv.get('gains_table'):
         D['gains'] = [dict(g, gain=N(g.get('gain')) or 0,
+                           key=g.get('key') or g.get('label'),
                            kind=g.get('kind') or 'cash',
                            invested=[N(x) or 0 for x in
                                      (g.get('invested') or [0, 0, 0])])
@@ -985,8 +1015,8 @@ def slide_fills(D):
         inside = [('Text 29', 'Text 31'), ('Text 43', 'Text 45'),
                   ('Text 54', 'Text 55')]
         for i, (lab, val) in enumerate(acct_rows):
-            if i < len(D['start_parts']):
-                l, a = D['start_parts'][i]
+            if i < len(D['slide_parts']):
+                l, a = D['slide_parts'][i]
                 short = re.sub(r'\s*\[.*?\]', '', l).split(',')[0]
                 out[15][lab] = short.upper()[:24]
                 out[15][val] = _k(a)
@@ -1010,9 +1040,9 @@ def slide_fills(D):
                     (None, 'Text 57')]
         lost, any_gap = 0.0, False
         for i, (cell, sub) in enumerate(vs_cells):
-            if i >= len(D['start_parts']):
+            if i >= len(D['slide_parts']):
                 break
-            l, a = D['start_parts'][i]
+            l, a = D['slide_parts'][i]
             r = rets.get(l) or {}
             if r.get('measured_with'):
                 r = dict(rets.get(r['measured_with']) or {}, **{
@@ -1049,7 +1079,8 @@ def slide_fills(D):
     sch = sorted(D['schedule'])
     # Only when the schedule came from these gains: beside an advisor's own
     # schedule they would describe a plan nobody chose.
-    gl = _slide16_rows(D['gains'])
+    later = [g for g in D['gains'] if g.get('year') == 2]
+    gl = _slide16_rows([g for g in D['gains'] if g.get('year') != 2])
     if gl:
         y1 = [('Text 10', 'Text 12', 'Text 14'), ('Text 16', 'Text 18', 'Text 20'),
               ('Text 22', 'Text 24', 'Text 26'), ('Text 28', 'Text 30', 'Text 32'),
@@ -1073,13 +1104,21 @@ def slide_fills(D):
         same = sum(_plan.invested(g, 0) for g in rec)
         step = sum(_plan.invested(g, 1) - _plan.invested(g, 0) for g in rec)
         rows2 = [('Same as year 1 (minus one-timers **)',
-                  M(sum(g['gain'] for g in rec)), M(same)),
-                 ('Practice improvements, second year', '\u2013', M(step))]
+                  M(sum(g['gain'] for g in rec)), M(same))]
+        if later:
+            # The lead advisor's year-two recommendations, as he chose them
+            for g in later[:3]:
+                rows2.append((g['label'], M(g['gain']) if g['gain'] else '\u2013',
+                              M(_plan.invested(g, 1))))
+            step = sum(_plan.invested(g, 1) for g in later) + step
+        else:
+            rows2.append(('Practice improvements, second year', '\u2013', M(step)))
         for i, cells in enumerate(y2):
             vals = rows2[i] if i < len(rows2) else ('', '', '')
             for n, v in zip(cells, vals):
                 out[16][n] = v
-        out[16]['Text 89'] = M(sum(g['gain'] for g in rec)) if full else '[TBD]'
+        out[16]['Text 89'] = M(sum(g['gain'] for g in rec) +
+                               sum(g['gain'] or 0 for g in later)) if full else '[TBD]'
         out[16]['Text 91'] = M(same + step) if full else '[TBD]'
 
     # 17 and 18 the Four Quadrants future
@@ -1239,7 +1278,7 @@ def _drop(prs, index):
 
 
 # The fee slide is set by the lead advisor for each client: left as TBD.
-NOT_DRAFTED = {7, 19}   # 7: accounting writes the tax red flags
+NOT_DRAFTED = {7, 9, 19}   # 7: accounting writes the tax red flags; 9: levers are figures, never drafted
 
 
 # 401(k) employee limits (2026): base, catch-up at 50, the larger catch-up

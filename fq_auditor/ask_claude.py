@@ -56,6 +56,9 @@ def check():
     key = os.environ.get('ANTHROPIC_API_KEY')
     out = {'binary': path, 'api_key_present': bool(key), 'version': None,
            'ok': False, 'reason': None}
+    if os.environ.get('FQ_NO_CLAUDE'):
+        out['reason'] = 'FQ_NO_CLAUDE is set: answers come from what was saved.'
+        return out
     if key:
         out['reason'] = ('ANTHROPIC_API_KEY is set, which would bill this per '
                          'call instead of using the seat. Unset it and retry.')

@@ -27,6 +27,13 @@ import sys
 import time
 import argparse
 import traceback
+import warnings
+
+# Files left for Python to close and the PDF library's renaming notice:
+# harmless, and they filled the build log ("enable tracemalloc to get the
+# object allocation traceback").
+warnings.simplefilter('ignore', ResourceWarning)
+warnings.simplefilter('ignore', DeprecationWarning)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -134,6 +141,21 @@ def step_assumptions(folder, client, outdir):
     _pdf.render(sections, bundle.client or client or 'Client', out)
     done = sum(1 for s in sections if s.complete)
     print('   %d of %d sections written from documents' % (done, len(sections)))
+    # What the lead advisor's review page needs from the documents, read now
+    # so the review can come before any deck: the pay figures from the
+    # returns, each account's return, and wording for boxes the numbers
+    # cannot fill. Claude reads them once; later steps reuse what it read.
+    try:
+        import deck_template as _dt
+        print('   reading the returns and statements for the review page\u2026')
+        D = _dt.figures(folder, client)
+        words = _dt.proposed_wording(folder, D)
+        print('   ready for review: pay structure %s, %d account returns, %d drafted boxes'
+              % ('read' if D.get('income_facts', {}).get('total_tax') else 'incomplete',
+                 sum(1 for v in (D.get('returns') or {}).values()
+                     if v.get('return_pct') is not None), len(words)))
+    except Exception as exc:                                 # noqa: BLE001
+        print('   review readings skipped: %s' % exc)
     return out
 
 
@@ -154,9 +176,8 @@ def step_deck(folder, client, outdir):
 
 def step_duediligence(folder, client, outdir):
     import duediligence as _dd
-    path, email = _dd.write(folder, outdir)
-    print('OUTPUT\t%s' % email)
-    return path
+    _path, email = _dd.write(folder, outdir)
+    return email
 
 
 RUNNERS = {
@@ -191,6 +212,16 @@ def main():
           % (len(want), '' if len(want) == 1 else 's',
              a.client or os.path.basename(a.folder.rstrip('/'))))
     print('')
+
+    # Every bank statement is read by Claude first, once, and used only
+    # where its reading ties out (bank_claude). Everything below reads the
+    # statements through statements.gather, which prefers those readings.
+    if set(want) & {'workbook', 'cashflow', 'assumptions', 'deck'}:
+        try:
+            import bank_claude as _bc
+            _bc.ensure(a.folder)
+        except Exception as exc:                             # noqa: BLE001
+            print('  bank statements: Claude reading skipped (%s)' % exc)
 
     made, failed = [], []
     for n, name in enumerate(want, 1):

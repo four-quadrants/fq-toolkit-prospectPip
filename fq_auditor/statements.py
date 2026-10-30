@@ -77,6 +77,10 @@ ADD_PATTERNS = (
     re.compile(r'\d+\s+credit\(?s\)?\s+this\s+period', re.I),
     # "1 Deposits/Credits   3,000.00" -- a count, the label, then the
     # figure on the same line.
+    # Huntington's summary: "Credits (+) 15,447.95". Its transaction block
+    # is headed "Deposit / Credit Activity (+)", which the looser patterns
+    # below would take, reading the first deposit as the month's total.
+    re.compile(r'^(?:.*\s)?credits?\s*\(\+\)\s*\$?[\d,]+\.\d{2}', re.I),
     re.compile(r'\d+\s+deposits?\s*/\s*credits?', re.I),
     re.compile(r'\d+\s+credits?\s*/\s*deposits?', re.I),
     # BancFirst: "Deposits / Misc Credits   3   1,195.12". The count comes
@@ -538,6 +542,40 @@ def _complete(got):
 
 
 def gather(folder):
+    """Every bank statement, grouped by account: Claude's reading where it
+    ties out (bank_claude), the toolkit's own reading for the rest."""
+    code = _gather_code(folder)
+    try:
+        import bank_claude as _bc
+        claude, used = _bc.as_statements(folder)
+    except Exception:                                        # noqa: BLE001
+        return code
+    if not claude:
+        return code
+    out = {}
+    for key, rows in code.items():
+        keep = []
+        for r in rows:
+            src = r.get('source')
+            try:
+                sha = _bc._sha(src) if src and os.path.isfile(src) else None
+            except OSError:
+                sha = None
+            if sha not in used:
+                keep.append(r)
+        if keep:
+            out[key] = keep
+    for key, rows in claude.items():
+        have = out.setdefault(key, [])
+        for r in rows:
+            if not any((r['ends'], r['ending']) == (o.get('ends'), o.get('ending'))
+                       for o in have):
+                have.append(r)
+        have.sort(key=lambda r: (r['ends'] or r['begins'] or datetime.date(1900, 1, 1)))
+    return out
+
+
+def _gather_code(folder):
     """Every bank statement in a client's cache, grouped by account.
 
     Statements are ordered by the date printed inside them, never by file
@@ -622,6 +660,28 @@ def gather(folder):
         if source and os.sep + 'Original_sourcedocs' + os.sep in source:
             got['notes'].append('Not filed yet, so personal or business was '
                                 'guessed from the file name. Check the side.')
+        # What is printed on the statement beats where it was filed when the
+        # two disagree. Spaulding's Huntington statements were filed under
+        # Business, in folders named for the wrong accounts (x3905 holding
+        # x5130's statement), with Jonathan Spaulding as the holder: personal
+        # accounts, which left the household with no bank accounts at all.
+        printed = got.get('account')
+        if printed and folder_key != 'x' + printed and (
+                not re.match(r'x?\d{4}$', folder_key or '') or
+                (folder_key or '')[-4:] != printed):
+            got['notes'].append('Filed under %s; the statement itself is account '
+                                'x%s.' % (folder_key, printed))
+            folder_key = 'x' + printed
+        holder = (got.get('holder') or '').strip()
+        if got['side'] == 'Business' and holder and not BUSINESSY.search(holder) \
+                and not re.search(r'dental|dentistry|orthodont|oral|surgery|'
+                                  r'associates|group|corp|company|\bco\b|ltd',
+                                  holder, re.I) \
+                and re.search(r'^[A-Za-z]+\.?( [A-Za-z]\.?)?( [A-Za-z\-\']+)+$|custodian',
+                              holder, re.I):
+            got['notes'].append('Filed as business, but the statement is in the '
+                                'name of %s: counted as personal.' % holder)
+            got['side'] = 'Personal'
         key = (got['side'], folder_key)
         out.setdefault(key, []).append(got)
 

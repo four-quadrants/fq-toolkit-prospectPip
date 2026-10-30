@@ -19,6 +19,7 @@ THE RULES THE DRAFTS ARE HELD TO
     The presenter notes on each slide say which boxes were drafted, so the
     advisor knows what to read before the meeting.
 """
+import glob
 import json
 import os
 import re
@@ -213,7 +214,20 @@ def documents(folder, first=''):
         if not os.path.exists(txt):
             continue
         low = name.lower()
-        if 'taxes' in low or re.search(r'\b(1040|1120)', low):
+        if re.search(r'instructions|payments due|voucher|e-?file|signature|'
+                     r'filing instructions|\.zip$', low):
+            continue
+        # What the document is, from its text first: a file called "DDS
+        # Taxes Acct Statement" is a bank statement, and one called
+        # "..._1040_Tax Returns.pdf" is a return whatever its name says.
+        try:
+            import classify as _cl
+            kind = (_cl.classify(m.get('text') or '') or {}).get('doc_type') or ''
+        except Exception:  # noqa: BLE001
+            kind = ''
+        is_return = kind.endswith('tax_return') or (
+            not kind and re.search(r'tax returns?|(?<![a-z])(1040|1120s?|1065)(?![0-9])', low))
+        if is_return:
             # Children's returns are not the client's tax story.
             if 'personal returns' in low and first and \
                     first.lower() not in low.split('personal returns')[-1][:40]:
@@ -417,7 +431,17 @@ def account_returns(folder, labels, first=''):
     """{label: {return_pct, period, measured_with, basis}} from the investment
     statements, read by Claude and cached like the drafts."""
     saved = os.path.join(folder, '_Audit', 'account_returns.json')
-    docs = [d for d in documents(folder, first) if 'investments' in d[0].lower()]
+    # The same statements the account reader uses, so the returns are read
+    # from the documents the balances came from.
+    import accounts as _acc
+    docs = []
+    for rep in _acc.find_statements(folder):
+        text = _acc._text(folder, rep)
+        hits = sorted(glob.glob(os.path.join(folder, '.fq_cache', rep['sha'] + '*.txt')) +
+                      glob.glob(os.path.join(folder, 'Original_sourcedocs', '.fq_cache',
+                                             rep['sha'] + '*.txt')))
+        hits = [h for h in hits if not h.endswith('.credit.txt')]
+        docs.append((rep['name'], hits[-1] if hits and text else rep['path'], text))
     if not docs or not labels or ask_claude is None:
         return _load(saved)
     prompt = RETURNS_PROMPT.format(
@@ -429,8 +453,7 @@ def account_returns(folder, labels, first=''):
         try:
             got = ask_claude.ask_json(
                 prompt, cache_dir=cache, timeout=TIMEOUT, allow=('Read',),
-                add_dirs=(os.path.join(folder, 'Original_sourcedocs',
-                                       '.fq_cache'),))
+                add_dirs=sorted({os.path.dirname(t) for _n, t, _x in docs}))
         except Exception:  # noqa: BLE001
             return _load(saved)
     out = {}

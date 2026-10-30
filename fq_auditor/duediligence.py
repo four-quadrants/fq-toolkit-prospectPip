@@ -159,14 +159,16 @@ def findings(folder):
             if len(hits) >= 3 and amt >= 500:
                 desc = ' '.join((hits[0].get('description') or '').split())
                 payer = re.sub(r'^(direct-?pay|ach|deposit)\s+', '', desc,
-                               flags=re.I).title()[:40]
+                               flags=re.I).title()[:40].strip()
+                src = ('from "%s"' % payer) if payer else \
+                    'with no payer named on the statement'
                 out.append(('income|%s|%s' % (key, amt),
-                            'We noticed that %s has a monthly deposit of %s from '
-                            '"%s". This appears to be income above and beyond the '
+                            'We noticed that %s has a monthly deposit of %s %s. '
+                            'This appears to be income above and beyond the '
                             'dental practice. Can you give us more information '
                             'regarding this payment? If it is a renter, do you '
                             'have a lease you could send us?'
-                            % (key, _money(amt), payer),
+                            % (key, _money(amt), src),
                             '%d deposits of %s on the %s statements.'
                             % (len(hits), _money(amt), key),
                             'bank statements', 'Normal', SEND))
@@ -215,6 +217,12 @@ def findings(folder):
         seen_words.append(w)
         return False
 
+    # What is on file whatever the checklist reading said: a QuickBooks
+    # backup (.qbb) answers a request for QuickBooks access. Spaulding sent
+    # two and was still asked for one.
+    on_file = ' '.join(os.listdir(os.path.join(folder, 'Original_sourcedocs'))) \
+        if os.path.isdir(os.path.join(folder, 'Original_sourcedocs')) else ''
+    have_qb = bool(re.search(r'\.(qbb|qbw|qbm|qbx)\b', on_file, re.I))
     for item, v in verdicts.items():
         if v.get('verdict') == 'satisfied':
             continue
@@ -222,12 +230,28 @@ def findings(folder):
             text = (ask.get('text') if isinstance(ask, dict) else str(ask)).strip()
             if not text or _dupe(text):
                 continue
+            if have_qb and re.search(r'quickbooks', text, re.I) and \
+                    not re.search(r'online access|login|user', text, re.I):
+                continue
             hi = bool(re.search(r'return|decree|credit report|statement',
                                 text, re.I))
             out.append(('doc|%s|%s' % (item, text[:40]), text,
                         'Checklist: "%s" read as %s.'
                         % ((v.get('label') or '')[:80], v.get('verdict')),
                         'request checklist', 'High' if hi else 'Normal', SEND))
+
+    # Loans taken since the debt sheet was made ---------------------------
+    # Spaulding financed a Primescan in May 2026 ($91,929); no document
+    # shows it, and only asking finds it.
+    if re.search(r'debt', on_file, re.I):
+        out.append(('debt|new_since_sheet',
+                    'Have you taken on any new practice loans or equipment '
+                    'financing since you put together the debt sheet (new '
+                    'equipment, a line of credit, a vehicle)? If so, please '
+                    'send the loan details: amount, rate, term and monthly '
+                    'payment.',
+                    'The debt sheet is a snapshot; financing taken since is in '
+                    'no document on file.', 'debt sheet', 'Normal', SEND))
 
     # Capacity, always ------------------------------------------------------
     names = []
@@ -261,10 +285,12 @@ def findings(folder):
     out.append(('savings',
                 'Lastly from a personal retirement savings standpoint, it appears '
                 'that %s. Does this appear correct to you?'
-                % ('your savings are "%s" per the intake form; [ADVISOR: state '
-                   'the deferrals, matches and contributions the plan uses]'
-                   % saved if saved else
-                   '[ADVISOR: state what the plan assumes is saved each year]'),
+                % ('your savings are "%s" a year per the intake form, between '
+                   'your retirement plan deferrals, any employer match and other '
+                   'contributions' % saved if saved else
+                   'we could not find a figure for what you save each year; can '
+                   'you tell us your retirement plan deferrals, any employer '
+                   'match and other contributions'),
                 'The plan\'s current-savings figure; confirmed with the client '
                 'every time.', 'standard', 'High', SEND))
     return out
@@ -316,35 +342,10 @@ def write(folder, outdir=None):
     rows.sort(key=lambda r: (r[0] == 'savings', r[0] == 'capacity',
                              order.get(r[4], 1)))
 
-    book = _book.Book(path)
-    t = book.table('Due diligence', len(rows) + 6, len(HEADS))
-    t.write(0, 0, 'Due diligence: %s' % name, style=book.s_title)
-    t.write(2, 0, 'Decide each one: Send (goes in the email), Strike (not '
-                  'needed) or Answered (settled from the file). Edit the '
-                  'wording freely. Save, then rebuild for the email.',
-            style=book.s_note)
-    for c, h in enumerate(HEADS):
-        t.write(3, c, h, style=book.s_head)
-    t.col_width(0, 30)
-    t.col_width(1, 420)
-    t.col_width(2, 300)
-    t.col_width(3, 130)
-    t.col_width(4, 70)
-    t.col_width(5, 90)
-    t.col_width(6, 120)
-    for i, (key, q, why, src, pri, dec) in enumerate(rows):
-        r = 4 + i
-        t.write(r, 0, i + 1)
-        t.write(r, 1, q, style=book.s_wrap)
-        t.write(r, 2, why, style=book.s_wrap)
-        t.write(r, 3, src)
-        t.write(r, 4, pri)
-        t.write(r, 5, dec, style=book.s_edit)
-        t.write(r, 6, key, style=book.s_note)
-        t.row_height(r, max(36, 16 * (1 + max(len(q) // 70, len(why) // 50))))
-    book.finish()
-
-    email = os.path.join(outdir, 'Follow-up email - %s.txt' % name)
+    # The questions live on the lead advisor's review page now; the
+    # separate Numbers tracker (with the cash flow template's spare tabs)
+    # is no longer written.
+    email = os.path.join(outdir, 'Follow-up email - %s.eml' % name)
     send = [r for r in rows if (r[5] or '').strip().lower() == 'send']
     hi = [str(i + 1) for i, r in enumerate(send) if r[4] == 'High']
     today = datetime.date.today()
@@ -375,12 +376,19 @@ def write(folder, outdir=None):
               'you have further clarifications.'
               % (', '.join(hi) if hi else '1', due.strftime('%A'), due.month,
                  due.day)]
-    with open(email, 'w') as fh:
-        fh.write('\n'.join(lines) + '\n')
+    # An unsent email: double-click opens it in Outlook or Mail as a new
+    # message, ready to address and send (a .txt opened in TextEdit).
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg['Subject'] = 'Follow-up questions for your consultation'
+    msg['X-Unsent'] = '1'
+    msg.set_content('\n'.join(lines) + '\n')
+    with open(email, 'wb') as fh:
+        fh.write(bytes(msg))
     checks = sum(1 for r in rows if r[5] == CHECK)
     print('   %d questions drafted: %d to send, %d to check first'
           % (len(rows), len(send), checks))
-    return path, email
+    return email, email
 
 
 def main():

@@ -26,6 +26,7 @@ A slide whose input is missing prints what is missing, in amber, on the slide.
 Nothing is filled in from another client and nothing is guessed.
 """
 import os
+import glob
 import re
 import sys
 import json
@@ -75,6 +76,18 @@ def _num(s):
     return float(m.group(0).replace(',', '')) if m else None
 
 
+def retire_age_of(v):
+    """The retirement age in the IC form's answer: a number, or the last
+    and largest age named in a sentence ("down to 3 days a week by 55 and
+    able to walk away by 65" is 65, not 3)."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    ages = [float(x) for x in re.findall(r'\b([4-8]\d)\b', str(v))]
+    return max(ages) if ages else None
+
+
 class Slide(object):
     def __init__(self, key, eyebrow, headline, hero=None, sub=None,
                  body=None, table=None, note='', needs=None, kind='content'):
@@ -104,16 +117,61 @@ def _start_portfolio(folder):
     Bank cash is left out, as on every firm deck read ("Current portfolio
     value $289,545 (excl. HSA)").
     """
+    try:
+        import accounts as _accounts
+        _accounts.ensure(folder, log=lambda *_a: None)
+    except Exception:                                        # noqa: BLE001
+        pass
     parts, total = [], 0.0
     for key in ('qualified_accounts', 'nonqualified_accounts'):
         for r in (_inputs.value(folder, key) or []):
             label = r.get('label') or ''
             amt = _num(r.get('amount') or r.get('value'))
-            if not amt or BANKISH.search(label) or re.search(r'\bhsa\b', label, re.I):
+            if not amt or r.get('excluded') or BANKISH.search(label) or \
+                    re.search(r'\bhsa\b|529', label, re.I):
                 continue
             parts.append((label, amt))
             total += amt
     return (total or None), parts
+
+
+def annual_pi(folder):
+    """{year: {gross, adjustments, net, income}} from Dentrix "Annual P&I"
+    exports (one CSV a year, a row a month: Production, Adjustments,
+    Write-off, Tot Prod, ... Total Income). Doctor-only and year-to-date
+    files are left out; a year with fewer than 12 months is marked partial."""
+    import csv
+    out = {}
+    for path in glob.glob(os.path.join(folder, '**', '*P&I*.csv'), recursive=True):
+        name = os.path.basename(path).lower()
+        if 'doctor' in name or '/.' in path:
+            continue
+        try:
+            # Dentrix leads with a blank line before the header
+            lines = [ln for ln in open(path, errors='replace').read().splitlines()
+                     if ln.strip()]
+            rows = list(csv.DictReader(lines))
+        except (OSError, csv.Error):
+            continue
+        by = {}
+        for r in rows:
+            m = re.match(r'\s*[A-Za-z]{3}\s+(\d{4})', r.get('Month') or '')
+            if not m:
+                continue
+            y = m.group(1)
+            t = by.setdefault(y, {'gross': 0.0, 'adjustments': 0.0, 'net': 0.0,
+                                  'income': 0.0, 'months': 0})
+            t['gross'] += _num(r.get('Production')) or 0
+            t['adjustments'] += -((_num(r.get('Adjustments')) or 0) +
+                                  (_num(r.get('Write-off')) or 0))
+            t['net'] += _num(r.get('Tot Prod')) or 0
+            t['income'] += _num(r.get('Total Income')) or 0
+            t['months'] += 1
+        for y, t in by.items():
+            t['partial'] = t['months'] < 12
+            if y not in out or (out[y]['partial'] and not t['partial']):
+                out[y] = t
+    return out
 
 
 def _production_inputs(folder):
@@ -128,6 +186,18 @@ def _production_inputs(folder):
         import production as _prod
         got = _prod.gather(folder)
     except Exception:                                        # noqa: BLE001
+        got = {}
+    if not got:
+        pi = annual_pi(folder)
+        for year in sorted(pi, reverse=True):
+            t = pi[year]
+            if t['partial'] or not t['gross']:
+                continue
+            return {'gross_production': t['gross'],
+                    'adjust_pct': t['adjustments'] / t['gross'],
+                    'net_production': t['net'],
+                    'collection_pct': t['income'] / t['net'] if t['net'] else None,
+                    'production_year': year}
         return {}
     for year in sorted(got, reverse=True):
         r = got[year]
@@ -172,7 +242,7 @@ def gather(folder, client=None, today=None):
     start = _num(adv.get('start_portfolio')) or start
 
     age = _num(f.get('Age')) or _num(adv.get('age'))
-    retire_age = _num(adv.get('retire_age')) or _num(f.get('Retirement age goal'))
+    retire_age = _num(adv.get('retire_age')) or retire_age_of(f.get('Retirement age goal'))
     revenue = _num(f.get('Income base (overhead denominator)'))
     building = _num(adv.get('building_value'))
     years_to = (retire_age - age) if (age and retire_age) else None

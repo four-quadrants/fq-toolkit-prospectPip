@@ -191,6 +191,16 @@ def build(bundle, folder):
 
     # 2 ---------------------------------------------------------------------
     retire_at = _value(bundle, 'Retirement age goal')
+    if isinstance(retire_at, str):
+        # The IC form's own words ("60-62, depends on the practice"): the
+        # first age in them, or nothing to compute from.
+        # "down to 3 days by 55 and able to walk away by 65": the last age
+        # named is when they stop, so the largest one
+        ages = [float(x) for x in re.findall(r'\b([4-8]\d)\b', retire_at)]
+        retire_at = max(ages) if ages else None
+    if isinstance(age, str):
+        m = re.search(r'\b(\d{2})\b', age)
+        age = float(m.group(1)) if m else None
     if age and retire_at:
         year_of = this_year + int(retire_at - age)
         # The corpus wording, unchanged in all 44 plans: given name, the year,
@@ -262,6 +272,12 @@ def build(bundle, folder):
     # sections to it directly would have left them blank until it lands.
     # Pointing both at the store instead means the reader becomes a way of
     # filling the store rather than a prerequisite for the page.
+    try:
+        import accounts as _accounts
+        _accounts.ensure(folder, log=lambda *_a: None)
+    except Exception:                                        # noqa: BLE001
+        pass
+
     def _listing(key, number, heading, missing_need, missing_why):
         got = _inputs.get(folder, key)
         rows = (got or {}).get('value') or []
@@ -439,6 +455,18 @@ def build(bundle, folder):
                 if kind != 'Liability':
                     continue
                 if any(abs(monthly - p) <= 2 for p in paid):
+                    continue
+                # The same loan by its account digits ("Us Bank Home Mtg Mtg
+                # Pymt ***7127" is the mortgage x7127), paid above schedule:
+                # the lead advisor's Rebol plan, "currently being accelerated
+                # by $1,000/month". Said on that loan, not listed again.
+                digits = re.findall(r'(\d{4})(?!\d)', payee)
+                same = next((r for r in rows if digits and
+                             any('x' + d4 in (r.label or '') for d4 in digits)), None)
+                if same is not None:
+                    if not any(abs(monthly - p) <= 2 for p in paid):
+                        same.note = '%s; %s/mo paid on the bank statements' % (
+                            same.note or '', _money(monthly))
                     continue
                 low = payee.lower()
                 what = ('Mortgage' if re.search(r'\bmtge?\b|mortgage|\bmort\b', low)

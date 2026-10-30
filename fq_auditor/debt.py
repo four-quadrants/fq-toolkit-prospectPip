@@ -280,6 +280,51 @@ def find_prose(folder):
     return out
 
 
+def _ckey(name):
+    import credit as _c
+    return _c._lender_key(name)
+
+
+def add_credit(folder, rows):
+    """The credit report's open loans beside what the statements and the
+    Debt Sheet already list. A loan already listed is completed from the
+    report (a payment, the last four digits) and keeps its own figures; a
+    loan only the report shows is added, marked as from the report."""
+    try:
+        import credit as _credit
+        got = _credit.read(folder, log=lambda *_a: None)
+    except Exception:  # noqa: BLE001 - no reports, nothing to add
+        return rows, []
+    rows = [dict(r) for r in rows]
+    added = []
+    for c in got.get('debts') or []:
+        if c.get('side') != 'Personal':
+            continue
+        match = None
+        for r in rows:
+            l4 = str(r.get('account_last4') or '')
+            if l4 and c.get('account_last4') and l4[-4:] == c['account_last4']:
+                match = r
+                break
+            close = r.get('balance') and c.get('balance') and \
+                abs(r['balance'] - c['balance']) <= 0.1 * c['balance']
+            same_pay = r.get('payment') and c.get('payment') and \
+                abs(r['payment'] - c['payment']) <= 2
+            if close and (_ckey(r.get('creditor')) == _ckey(c.get('creditor'))
+                          or same_pay):
+                match = r
+                break
+        if match:
+            for k in ('payment', 'account_last4', 'what', 'opened'):
+                if not match.get(k) and c.get(k):
+                    match[k] = c[k]
+            match['source'] = '%s; on the credit report' % (match.get('source') or '')
+            continue
+        rows.append(dict(c))
+        added.append(c)
+    return rows, added
+
+
 def gather(folder):
     # One schedule, however many copies of it are on disk. The same workbook
     # sits in Documents, in Original_sourcedocs and in whatever tree the last
@@ -308,6 +353,7 @@ def gather(folder):
     if personal_sheet:
         statements = personal_sheet
     prose = find_prose(folder)
+    statements, from_credit = add_credit(folder, statements)
 
     def total(rows, key):
         vals = [r.get(key) for r in rows if r.get(key)]
@@ -317,6 +363,7 @@ def gather(folder):
         'practice': sched,
         'personal': statements,
         'unread': prose,
+        'from_credit_report': from_credit,
         'practice_balance': total(sched, 'balance'),
         'practice_payment': total(sched, 'payment'),
         'personal_balance': total(statements, 'balance'),

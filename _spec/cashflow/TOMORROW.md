@@ -374,6 +374,13 @@ design (7 tax, 6 fees, 5 4Q, 9 insurance-policy rows), 111 differ (mostly judgme
 custom slide 8 wording, distributions year).
 
 Friday, in order:
+0. CREDIT REPORT READER (vital: where most debts and many assets are found). Test files: Oyler has five
+   photographed pages (Personal - Credit Reports - IMG_6553..6557.png); Rebol has full PDFs for both spouses
+   (CRR and KMR, Equifax / Experian / TransUnion, June 2026). Claude reads each tradeline (creditor, type,
+   balance, payment, rate if shown, opened, status, individual or joint), dedupes across bureaus and spouses,
+   and the rows join debt.py's list beside the debt sheet and statements, each with its source. Feeds the
+   Assumptions section 8, the debt slide, the refinance and the due diligence questions (loans with no
+   statement on file).
 1. Oyler: rebuild (401(k) deferral from the statement), check slide 11 and 16 again.
 2. Spaulding gaps: levers slide empty (no lever inputs found), investments slide empty (start_parts empty though
    start = $312,080). Same check on Rebol.
@@ -382,3 +389,31 @@ Friday, in order:
    Oyler page HTML, new artifact per client).
 5. Run Spaulding, Rebol, Prather end to end in the app; load their review pages.
 6. Setup guide for the analyst's Mac; scheduled LaunchBay pull; commit.
+
+## Friday Oct 30, end of day: where things stand (handoff Monday)
+
+Built today
+- credit.py: credit reports read (Equifax parsed in code, others by Claude; pictures-only PDFs OCR'd by the toolkit
+  first). Merged across bureaus/spouses by identical balance+payment. Rebol 5/6 of the lead advisor's loans (the 6th is
+  an LLC loan, not on personal credit); found a HELOC the debt sheet missed.
+- accounts.py: investment accounts read by Claude from every statement (named by kind/custodian, not just the
+  Investments folder). Rebol 6/6 and Spaulding 9/9 (incl. annuity) to the dollar.
+- bank_claude.py: EVERY bank statement read by Claude first; used only if it ties (beginning + in - out = ending,
+  transactions = totals). Spaulding 14/14 tie. Rebol (73) and Oyler (41) not yet read: their next build does it.
+- statements.py: printed account/holder beat the filing folder; Huntington layout reader.
+- recommendations.py: catalog of 22 from 8 consult decks; review page checklist with year buttons and notes.
+- Two reviews per client: Analysis review (what we found + questions + live email on the page) and Consult review
+  (open questions, plan, recommendations, projections, slides). review_page_template in fq_auditor/assets.
+- Spaulding: analysis review JZvGC5yjwQrDqg8up4mueu; consult review Qs7D5JCSA19VGmD2Z5nZzh. Rebol consult
+  J42FM935RKGnx5NtSibeWo. Oyler (old layout) Lwqpd6UhE6h8JMpWSXsjbf.
+
+Monday, in order
+1. Spaulding: lead-advisor pass on the consult review, pull in, build the deck, compare to his real deck.
+2. Consult-review load should mark questions answered by documents that arrived since (re-run findings; a question no
+   longer raised = "answered by the documents"). The consult review never makes an email.
+3. Speed: loading a review page takes 1.5-3 min here; fine for now.
+4. Rebol + Oyler: Update once so bank_claude reads their statements; spot-check cash flow vs his.
+5. FQ Prospect plugin (skills: LaunchBay pull, load/pull analysis review, load/pull consult review).
+6. Setup guide for the analyst's Mac: xcode-select --install; Homebrew; brew install python@3.13 tesseract poppler;
+   Claude Code login; mount smb://192.168.62.170/Analysis. Copy assets (consult_template.pptx, deck_examples.json).
+7. Commit.

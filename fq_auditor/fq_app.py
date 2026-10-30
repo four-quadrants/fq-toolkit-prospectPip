@@ -212,7 +212,8 @@ class Job:
         try:
             # Unbuffered, or a Python child holds its output until it exits and
             # the page shows "Building…" over an empty box the whole time.
-            env = dict(os.environ, PYTHONUNBUFFERED='1')
+            env = dict(os.environ, PYTHONUNBUFFERED='1',
+                       PYTHONWARNINGS='ignore::ResourceWarning,ignore::DeprecationWarning')
             p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, text=True, bufsize=1,
                                  env=env)
@@ -720,6 +721,7 @@ nav button.on{background:var(--fq-orange);color:#fff;font-weight:600}
 #stepbar .wait .dot{background:#C9A227}
 #stepbar .why{color:#5F6E7C}
 #stepbar .busy{color:#CE6E0D;font-weight:600}
+#stepbar .catchup{margin-left:auto;border:1px solid #E8792B;background:#FFF4EA;color:#B35A12;border-radius:6px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer}
 .tag{margin-left:auto;font-size:12px;opacity:.75}
 main{flex:1;overflow:hidden;position:relative}
 .pane{position:absolute;inset:0;overflow:auto;display:none}
@@ -831,8 +833,8 @@ label.ck span{font-size:11.5px;color:#8A9099}
     <button id="tab-get" class="on">1 &nbsp;Intake</button>
     <button id="tab-build">2 &nbsp;Initial notes</button>
     <button id="tab-assume">3 &nbsp;Assumptions</button>
-    <button id="tab-consult">4 &nbsp;Due diligence</button>
-    <button id="tab-deck">5 &nbsp;Consult deck</button>
+    <button id="tab-consult">4 &nbsp;Analysis review</button>
+    <button id="tab-deck">5 &nbsp;Consult review &amp; deck</button>
   </nav>
   <span class="tag">running on this Mac only &middot; nothing is uploaded</span>
 </header>
@@ -981,14 +983,38 @@ label.ck span{font-size:11.5px;color:#8A9099}
   <!-- 4. Due diligence: the judgement calls, each traceable to its document
        and its arithmetic, and the questions still open. -->
   <div class="pane" id="pane-consult"><div class="wrap">
-    <h2>4 &nbsp;Due diligence</h2>
-    <p class="sub">The judgement calls behind the plan, each with the document it came
-       from and the sum that produced it. Anything that cannot be shown that way is a
-       question: for the analyst first, then, if it cannot be settled from the file,
-       for the prospect.</p>
+    <h2>4 &nbsp;Analysis review</h2>
+    <p class="sub">The lead advisor checks what the documents show (accounts, debts, pay,
+       cash flow) and decides the follow-up questions for the client, on a private page on
+       claude.ai, not in this app. The plan itself comes in step 5, once the answers are in.</p>
     <div id="consultstatus" class="found hide" style="margin-bottom:14px"></div>
+    <div class="card">
+      <b style="color:#16324F">1 &nbsp;Load the analysis review</b>
+      <div class="sub" style="margin:2px 0 0">Once the Assumptions are built, ask Claude:
+        <i>"Load <span class="whoname">this client</span>'s analysis review."</i> Claude gives back
+        the link; share it with the lead advisor (edit access) from the page's Share menu.</div>
+    </div>
+    <div class="card">
+      <b style="color:#16324F">2 &nbsp;Questions to the client</b>
+      <div class="sub" style="margin:2px 0 0">He checks the findings and marks the questions; the
+        page writes the email to the client as he goes, and he edits and copies it from the
+        page's Email tab. Nothing to do here in the meantime.</div>
+    </div>
+    <div class="card">
+      <b style="color:#16324F">3 &nbsp;When the answers come back</b>
+      <div class="sub" style="margin:2px 0 0">New documents go through Intake as usual (then
+        Update). Typed answers go on the analysis page beside each question. Then go to step 5.</div>
+    </div>
+    <div class="card">
+      <b style="color:#16324F">The follow-up email</b>
+      <div id="ddwhat" class="hide"><input type="checkbox" value="duediligence" checked></div>
+      <div class="row"><span style="flex:1"></span>
+        <button class="primary" id="ddgo" disabled>Pick a client first</button></div>
+      <pre class="log hide" id="ddlog" style="margin-top:12px"></pre>
+      <div id="ddmade" class="row hide" style="margin-top:10px"></div>
+    </div>
 
-    <div class="card plan" id="plancard">
+    <div class="card plan hide" id="plancard" style="display:none">
       <div class="row">
         <div style="flex:1"><b style="color:#16324F">The plan</b>
           <div class="sub" style="margin:2px 0 0">Every figure is worked out from the
@@ -998,24 +1024,26 @@ label.ck span{font-size:11.5px;color:#8A9099}
       <div id="planbody" class="hide"></div>
     </div>
 
-    <div class="card">
-      <b style="color:#16324F">Questions for the prospect</b>
-      <div class="sub" style="margin:2px 0 0">Drafted from what the documents show, in
-        The lead advisor’s follow-up format. The lead advisor marks each Send, Answered or Strike on his
-        review page; once Claude has pulled his decisions in, rebuild for the email.</div>
-      <div id="ddwhat" class="hide"><input type="checkbox" value="duediligence" checked></div>
-      <div class="row"><span style="flex:1"></span>
-        <button class="primary" id="ddgo" disabled>Pick a client first</button></div>
-      <pre class="log hide" id="ddlog" style="margin-top:12px"></pre>
-      <div id="ddmade" class="row hide" style="margin-top:10px"></div>
-    </div>
   </div></div>
 
   <!-- 5. The consult deck, from the finished plan. -->
   <div class="pane" id="pane-deck"><div class="wrap">
-    <h2>5 &nbsp;Consult deck</h2>
-    <p class="sub">Built on the firm's design from the plan saved in step 4. Opens in
-       Keynote. Anything the advisor still has to write is marked on the slide.</p>
+    <h2>5 &nbsp;Consult review &amp; deck</h2>
+    <div class="card">
+      <b style="color:#16324F">1 &nbsp;Load the consult review</b>
+      <div class="sub" style="margin:2px 0 0">With the answers in, ask Claude: <i>"Load
+        <span class="whoname">this client</span>'s consult review."</i> The lead advisor works through
+        any open questions, the plan, the recommendations, the projections, then the slides.</div>
+    </div>
+    <div class="card">
+      <b style="color:#16324F">2 &nbsp;Pull it in and build</b>
+      <div class="sub" style="margin:2px 0 0">When he is done, ask Claude: <i>"Pull in
+        <span class="whoname">this client</span>'s consult review."</i> Claude reads his notes first,
+        then build the deck below.</div>
+    </div>
+    <p class="sub">Built from the plan as the lead advisor left it on his review page.
+       Anything nobody has filled yet (fees, accounting's tax red flags) is a small grey
+       placeholder to type over. Opens in Keynote or PowerPoint and stays editable.</p>
     <div class="card">
       <div id="consultwhat" class="hide"><input type="checkbox" value="deck" checked></div>
       <div class="row"><span style="flex:1"></span>
@@ -1086,13 +1114,15 @@ var BPOLL=null;
 function buildReady(){
   [['buildgo','Build the initial notes'],['cfgo','Build the cash flow workbook'],
    ['asgo','Build the Assumptions'],['consultgo','Build the deck'],
-   ['ddgo','Draft the questions and email']].forEach(function(x){
+   ['ddgo','Open the follow-up email']].forEach(function(x){
     var b=document.getElementById(x[0]);
     b.disabled = !FOLDER;
     b.textContent = FOLDER ? x[1] : 'Pick a client first';
   });
   document.getElementById('buildwho').textContent =
     FOLDER ? FOLDER.split('/').pop() : 'No client chosen yet';
+  document.querySelectorAll('.whoname').forEach(function(e){
+    e.textContent = FOLDER ? FOLDER.split('/').pop().split(',')[0] : 'this client'; });
   buildState();
 }
 // Orange only when an output is missing or older than what it is built
@@ -1103,8 +1133,8 @@ var AUTO={}, CATCHUP=null;
 function stepBar(d){
   var bar=document.getElementById('stepbar'); if(!FOLDER){ bar.classList.add('hide'); return; }
   var steps=[['Initial notes','workbook','build'],['Cash flow','cashflow','assume'],
-             ['Assumptions','assumptions','assume'],['Advisor review','review','consult'],
-             ['Questions + email','duediligence','consult'],['Deck','deck','deck']];
+             ['Assumptions','assumptions','assume'],
+             ['Advisor review','review','consult'],['Deck','deck','deck']];
   var h='<b>'+esc(FOLDER.split('/').pop())+'</b>';
   steps.forEach(function(st){
     var x=d[st[1]]||{}, cls, note;
@@ -1116,34 +1146,45 @@ function stepBar(d){
     // explanations made the bar wrap and look wonky).
     h+='<span class="st '+cls+'" data-tab="'+st[2]+'" title="'+esc(st[0]+': '+note)+'"><span class="dot"></span>'+st[0]+'</span>';
   });
+  // Nothing rebuilds on its own: opening a client audits and files, and
+  // the builds wait for the analyst. Out-of-date outputs get one button.
+  var stale=['workbook','cashflow','assumptions'].filter(function(k){
+    return d[k] && d[k].when && !d[k].current; });
   if(CATCHUP) h+='<span class="busy" title="'+esc(CATCHUP)+'">Updating\u2026</span>';
+  else if(stale.length) h+='<button type="button" class="catchup" id="catchupgo" title="Rebuild what has gone out of date, in order">Update '+stale.length+' out of date</button>';
   bar.innerHTML=h; bar.classList.remove('hide');
   bar.querySelectorAll('.st').forEach(function(e){ e.onclick=function(){ show(e.dataset.tab); }; });
-  catchUp(d);
+  var cu=document.getElementById('catchupgo'); if(cu) cu.onclick=function(){ catchUp(d); };
 }
 function catchUp(d){
-  // Rebuild what was built before and has gone out of date. Never the deck:
-  // it may have been edited in Keynote, so it is only flagged.
-  if(!FOLDER || AUTO[FOLDER] || CATCHUP) return;
-  var want=['workbook','cashflow','assumptions','duediligence'].filter(function(k){
+  // The "Update N out of date" button: rebuild, in order, what was built
+  // before and has gone out of date. Never the deck (it may have been edited
+  // in Keynote; its dot only turns orange). Progress shows in the bar.
+  if(!FOLDER || CATCHUP) return;
+  var want=['workbook','cashflow','assumptions'].filter(function(k){
     return d[k] && d[k].when && !d[k].current; });
   if(!want.length) return;
-  AUTO[FOLDER]=true;
   var names={workbook:'Initial notes',cashflow:'Cash flow',assumptions:'Assumptions',duediligence:'Questions'};
-  CATCHUP='Bringing '+want.map(function(k){return names[k]}).join(', ')+' up to date\u2026';
-  var tries=0;
-  (function go(){
-    fetch('/api/build',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({folder:FOLDER, what:want.join(',')})})
-      .then(function(r){return r.json();}).then(function(j){
-        if(j.error){ if(++tries<15){ setTimeout(go,20000); return; } CATCHUP=null; buildState(); return; }
-        var t=setInterval(function(){
-          fetch('/api/log?since=0').then(function(r){return r.json();}).then(function(x){
-            if(!x.running){ clearInterval(t); CATCHUP=null; buildState(); }
-          });
-        },1500);
-      }).catch(function(){ CATCHUP=null; });
-  })();
+  CATCHUP='Updating '+want.map(function(k){return names[k]}).join(', ')+'\u2026';
+  stepBar(d);
+  fetch('/api/build',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({folder:FOLDER, what:want.join(',')})})
+    .then(function(r){return r.json();}).then(function(j){
+      if(j.error){ CATCHUP=null; stepBar(d); alert('Could not update: '+j.error); return; }
+      var at=0, last='';
+      var t=setInterval(function(){
+        fetch('/api/log?since='+at).then(function(r){return r.json();}).then(function(x){
+          at=x.total;
+          var ls=(x.lines||[]).filter(function(l){return l.trim() && l.indexOf('OUTPUT\t')!==0;});
+          if(ls.length){ last=ls[ls.length-1].trim(); }
+          var b=document.querySelector('#stepbar .busy');
+          if(b && last) b.textContent='Updating: '+last.slice(0,70);
+          if(!x.running){ clearInterval(t); CATCHUP=null;
+            if(x.rc) alert('The update stopped with an error. Last line: '+last);
+            buildState(); }
+        });
+      },1500);
+    }).catch(function(e){ CATCHUP=null; stepBar(d); alert('Could not update: '+e); });
 }
 function buildState(){
   if(!FOLDER) return;
@@ -1153,9 +1194,13 @@ function buildState(){
       stepBar(d);
       [['buildgo','workbook','Initial notes'],['cfgo','cashflow','Cash flow workbook'],
        ['asgo','assumptions','Assumptions'],['consultgo','deck','Deck'],
-       ['ddgo','duediligence','Questions and email']].forEach(function(x){
+       ['ddgo','duediligence','Follow-up email']].forEach(function(x){
         var b=document.getElementById(x[0]), st=d[x[1]];
         if(!b || b.disabled || !st) return;
+        if(x[0]==='consultgo'){
+          var rv=d.review||{};
+          b.title=rv.current?'':'The lead advisor has not reviewed this plan yet; the deck will use the toolkit\u2019s own figures.';
+        }
         if(st.current){
           b.classList.add('done');
           b.textContent=x[2]+' built '+st.when+' \u2713  (rebuild)';
@@ -2534,7 +2579,7 @@ OUTPUTS = {
     'workbook': ('Initial notes', '.xlsx'),
     'cashflow': ('Cash flow', '.numbers'),
     'assumptions': ('Assumptions', '.pdf'),
-    'duediligence': ('Follow-up email', '.txt'),
+    'duediligence': ('Follow-up email', '.eml'),
     'deck': ('Consult deck', '.pptx'),
 }
 

@@ -122,12 +122,57 @@ def apply(folder, plan_json):
         entry['concerns'] = [[c.get('head', ''), c.get('body', '')]
                              for c in rec['concerns'] if c.get('head')]
         changed.append('concerns')
+    # The recommendations he left ticked (and any he added) become the
+    # savings slide and the savings schedule.
+    recs = rec.get('recommendations') or []
+    notes = []
+    if recs:
+        state = rec.get('recs') or {}
+        chosen = []
+        for r in recs + [dict(c, key=c.get('key') or 'custom_%d' % i, year=c.get('year') or 2)
+                         for i, c in enumerate(rec.get('recs_custom') or [])]:
+            st = state.get(r['key']) or {}
+            on = st.get('on') if 'on' in st else (r.get('suggested') or r['key'].startswith('custom'))
+            if not on:
+                continue
+            gain = _num(st.get('gain')) if st.get('gain') not in (None, '') else r.get('gain')
+            inv = list(r.get('invested') or [0, 0, 0]) + [0, 0, 0]
+            for i, k in ((0, 'inv1'), (1, 'inv2')):
+                if st.get(k) not in (None, ''):
+                    inv[i] = _num(st[k])
+            if st.get('inv2') not in (None, ''):
+                inv[2] = _num(st['inv2'])
+            year = str(st.get('year') or r.get('year') or 1)
+            if year == 'later':
+                # Kept in view (the note says when), out of the schedule
+                notes.append('%s: held for later. %s' % (
+                    st.get('label') or r.get('label'), st.get('note') or ''))
+                continue
+            # Moved to a later year: nothing invested before it starts
+            start = int(year) - 1
+            full = max(inv[:3]) if any(inv[:3]) else 0
+            inv = [0 if i < start else (inv[i] or full) for i in range(3)]
+            if st.get('note'):
+                notes.append('%s: %s' % (st.get('label') or r.get('label'), st['note']))
+            chosen.append(dict(r, label=st.get('label') or r.get('label'),
+                               gain=gain, invested=inv[:3], year=int(year)))
+        import recommendations as _recmod
+        entry['gains_table'] = _recmod.to_gains_table(chosen)
+        entry.pop('savings_schedule', None)
+        changed.append('recommendations (%d)' % len(chosen))
     _inputs.put(folder, 'deck', entry, by='the lead advisor, on the consult review page',
                 note='decided on the review page')
 
     out = {'read': datetime.datetime.now().isoformat(timespec='seconds'),
            'qdecisions': rec.get('qdecisions') or {},
-           'qtext': rec.get('qtext') or {}}
+           'qtext': rec.get('qtext') or {},
+           # The client's answers, as recorded on the page: Claude reads them
+           # at the refresh and puts what they settle into the plan.
+           'qanswers': {k: v for k, v in (rec.get('qanswers') or {}).items() if (v or '').strip()},
+           # His reasoning, for whoever (or whatever) builds the deck next:
+           # Claude reads these when it pulls the review in.
+           'notes': (rec.get('notes') or '').strip(),
+           'recommendation_notes': notes}
     # Slide wording: what was proposed, as edited, unless dropped.
     try:
         with open(os.path.join(folder, '_Audit', 'review_slides.json')) as fh:
@@ -143,6 +188,32 @@ def apply(folder, plan_json):
         json.dump(out, fh, indent=1)
     print('   figures applied: %s' % (', '.join(changed) or 'none'))
     print('   question decisions read: %d' % len(out['qdecisions']))
+    if out['qanswers']:
+        print('   CLIENT ANSWERS (put what they settle into the plan before rebuilding):')
+        for k, v in sorted(out['qanswers'].items()):
+            print('     %s: %s' % (k, v))
+    if out['notes'] or notes:
+        print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
+        if out['notes']:
+            print('     ' + out['notes'])
+        for n in notes:
+            print('     - ' + n)
+    # The follow-up email, now that he has said which questions go.
+    try:
+        import duediligence as _dd
+        _p, email = _dd.write(folder)
+        print('   follow-up email written: %s' % os.path.basename(email))
+        # Its text, for the review page's Email tab (whoever sends it copies
+        # it from there; the .eml opens in Outlook or Mail for the analyst).
+        from email import policy
+        from email.parser import BytesParser
+        with open(email, 'rb') as fh:
+            body = BytesParser(policy=policy.default).parse(fh).get_content()
+        out['email_text'] = body
+        with open(os.path.join(folder, '_Audit', 'review_decisions.json'), 'w') as fh:
+            json.dump(out, fh, indent=1)
+    except Exception as exc:                                 # noqa: BLE001
+        print('   follow-up email not written: %s' % exc)
     if 'slides' in out:
         print('   slide wording: %d used, %d dropped'
               % (sum(1 for v in out['slides'].values() if v),
@@ -163,17 +234,90 @@ def decisions(folder):
             ids = json.load(fh)              # {question id: question key}
     except (OSError, ValueError):
         ids = {}
+    def words(t):
+        return set(re.findall(r'[a-z0-9]{3,}', (t or '').lower()))
+    texts = {qid: (v.get('text') if isinstance(v, dict) else '') for qid, v in ids.items()}
+    keys = {qid: (v.get('key') if isinstance(v, dict) else v) for qid, v in ids.items()}
     out = {}
-    for qid, key in ids.items():
+    for qid, key in keys.items():
         d = (got.get('qdecisions') or {}).get(qid)
-        t = (got.get('qtext') or {}).get(qid)
-        if d or t:
-            out[key] = (d, t)
+        if d:
+            out[key] = (d, None)
+    # Reworded questions, matched to the question they were written from.
+    # The list can be renumbered when the page is refreshed (Spaulding: an
+    # edit made to the old question 1, the tax returns, arrived after the
+    # refresh had made question 1 the mortgage); the words say which it was.
+    for qid, t in (got.get('qtext') or {}).items():
+        if not (t or '').strip():
+            continue
+        w = words(t)
+        best, score = qid if qid in keys else None, -1.0
+        for other, txt in texts.items():
+            if not txt:
+                continue
+            o = words(txt)
+            sc = len(w & o) / float(len(w | o) or 1)
+            if sc > score:
+                best, score = other, sc
+        if best is None:
+            continue
+        key = keys[best]
+        out[key] = ((out.get(key) or (None, None))[0], t)
     return out
 
 
-def seed(folder, outdir):
-    """The JSON files Claude loads into a client's review page."""
+def findings(folder, D):
+    """What the documents show, for the lead advisor to sanity-check on the
+    analysis review: accounts, debts, cards, pay, cash flow, each with where
+    it came from."""
+    import inputs as _inputs
+    import debt as _debt
+    out = {'accounts': [], 'debts': [], 'cards': [], 'pay': [], 'cash': [], 'concerns': []}
+    for key, side in (('qualified_accounts', 'Retirement'), ('nonqualified_accounts', 'Other')):
+        for r in _inputs.value(folder, key) or []:
+            out['accounts'].append({'side': side, 'label': r.get('label'),
+                                    'value': r.get('value') or r.get('amount'),
+                                    'basis': r.get('basis') or '',
+                                    'counted': not r.get('excluded')})
+    try:
+        g = _debt.gather(folder)
+        for side in ('personal', 'practice'):
+            for r in g.get(side) or []:
+                out['debts'].append({'side': side.title(), 'label': '%s %s' % (
+                    r.get('creditor') or '', ('x' + r['account_last4']) if r.get('account_last4') else ''),
+                    'what': r.get('what') or r.get('description') or '',
+                    'balance': r.get('balance'), 'payment': r.get('payment'),
+                    'rate': r.get('rate'), 'basis': r.get('source') or ''})
+    except Exception:                                        # noqa: BLE001
+        pass
+    try:
+        import credit as _credit
+        for c in (_credit.read(folder, log=lambda *_a: None) or {}).get('cards') or []:
+            out['cards'].append({'label': c.get('lender'), 'balance': c.get('balance'),
+                                 'limit': c.get('limit')})
+    except Exception:                                        # noqa: BLE001
+        pass
+    f = D.get('income_facts') or {}
+    src = f.get('sources') or {}
+    for k, lab in (('w2', 'Owner W-2'), ('deferral', 'Owner 401(k) deferral'),
+                   ('total_tax', 'Total income tax'), ('distributions', 'Distributions')):
+        out['pay'].append({'label': '%s (%s)' % (lab, f.get('year') or '?'),
+                           'value': f.get(k), 'basis': src.get(k) or ''})
+    cash = D.get('cash') or {}
+    for a in cash.get('accounts') or []:
+        out['cash'].append({'label': '%s %s' % (a.get('entity') or '', a.get('name') or ''),
+                            'balance': a.get('balance'),
+                            'surplus': a.get('surplus'), 'as_of': str(a.get('as_of') or '')})
+    out['spend'] = D.get('spend')
+    out['concerns'] = [{'head': h, 'body': b} for h, b in D['adv'].get('concerns') or []]
+    return out
+
+
+def seed(folder, outdir, mode='consult'):
+    """The JSON files Claude loads into a client's review page. mode
+    'analysis' is the first review (what the documents show, and the
+    questions); 'consult' is the second (the plan, recommendations,
+    projections and slides), once the answers are in."""
     import importlib.util
     import deck_template as dt
     import duediligence as dd
@@ -263,11 +407,9 @@ def seed(folder, outdir):
     # statements, and 4Q's over the same dates, which only the firm has.
     rets = D.get('returns') or {}
     acct_map = {}
-    for i, (label, value) in enumerate(D.get('start_parts') or []):
-        if i >= 3:
-            break
+    for i, (label, value) in enumerate(D.get('slide_parts') or []):
         r = rets.get(label) or {}
-        name = re.sub(r'\s*\[.*?\]', '', label)
+        name = label.replace('[', '(').replace(']', ')')
         acct_map[str(i)] = label
         if r.get('measured_with'):
             per = 'Measured with %s' % re.sub(r'\s*\[.*?\]', '', r['measured_with'])
@@ -289,13 +431,25 @@ def seed(folder, outdir):
                                'table" are worked from it.' % (r.get('period') or 'the same period')))
     with open(os.path.join(folder, '_Audit', 'review_accounts.json'), 'w') as fh:
         json.dump(acct_map, fh, indent=1)
+    # The recommendations: the firm's whole list, the ones the documents
+    # point to ticked, for the lead advisor to keep, change or add to.
+    try:
+        import recommendations as _rec
+        recs = _rec.propose(folder, D) if mode == 'consult' else []
+    except Exception as exc:                                 # noqa: BLE001
+        print('   recommendations skipped: %s' % exc)
+        recs = []
     rows = dd.findings(folder)
     rows.sort(key=lambda r: (r[0] == 'savings', r[0] == 'capacity',
                              {'High': 0}.get(r[4], 1)))
     ids = {}
     for i, (key, q, why, src, pri, dec) in enumerate(rows, 1):
-        qid = 'q%02d' % i
-        ids[qid] = key
+        # Named by the question itself, not its place in the list, so a
+        # refresh that reorders the questions keeps every decision and
+        # rewording on the question it was made for.
+        import hashlib
+        qid = 'q' + hashlib.sha1(key.encode('utf-8')).hexdigest()[:10]
+        ids[qid] = {'key': key, 'text': q}
         with open(os.path.join(outdir, qid + '.json'), 'w') as fh:
             json.dump({'n': i, 'key': key, 'text': q, 'why': why, 'source': src,
                        'priority': pri, 'decision': dec}, fh)
@@ -303,7 +457,7 @@ def seed(folder, outdir):
         json.dump(ids, fh, indent=1)
     # The slide wording Claude drafted from the documents, for approval.
     try:
-        words = dt.proposed_wording(folder, D)
+        words = dt.proposed_wording(folder, D) if mode == 'consult' else []
     except Exception as exc:  # noqa: BLE001 - the page works without it
         print('   slide wording skipped: %s' % exc)
         words = []
@@ -311,7 +465,8 @@ def seed(folder, outdir):
                          'heading': w['heading'], 'hint': w['example'],
                          'text': w['text']} for w in words]}
     fig_slides = sorted({f['slide'] for f in figs if f.get('slide')})
-    pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides)
+    pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides) \
+        if mode == 'consult' else {}
     for it in slides['items']:
         it['pic'] = pics.get(it['slide'])
     titles = {}
@@ -331,12 +486,31 @@ def seed(folder, outdir):
     plan = {'client': D['names'], 'surname': D['surname'], 'figures': figs,
             'concerns': [{'head': h, 'body': b} for h, b in D['adv'].get('concerns') or []],
             'decided': {}, 'qdecisions': {}, 'qtext': {},
-            'sdecisions': {}, 'stext': {},
+            'sdecisions': {}, 'stext': {}, 'qanswers': {}, 'notes': '',
+            'recommendations': recs, 'recs': {}, 'recs_custom': [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
-            'question_ids': sorted(ids)}
+            'question_ids': sorted(ids), 'mode': mode,
+            'findings': findings(folder, D) if mode == 'analysis' else None}
+    # What the lead advisor already decided on an earlier review (the
+    # analysis review, or this page before a refresh) carries over, matched
+    # by the question itself.
+    try:
+        prev = decisions(folder)
+        with open(os.path.join(folder, '_Audit', 'review_decisions.json')) as fh:
+            prev_all = json.load(fh)
+    except (OSError, ValueError):
+        prev, prev_all = {}, {}
+    by_key = {v['key'] if isinstance(v, dict) else v: k for k, v in ids.items()}
+    for key, (d, t) in prev.items():
+        qid = by_key.get(key)
+        if qid and d:
+            plan['qdecisions'][qid] = d
+        if qid and t:
+            plan['qtext'][qid] = t
+    plan['notes'] = prev_all.get('notes') or ''
     with open(os.path.join(outdir, 'plan.json'), 'w') as fh:
-        json.dump(plan, fh)
+        json.dump(plan, fh, default=str)
 
     pr = D['proj'] or {}
     get = lambda d, y: (d or {}).get(str(y), (d or {}).get(y))   # noqa: E731
@@ -418,13 +592,20 @@ def slide_pictures(folder, items, outdir, also=()):
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
     import deck_template as dt
-    deck = sorted(glob.glob(os.path.join(folder, '_Audit', 'Consult deck - *.pptx')),
-                  key=os.path.getmtime)
-    if not deck or not (items or also):
+    if not (items or also):
+        return {}
+    # A deck built here, only to take pictures of: the review comes before
+    # any deck the team uses, so there may not be one yet.
+    scratch = tempfile.mkdtemp()
+    deck_path = os.path.join(scratch, 'review.pptx')
+    try:
+        dt.render(folder, None, deck_path)
+    except Exception as exc:                                 # noqa: BLE001
+        print('   slide pictures skipped: %s' % exc)
         return {}
     D = dt.figures(folder, None)
     drop = dt.dropped(D)
-    prs = Presentation(deck[-1])
+    prs = Presentation(deck_path)
     want = {n: [] for n in also}
     for i, it in enumerate(items, 1):
         it['n'] = i
@@ -477,6 +658,7 @@ def slide_pictures(folder, items, outdir, also=()):
                 shutil.copy(base + '.jpg', os.path.join(outdir, name))
                 out[n] = name
     shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(scratch, ignore_errors=True)
     return out
 
 
@@ -486,12 +668,13 @@ def main():
     s = sub.add_parser('seed')
     s.add_argument('folder')
     s.add_argument('--out', required=True)
+    s.add_argument('--mode', choices=('analysis', 'consult'), default='consult')
     a_ = sub.add_parser('apply')
     a_.add_argument('folder')
     a_.add_argument('plan_json')
     a = ap.parse_args()
     if a.cmd == 'seed':
-        seed(a.folder, a.out)
+        seed(a.folder, a.out, a.mode)
     else:
         apply(a.folder, a.plan_json)
 
