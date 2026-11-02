@@ -42,7 +42,7 @@ a patient count, so overhead and collections compute and new patients waits.
 """
 
 COLLECT_IDEAL = 0.995
-TARGET_OH = 0.50
+TARGET_OH = 0.60     # the lead advisor's recent decks: Spaulding 60%, Rebol 62%
 ATTRITION = 0.50
 ADJ_THRESHOLD = 0.25
 ADJ_IDEAL_HIGH = 0.16
@@ -150,7 +150,13 @@ def compute(x):
 
     # Collection ratio to 99.5%.
     col = g('collection_pct')
-    if col is not None and net:
+    if col is not None and col > 1.02:
+        # More collected than produced: the production export counts
+        # something the income side does not (or the reverse). Not a lever
+        # until someone looks.
+        out['collections'] = _need('a collection %% that makes sense (read %.0f%%)'
+                                   % (100 * col))
+    elif col is not None and net:
         v = max(0.0, (COLLECT_IDEAL - col) * net) * owner
         out['collections'] = _ok(v, 'Collections from %.1f%% to 99.5%%.'
                                  % (100 * col))

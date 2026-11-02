@@ -158,6 +158,26 @@ def apply(folder, plan_json):
                                gain=gain, invested=inv[:3], year=int(year)))
         import recommendations as _recmod
         entry['gains_table'] = _recmod.to_gains_table(chosen)
+        # His own recommendations join the library, so the next client's
+        # review can suggest them (Claude keeps the library; nobody edits it).
+        try:
+            lib = _recmod.LIBRARY
+            text = open(lib).read() if os.path.exists(lib) else ''
+            for i, c in enumerate(rec.get('recs_custom') or []):
+                st = (rec.get('recs') or {}).get('custom_%d' % i) or {}
+                label = (st.get('label') or c.get('label') or '').strip()
+                if not label or ('## ' + label.lower()) in text.lower():
+                    continue
+                key = re.sub(r'[^a-z0-9]+', '_', label.lower()).strip('_')[:40]
+                text += ('\n## %s [%s]\n- When: added by the lead advisor on a '
+                         'consult review (%s).\n- Signs: %s\n- Size: %s a year as he '
+                         'sized it; check against the client.\n- Seen: one consult.\n'
+                         % (label, key, datetime.date.today().isoformat(),
+                            st.get('note') or 'see his note', st.get('gain') or 'not sized'))
+            with open(lib, 'w') as fh:
+                fh.write(text)
+        except Exception:                                    # noqa: BLE001
+            pass
         entry.pop('savings_schedule', None)
         changed.append('recommendations (%d)' % len(chosen))
     _inputs.put(folder, 'deck', entry, by='the lead advisor, on the consult review page',
@@ -455,6 +475,24 @@ def seed(folder, outdir, mode='consult'):
                        'priority': pri, 'decision': dec}, fh)
     with open(os.path.join(folder, '_Audit', 'review_questions.json'), 'w') as fh:
         json.dump(ids, fh, indent=1)
+    # The questions the analysis review asked, kept so the consult review can
+    # say which of them the documents have since answered: a question the
+    # toolkit no longer raises, after new documents, is one they settled.
+    asked_path = os.path.join(folder, '_Audit', 'analysis_questions.json')
+    answered_by_docs = []
+    if mode == 'analysis':
+        with open(asked_path, 'w') as fh:
+            json.dump({v['key']: v['text'] for v in ids.values()}, fh, indent=1)
+    else:
+        try:
+            with open(asked_path) as fh:
+                asked = json.load(fh)
+        except (OSError, ValueError):
+            asked = {}
+        now = {v['key'] for v in ids.values()}
+        for key, text in asked.items():
+            if key not in now:
+                answered_by_docs.append({'text': text})
     # The slide wording Claude drafted from the documents, for approval.
     try:
         words = dt.proposed_wording(folder, D) if mode == 'consult' else []
@@ -491,6 +529,7 @@ def seed(folder, outdir, mode='consult'):
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,
+            'answered_by_docs': answered_by_docs,
             'findings': findings(folder, D) if mode == 'analysis' else None}
     # What the lead advisor already decided on an earlier review (the
     # analysis review, or this page before a refresh) carries over, matched

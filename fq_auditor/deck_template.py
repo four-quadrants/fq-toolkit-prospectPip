@@ -791,8 +791,10 @@ def slide_fills(D):
         rows.append(('Overhead', _pct(lx['overhead']), _pct(target), 0.0,
                      lv['overhead']['value']))
     if lv['adjustment'].get('value'):
+        adj_goal = _lev.ADJ_IDEAL_HIGH if lx['adjust_pct'] >= _lev.ADJ_THRESHOLD \
+            else lx['adjust_pct'] - 0.10
         rows.append(('Production adjustment %', _pct(lx['adjust_pct']),
-                     ask('goal'), lv['adjustment']['value'] / owner,
+                     _pct(adj_goal), lv['adjustment']['value'] / owner,
                      lv['adjustment']['value']))
     if lv['collections'].get('value'):
         rows.append(('Collection %', _pct(lx['collection_pct']), '99.5%',
@@ -1139,7 +1141,7 @@ def slide_fills(D):
             if N(a) != last:
                 changes.append(int(y))
                 last = N(a)
-        early = sorted(set([y0, y0 + 1, y0 + 2] + changes))
+        early = sorted(set([y0, y0 + 1, y0 + 2, y0 + 3] + changes))
         early = [y for y in early if y < ry][:4]
         cy = int((adv.get('consult_date') or
                   datetime.date.today().isoformat())[:4])
@@ -1402,6 +1404,11 @@ def dropped(D):
         drop.append(12)
     if not D.get('proj2'):
         drop.append(18)
+    # How you get paid: a sole proprietor (Schedule C) has no W-2 and no
+    # distributions to restructure, so the slide has nothing to say.
+    if not income_structure(D) and not (D.get('income_facts') or {}).get('w2') \
+            and not (D.get('facts') or {}).get('Doctor wages'):
+        drop.append(11)
     return drop
 
 

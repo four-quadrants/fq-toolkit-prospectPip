@@ -496,6 +496,8 @@ def gather(folder):
                     got.append(t)
             else:
                 text = _text_for(folder, row['file'], row.get('text_path'))
+                if text is None and row.get('source') and _st._is_pdf(row['source']):
+                    text = _st.layout_text(row['source']) or ''
                 if text is None:
                     continue
                 got = read(text, year, row.get('account') or key[1],

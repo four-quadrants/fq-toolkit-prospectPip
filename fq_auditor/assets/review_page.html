@@ -113,6 +113,14 @@ tr.off td{opacity:.55}
 .tabs .tc{font-weight:400;opacity:.8;font-size:12px}
 section[data-tab].tab-off{display:none}
 .qans{margin-top:6px;background:var(--pale,#f6f3ee)}
+#donebar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px 16px;background:#16324F;color:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.18)}
+#donebar .db-text{display:flex;flex-direction:column;font-size:14px;line-height:1.35;max-width:560px}
+#donebar .db-text b{font-size:15px}
+#donebtn{font:inherit;font-size:16px;font-weight:700;padding:12px 26px;border:0;border-radius:10px;background:#2EA44F;color:#fff;cursor:pointer;white-space:nowrap}
+#donebtn:hover{filter:brightness(1.08)}
+#donebar.is-done{background:#1E6B3A}
+#donebar.is-done #donebtn{background:transparent;border:2px solid #fff;font-size:14px;padding:9px 18px}
+body{padding-bottom:96px}
 .grp td{background:var(--soft,#f4f1ec);font-weight:700;padding-top:14px}
 .slidegroup{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start;margin:0 0 28px}
 .slidepicwrap{position:sticky;top:12px}
@@ -182,6 +190,7 @@ tr.off td{opacity:.55}
   <section id="recsec" data-tab="recs">
     <h2>Recommendations <small id="reccount"></small></h2>
     <p class="note">The firm's usual recommendations, from past consults. The ones this client's documents point to are ticked, with the figure and the reason. Untick what does not fit, tick anything else that does and fill in its figures, or add your own. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
+    <div class="wi-results" id="recimpact" style="margin-bottom:14px"></div>
     <div class="card ledger"><table>
       <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
       <tbody id="recs"><tr><td colspan="5" class="empty">The recommendations appear here once the analyst loads them.</td></tr></tbody>
@@ -231,10 +240,15 @@ tr.off td{opacity:.55}
   <section data-tab="qs">
     <h2>Follow-up questions <small id="qcount"></small></h2>
     <p class="note"><b>First, before the plan.</b> Mark each question; once you are done, the analyst asks Claude to pull in the questions and the email goes to the client. When answers come back (portal, email or new documents), record them here or the team files the documents; the analyst then asks Claude to refresh this page, and the plan, recommendations and slides are worked out again with the answers in, keeping everything you already decided.<br><b>Send</b>: goes in the email to the client. <b>Answered</b>: the team settled it from the file, so it is not asked. <b>Strike</b>: not needed, drop it. <b>Check first</b>: look before deciding. Edit the wording freely.</p>
+    <div id="answered" class="card pad" style="display:none;margin-bottom:14px"></div>
     <div class="qs" id="qs"><div class="card empty">The questions appear here once the analyst loads them.</div></div>
   </section>
 </div>
 
+<div id="donebar" role="region" aria-label="Finish this review">
+  <div class="db-text"><b id="donetitle">When you have been through every tab</b><span id="donestate">press the button so the team knows the review is finished.</span></div>
+  <button type="button" id="donebtn">I'm done with this review</button>
+</div>
 <script>
 (function(){
   var db=null, plan=null, qs=[], timers={}, pending={};
@@ -293,7 +307,7 @@ tr.off td{opacity:.55}
     $('w-sale').className='kv'; $('w-sale').innerHTML=sale;
     $('w-levers').innerHTML='<table><thead><tr><th>Lever</th><th class="r">A year</th><th>Basis</th></tr></thead><tbody>'+
       (w.levers||[]).map(function(l){return '<tr><td><b>'+esc(l.label)+'</b></td><td class="r">'+(l.value==null?'—':$m(l.value))+'</td><td class="'+(l.value==null?'needs':'')+'">'+esc(l.basis)+'</td></tr>'}).join('')+'</tbody></table>';
-    WK=w; if(!WI) wiReset(); wiRender();
+    WK=w; if(!WI) wiReset(); wiRender(); recImpact();
   }
 
 // Port of savings.py: both paths, year-end values.
@@ -433,6 +447,40 @@ function fqModel(P){
   });
   // ---- recommendations ----------------------------------------------
   function m0(v){ return (v==null||v==='')?'':$m(v); }
+  // What the ticked recommendations save each year: year-two items start in
+  // year two, "Later" ones are left out. This is the schedule the plan uses.
+  function recsSchedule(){
+    if(!plan||!plan.recommendations||!WK||!WK.model) return null;
+    var st=plan.recs||{}, cu=plan.recs_custom||[], tot=[0,0,0];
+    var rows=plan.recommendations.map(function(r){return {r:r,k:r.key,custom:false}})
+      .concat(cu.map(function(c,i){return {r:c,k:'custom_'+i,custom:true}}));
+    rows.forEach(function(x){
+      var r=x.r, s=st[x.k]||{}, on=('on' in s)?s.on:(x.custom||r.suggested); if(!on) return;
+      var yr=String(s.year||r.year||1); if(yr==='later') return; var start=(+yr)-1;
+      var inv=(r.invested||[]).slice(); var v1=s.inv1!=null&&s.inv1!==''?n(s.inv1):inv[0], v2=s.inv2!=null&&s.inv2!==''?n(s.inv2):inv[1];
+      var vals=[v1||0, v2||0, (s.inv2!=null&&s.inv2!=='')?n(s.inv2)||0:(inv[2]||v2||0)];
+      var full=Math.max(vals[0],vals[1],vals[2]);
+      for(var i=0;i<3;i++) tot[i]+= i<start?0:(vals[i]||full);
+    });
+    var y0=WK.model.first_year||((WK.base&&WK.base.first_year)||new Date().getFullYear()+1);
+    return [[y0,tot[0]],[y0+1,tot[1]],[y0+2,tot[2]]];
+  }
+  function recImpact(){
+    var el=$('recimpact'); if(!el||!WK||!WK.model) return;
+    var sch=recsSchedule(); if(!sch){ el.innerHTML=''; return; }
+    if(WI){ WI.sched=sch.map(function(r){return r.slice()}); }
+    var M=WK.model;
+    var P={rates:M.rates, consult_date:M.consult_date, age:M.age, retire_age:WI?WI.retire:M.retire_age, start:M.start,
+           current_savings:WI?WI.cur:M.current_savings, spend:M.spend, schedule:sch, income:WI?WI.income:M.income,
+           sale_net:WI?WI.sale:M.sale_net, horizon:M.horizon||90};
+    var r=fqModel(P), base=WK.base||{}, lasts=r.fq_end>=-1000;
+    el.innerHTML=
+      '<div class="tile"><span class="k">Invested, years 1 · 2 · 3</span><span class="v">'+$m(sch[0][1])+'</span><span class="s">'+$m(sch[1][1])+' · '+$m(sch[2][1])+'</span></div>'+
+      '<div class="tile good"><span class="k">With 4Q at retirement</span><span class="v">'+$m(r.fq_at)+'</span><span class="s">'+(base.fq_at?((r.fq_at-base.fq_at>=0?'+':'')+$m(r.fq_at-base.fq_at)+' vs the proposal'):'')+'</span></div>'+
+      '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">Difference '+$m(r.fq_at-r.cur_at)+'</span></div>'+
+      '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(P.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
+    if(typeof wiRender==='function') wiRender();
+  }
   function renderRecs(){
     if(!plan||!plan.recommendations) return;
     var st=plan.recs||{}, cu=plan.recs_custom||[];
@@ -458,6 +506,7 @@ function fqModel(P){
         '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="inv2" value="'+v('inv2',m0(inv[1]))+'" placeholder="0" aria-label="Year 2"></td></tr>';
     }).join('');
     $('reccount').textContent=on+' of '+rows.length+' in the plan';
+    recImpact();
   }
   function recSave(){ pending.rec=true; debounce('rec',function(){ write('plan/figures',{recs:plan.recs, recs_custom:plan.recs_custom||[]},function(){pending.rec=false;},'recommendations'); }); }
   document.addEventListener('change',function(e){
@@ -473,7 +522,7 @@ function fqModel(P){
   document.addEventListener('input',function(e){
     var el=e.target; if(!el||!el.dataset||!el.dataset.rk||el.type==='checkbox'||el.tagName==='SELECT'||!plan) return;
     plan.recs=plan.recs||{}; var o=Object.assign({},plan.recs[el.dataset.rk]||{}); o[el.dataset.f]=el.value; plan.recs[el.dataset.rk]=o;
-    recSave();
+    recSave(); recImpact();
   });
   document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='recadd'||!plan) return;
@@ -602,6 +651,35 @@ function fqModel(P){
     plan.email=e.target.value; plan.email_edited=true; pending.email=true;
     debounce('email',function(){ write('plan/figures',{email:plan.email,email_edited:true},function(){pending.email=false;},'email edited'); });
   });
+  function renderAnswered(){
+    var el=$('answered'); if(!el||!plan) return;
+    var a=plan.answered_by_docs||[];
+    if(!a.length||plan.mode==='analysis'){ el.style.display='none'; return; }
+    el.style.display='';
+    el.innerHTML='<b>Answered by the documents received since the analysis review ('+a.length+')</b>'+
+      '<div class="note" style="margin:4px 0 8px">The toolkit no longer needs to ask these: the documents that came in settle them.</div>'+
+      '<ul style="margin:0;padding-left:18px">'+a.map(function(x){ return '<li class="basis" style="margin:3px 0">'+esc(x.text)+'</li>'; }).join('')+'</ul>';
+  }
+  function renderDone(){
+    var b=$('donebtn'), st=$('donestate'), t=$('donetitle'), bar=$('donebar'); if(!b||!plan) return;
+    if(plan.done){
+      bar.classList.add('is-done');
+      t.textContent='\u2713 Review finished '+String(plan.done).slice(0,10);
+      st.textContent='The team can pull it in now. Changed your mind? Reopen it, change anything, and finish again.';
+      b.textContent='Reopen';
+    } else {
+      bar.classList.remove('is-done');
+      t.textContent='When you have been through every tab';
+      st.textContent='press the button so the team knows the review is finished.';
+      b.textContent='I\u2019m done with this review';
+    }
+  }
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='donebtn'||!plan) return;
+    plan.done=plan.done?null:new Date().toISOString();
+    write('plan/figures',{done:plan.done},null,plan.done?'review marked done: tell the analyst it is ready to pull in':'review reopened');
+    renderDone();
+  });
   function applyMode(){
     var mode=(plan&&plan.mode)||'consult';
     document.body.classList.toggle('mode-analysis',mode==='analysis');
@@ -628,7 +706,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v25';
+  var BUILD='v28';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
@@ -674,7 +752,7 @@ function fqModel(P){
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
-      plan=incoming; applyMode(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
+      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
       showEmail(false);
       ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=plan.notes||''; });
       var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();

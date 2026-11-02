@@ -1,196 +1,180 @@
-# Setting up the FQ Toolkit on a Mac
+# FQ Toolkit: setting up a Mac, and using it
 
-You do this once. After that, everything is a double-click.
+For the analyst taking the toolkit over. Setup is once per Mac, about 30
+minutes. Every command below is typed into **Terminal** (press `Cmd + Space`,
+type "terminal", press return), one at a time, exactly as written.
 
-Nothing you install sends client documents anywhere. The toolkit reads files on
-your own Mac and on the Analysis share, and writes its results back to the
-client's folder. There is no cloud account and no login.
+When Terminal asks for your Mac password, **typing shows nothing at all**. That
+is normal: type it and press return.
 
 ---
 
-## Step 1 — Install the two things it needs
+## Part 1: install (once per Mac)
 
-About ten minutes, once, and you never need Terminal again afterwards.
+### 1. Apple's developer tools
 
-Open **Terminal**: press `Cmd + Space`, type "terminal", press return. A window
-with a text prompt appears.
+```
+xcode-select --install
+```
 
-**a) Install Homebrew**, which is how Macs install tools like this. Copy the
-line below, paste it, press return:
+A window opens; click **Install** and wait for it to finish (a few minutes).
+If it says they are already installed, carry on.
+
+### 2. Homebrew (how Macs install the tools below)
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-It asks for your Mac password. **Typing shows nothing at all** — no dots, no
-asterisks. That is normal. Type it and press return.
-
-This takes several minutes and prints a lot of text. If it finishes by telling
-you to run two more commands under a heading like "Next steps", copy and run
-those too — Homebrew does not work until you do.
-
-**b) Install Python and the text reader.** Paste this, press return:
+When it finishes it prints **"Next steps"** with two or three commands. Copy and
+run those too; Homebrew does not work until you do. Then check:
 
 ```
-brew install python tesseract
+brew --version
 ```
 
----
+### 3. Python and the three tools the toolkit uses
 
-## Step 2 — Connect to the Analysis share
+```
+brew install python@3.13 tesseract poppler git
+```
 
-The client folders live on the office server, not on your Mac.
+- `python@3.13` runs the toolkit
+- `tesseract` reads scanned and photographed pages
+- `poppler` lets Claude look at PDF pages directly
+- `git` keeps your copy of the toolkit up to date
 
-In Finder: **Go → Connect to Server** (`Cmd + K`), enter:
+### 4. Claude Code (how the toolkit asks Claude to read documents)
+
+The toolkit uses Claude on the firm's team seat, not a paid API key.
+
+```
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Then start it once and sign in with your **firm** Claude account:
+
+```
+claude
+```
+
+Follow the sign-in prompts in the browser, then type `/exit` to leave. Check it
+is where the toolkit looks for it:
+
+```
+ls ~/.local/bin/claude
+```
+
+**Never set an `ANTHROPIC_API_KEY`.** The toolkit refuses to run with one,
+because that would bill outside the team subscription.
+
+### 5. The Analysis share (where the client folders live)
+
+In Finder: **Go > Connect to Server** (`Cmd + K`), enter
 
 ```
 smb://192.168.62.170/Analysis
 ```
 
-Click Connect and sign in with your office account. Tick "Remember this
-password in my keychain" so you are not asked every morning.
+Connect, sign in with your office account and tick **Remember this password in
+my keychain**. Prospects live under `Brogan/Prospects/2026` (the folder name is
+historical; leave it).
 
-You should end up with an **Analysis** drive in the Finder sidebar. Prospects
-live under `Brogan/Prospects/2026`.
+To have it reconnect at login: **System Settings > General > Login Items**, click
+**+**, and add the **Analysis** drive.
+
+### 6. The toolkit itself
+
+```
+cd ~/Desktop
+git clone https://github.com/<firm org>/<repo>.git FQ_Toolkit/prospectPip
+```
+
+(Use the address on the repo's GitHub page under the green **Code** button. You
+need to have been added to the repo first.)
+
+One file is deliberately **not** in git, because it holds masked wording from
+a client deck: `deck_examples.json` (box-by-box examples for drafted slide
+wording). Copy it from the previous analyst's Mac into
+`FQ_Toolkit/prospectPip/fq_auditor/assets/`. Without it the toolkit still
+works; drafted wording is just less like the firm's.
+
+### 7. First start
+
+In Finder, open `Desktop/FQ_Toolkit/prospectPip/fq_auditor`, **right-click**
+`Open FQ Toolkit.command` and choose **Open**, then **Open** again. (Right-click
+the first time only; macOS blocks a downloaded script until you confirm it.)
+
+The first start installs the Python libraries it needs, which takes a few
+minutes. Your browser then opens the toolkit. Leave the Terminal window open
+while you work; closing it stops the toolkit.
+
+### 8. The Claude side: the FQ Prospect plugin
+
+In the Claude desktop app, install the firm's **FQ Prospect** plugin. It holds
+the things only Claude can do for the toolkit:
+
+- pulling a client's documents and checklist from LaunchBay
+- loading and pulling in the lead advisor's review pages
+
+The LaunchBay connector must be connected in your Claude account.
 
 ---
 
-## Step 3 — Install the toolkit
+## Part 2: one client, start to finish
 
-The firm will send you a zip called something like `FQ Toolkit a1b2c3d.zip`.
+The app's tabs run in this order, and the dots across the top show where each
+client stands (green: up to date; orange: something it is built from has
+changed). **Update N out of date** rebuilds whatever has gone orange, in order.
 
-1. Double-click it to unzip. You get a folder called **FQ Toolkit**.
-2. Open that folder.
-3. **Right-click** `Install FQ Toolkit.command` and choose **Open**, then click
-   **Open** again in the box that appears.
+| Step | Where | What you do |
+|---|---|---|
+| Documents | Claude | "Pull [client] from LaunchBay" (or let the scheduled pull do it) |
+| 1 Intake | App | Pick the client; it downloads and audits. Review & file, then **Build File Tree** |
+| 2 Initial notes | App | Build. Claude reads the credit reports here the first time |
+| 3 Cash flow, Assumptions | App | Build each. Claude reads every bank statement (it must tie out to the dollar) and every investment statement |
+| 4 Analysis review | Claude | "Load [client]'s analysis review". Share the link with the lead advisor (edit access). He checks what was found and marks the questions; the email to the client writes itself on the page, and he copies it from there |
+| Answers come back | App | New documents go through Intake, then **Update** |
+| 5 Consult review | Claude | "Load [client]'s consult review". He works through open questions, the plan, recommendations, projections, slides |
+| Pull in | Claude | "Pull in [client]'s consult review". Claude reads his notes first |
+| Deck | App | **Build the deck**. It opens in Keynote or PowerPoint and stays editable |
 
-   Right-click rather than double-click: macOS blocks anything that arrived
-   from somewhere else until you confirm it once. You do this once per file.
-
-It copies everything to `FQ_Toolkit` on your Desktop and opens that folder.
-
-**Updating later** is the same thing again — the firm sends a newer zip, you
-unzip and run the installer. It keeps the working folder you had chosen, so you
-do not have to set it up again. If you are ever unsure which version you are
-running, open `VERSION.txt` and read it to him.
-
----
-
-## Step 4 — Check it worked
-
-Double-click **`Check This Mac.command`** in the Desktop folder it just made.
-
-It prints a line per item and tells you plainly what, if anything, is wrong —
-with the exact command that fixes it. Anything marked `STOP` has to be sorted
-before the toolkit will run; anything marked `note` is worth knowing but is not
-blocking.
-
-Same right-click-then-Open the first time, for the same reason.
-
----
-
-## Step 5 — Start it
-
-Double-click **`Start FQ Toolkit.command`**.
-
-A Terminal window opens and your browser opens the toolkit. **Leave the Terminal
-window alone while you work** — closing it shuts the toolkit down.
-
-You will see four tabs.
-
-### 1 · Download Files
-
-Pick the client's folder, then press **Download from LaunchBay** to pull
-everything they have uploaded.
-
-The **Audit** button beside it turns **green with a tick** when every document
-LaunchBay lists is already on your Mac — that is your signal there is nothing
-left to fetch. It stays grey if documents are missing, and also if the list
-itself is out of date, because "nothing new" from a stale list looks exactly
-like a client who has sent nothing.
-
-### 2 · Audit & File
-
-Press **Run the audit**. The first run on a client takes a few minutes because
-it reads every page of every document. After that it is quick — it remembers
-what it read, keyed to the contents of each file, so renaming or moving
-documents does not cause a re-read, and a client sending five more documents
-means only those five are read.
-
-### 3 · Review
-
-This is where the work happens.
-
-- **The checklist is at the top.** Outstanding items first. Each one names the
-  documents that answered it, and clicking a document name opens it — PDFs as
-  a page image, spreadsheets as a proper grid with column letters and row
-  numbers.
-- **"Your call" on every item.** The auditor reads text; it cannot open a debt
-  schedule and judge whether the rows under the practice loans are the doctor's
-  car. When you know better, say so: satisfied, practice side only, personal
-  side only, not applicable, or still missing, plus a note. Your answer carries
-  into the chase list and the client email, not just the screen.
-- **Decide these** lists documents it could not place confidently.
-- **Save decisions** as often as you like. It confirms, then re-arms as soon as
-  you change anything else.
-- **Build File Tree**, at the bottom, files everything. It re-runs the audit
-  itself, so it picks up whatever you just saved.
-
-Hovering any number under "Where this client stands" tells you what it is
-counting.
-
-### 4 · Redact
-
-For producing shareable copies with identifiers removed. Not needed for
-ordinary intake.
+The first build of a client takes longer (Claude reading statements and
+reports, a few minutes to twenty for a large client). After that, only new
+documents are read.
 
 ---
 
 ## Things worth knowing
 
-**Originals are never moved.** Filing makes copies. If something is filed
-wrongly, the original is still sitting in `Original_sourcedocs` exactly where
-the client put it.
-
-**The internal report is internal.** Its residual-PII section lists real account
-and ID numbers found in the documents. Never forward it to a client. The draft
-email is generated separately and checked automatically — if an account number
-or ID would leak into it, the tool refuses to write the email at all rather than
-hand you something unsafe.
-
-**Passwords the client sent are saved beside the documents**, in
-`Original_sourcedocs/_PASSWORDS.txt`, copied word for word. This means an
-encrypted return can actually be opened — and it also means that file is as
-sensitive as the documents themselves.
+- **Originals are never moved.** Filing makes copies; `Original_sourcedocs`
+  stays exactly as the client sent it.
+- **What Claude reads is checked.** Bank statements must balance to the dollar;
+  credit report, account and return figures must appear in the document's own
+  text. Anything that does not check out is flagged, never quietly used.
+- **The internal audit report lists real account numbers.** Never forward it.
+- **Client passwords** are saved in `Original_sourcedocs/_PASSWORDS.txt`; treat
+  it as sensitive as the documents.
+- **Commits:** always in this order, so the check reads what is about to go in:
+  ```
+  git add -A && python3 fq_auditor/precommit_check.py && git commit -m "what changed" && git push
+  ```
+  The check stops anything that looks like an account number, a birthdate or
+  other client detail reaching git. If it flags something, replace it with an
+  invented example, then run the whole line again.
 
 ---
 
 ## If something goes wrong
 
-Run **`Check This Mac.command`** first. It rules out the boring causes in about
-two seconds.
-
-**"command not found: brew"** — Homebrew did not finish installing, or the
-"Next steps" commands it printed were not run. Redo step 1a and read the last
-few lines it prints.
-
-**The window flashes and disappears** — right-click the `.command` file and
-choose Open rather than double-clicking.
-
-**The browser says the site can't be reached** — an older copy of the toolkit is
-probably still running and holding the port. Close every Terminal window running
-it and start again, or run `pkill -f fq_app.py`.
-
-**A preview says the app is older than the page** — exactly what it says. Quit
-the toolkit and start it again.
-
-**A preview says a PDF is encrypted** — the client sent it locked and did not
-send us a password that opens it. Ask them for it.
-
-**The client folders are missing** — the Analysis share has unmounted. Redo
-step 2.
-
-**A document comes out unrecognised** — usually a scan too faint to read, or a
-document type the classifier has not been taught yet. It appears in the
-unexpected section rather than being silently ignored. Send it to the firm and it
-can be added.
+- **"command not found: brew"**: step 2's "Next steps" commands were not run.
+- **The window flashes and disappears**: right-click the `.command` file and
+  choose Open.
+- **The browser says the site can't be reached**: an older copy is still
+  running. `pkill -f fq_app.py`, then start it again.
+- **"Claude not available"** in a build log: sign in again (`claude`, then
+  follow the prompts), and check `ls ~/.local/bin/claude`.
+- **The client folders are missing**: the Analysis share unmounted; redo step 5.
+- **A statement "DOES NOT TIE"** in the build log: open it and look; usually a
+  page missing from the PDF. The account is left out of the cash flow until it
+  ties or is replaced.

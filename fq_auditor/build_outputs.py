@@ -150,6 +150,11 @@ def step_assumptions(folder, client, outdir):
         print('   reading the returns and statements for the review page\u2026')
         D = _dt.figures(folder, client)
         words = _dt.proposed_wording(folder, D)
+        try:
+            import recommendations as _rec
+            _rec.claude_candidates(folder, D)
+        except Exception as exc:                             # noqa: BLE001
+            print('   recommendations: %s' % exc)
         print('   ready for review: pay structure %s, %d account returns, %d drafted boxes'
               % ('read' if D.get('income_facts', {}).get('total_tax') else 'incomplete',
                  sum(1 for v in (D.get('returns') or {}).values()

@@ -417,3 +417,8 @@ Monday, in order
 6. Setup guide for the analyst's Mac: xcode-select --install; Homebrew; brew install python@3.13 tesseract poppler;
    Claude Code login; mount smb://192.168.62.170/Analysis. Copy assets (consult_template.pptx, deck_examples.json).
 7. Commit.
+8. GitHub: transfer the repo to the firm's GitHub organization (repo Settings > Danger zone > Transfer;
+   needs owner rights in the org), keep it private, give both analysts Admin access. On each Mac afterwards:
+   git remote set-url origin <new org URL>. Files git does not carry (allowlist): fq_auditor/assets/
+   consult_template.pptx and deck_examples.json; copy them by hand (deck_examples holds masked client wording,
+   so it stays out of git).

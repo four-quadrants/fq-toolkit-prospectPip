@@ -257,7 +257,17 @@ def as_statements(folder):
     saved = _load(folder)
     out, used = {}, {}
     for sha, f in saved['files'].items():
-        good = [s for s in f['statements'] if s['ties']]
+        # A statement whose balances tie but whose transaction list came back
+        # short (a practice account with hundreds of lines: Rebol's First
+        # Citizens accounts) is still right on the totals. Its figures are
+        # used; its transactions come from the toolkit's own reading.
+        for st_ in f['statements']:
+            st_['balances_tie'] = st_['ties'] or (
+                None not in (st_.get('beginning_balance'), st_.get('ending_balance'),
+                             st_.get('total_in'), st_.get('total_out')) and
+                abs(st_['beginning_balance'] + st_['total_in'] - st_['total_out'] -
+                    st_['ending_balance']) <= 1.0)
+        good = [s for s in f['statements'] if s['balances_tie']]
         if not good or len(good) != len(f['statements']):
             continue
         used[sha] = True
@@ -281,8 +291,10 @@ def as_statements(folder):
                 'begins': _date(s.get('period_start')), 'ends': ends,
                 'account': s.get('account_last4'), 'side': side,
                 'expenses': s.get('total_out'),
-                'notes': ['Read by Claude; balances and transactions tie.'],
-                'source': f['path'], 'text_path': None, 'claude_tx': tx})
+                'notes': ['Read by Claude; balances and transactions tie.' if s['ties'] else
+                          'Read by Claude; balances tie, transactions read by the toolkit.'],
+                'source': f['path'], 'text_path': None,
+                'claude_tx': tx if s['ties'] else None})
     return out, used
 
 

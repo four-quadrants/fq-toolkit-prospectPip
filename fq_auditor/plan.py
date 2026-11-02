@@ -210,8 +210,14 @@ def refinance(rows, this_year=None):
         revolving = 'line of credit' in ' '.join(
             str(r.get(k) or '') for k in ('creditor', 'description')).lower()
         ending = mat and mat < 2090 and mat - this_year <= 2
-        if bal >= REFI_MIN_BALANCE and not ending and (
-                revolving or rate is None or rate >= 0.05):
+        # A loan on a short schedule (equipment financed over five years)
+        # costs a lot each month for its balance; stretching it frees
+        # cashflow even at a low rate. Spaulding: five Patterson loans added
+        # in 14 months, "a potential refinance could lower payments".
+        short = mat and mat < 2090 and 2 < mat - this_year <= 5 and \
+            bal >= 10000
+        if not ending and (short or (bal >= REFI_MIN_BALANCE and (
+                revolving or rate is None or rate >= 0.05))):
             cands.append(r)
         else:
             keep.append(r)

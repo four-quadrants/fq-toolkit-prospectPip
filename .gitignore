@@ -19,6 +19,7 @@
 !*.md
 !Cena_5.html
 !fq_auditor/assets/review_page.html
+
 !.gitignore
 
 # 4. belt and braces: never these, even if a rule above would allow them
@@ -89,3 +90,6 @@ __pycache__/
 #    to write it while any of that client survives. Named exactly, so no other
 #    .pptx can ride in on this line.
 !fq_auditor/assets/consult_template.pptx
+
+# The plugin manifest is code, not client data.
+!plugin/fq-prospect/.claude-plugin/plugin.json

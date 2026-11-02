@@ -40,6 +40,7 @@ CATALOG = [
     ('practice_surplus', 'Practice bank surplus balance **', 1, 'once'),
     ('personal_surplus', 'Personal bank surplus balance **', 1, 'once'),
     ('llc_surplus', 'LLC / other entity bank surplus balance **', 1, 'once'),
+    ('s_corp', 'Incorporate the practice (S corporation election)', 1, 'cash'),
     ('pay_structure', 'New payroll & distribution structure', 1, 'cash'),
     ('stop_acceleration', 'Stop personal & LLC debt acceleration', 1, 'cash'),
     ('refinance', 'Practice debt refinance', 2, 'refi'),
@@ -56,7 +57,11 @@ CATALOG = [
     ('tax_management', 'Better tax management', 2, 'cash'),
     ('sell_property', 'Sell a building or property **', 2, 'once'),
     ('loan_dropoff', 'Loan paid off, payment freed', 2, 'cash'),
-    ('marketing_ends', 'A marketing or other contract ends', 2, 'cash'),
+    ('growth_trend', 'Current growth trend continues', 1, 'practice'),
+    ('marketing_ends', 'A marketing campaign or contract ends (direct mail, consultant)', 1, 'cash'),
+    ('associate_change', 'Associate or doctor days change', 2, 'practice'),
+    ('remove_pmi', 'Remove PMI on the home mortgage', 1, 'cash'),
+    ('profit_share', 'New or redirected profit share / cash balance plan', 2, 'plan'),
     ('five_k_rule', '$5,000 rule', 1, 'cash'),
 ]
 LABEL = {k: l for k, l, _y, _k in CATALOG}
@@ -103,7 +108,7 @@ def acceleration(folder):
     return out
 
 
-def propose(folder, D=None):
+def propose(folder, D=None, use_claude=True):
     """[{key, label, year, kind, suggested, gain, invested, basis}] for the
     whole catalog, the suggested ones first."""
     import deck_template as _dt
@@ -139,6 +144,13 @@ def propose(folder, D=None):
             'unchanged: the practice keeps %s a month more.'
             % ('${:,.0f}'.format(inc['w2']), '${:,.0f}'.format(inc['p_w2']),
                '${:,.0f}'.format(inc['gain'])), invested=[0, 0, 0])
+    f = D.get('income_facts') or {}
+    if not f.get('w2') and not (D.get('facts') or {}).get('Doctor wages'):
+        put('s_corp', True, None,
+            'The practice files on Schedule C: no W-2, self-employment tax on '
+            'every dollar of profit, and tax estimates that swing. An S '
+            'corporation allows a W-2 and distributions (his Spaulding deck).',
+            invested=[0, 0, 0])
     acc = acceleration(folder)
     if acc:
         extra = sum(p - s for _l, s, p in acc) * 12
@@ -151,14 +163,13 @@ def propose(folder, D=None):
     worth = [r for r in rf.get('candidates') or []
              if (r.get('rate') or 0) >= REFI_RATE_WORTH_IT or r.get('rate') is None]
     if rf.get('freed'):
-        put('refinance', bool(worth), rf['freed'] * 12,
-            ('%d practice loans at 6%% or more, or with no stated rate; '
-             'consolidated at %.0f%% over %d years they free %s a month.'
-             % (len(worth), _plan.REFI_RATE * 100, _plan.REFI_YEARS,
-                '${:,.0f}'.format(rf['freed'])))
-            if worth else 'The practice loans are mostly cheap; a refinance '
-                          'would free %s a month but is not proposed.'
-                          % '${:,.0f}'.format(rf['freed']),
+        n = len(rf.get('candidates') or [])
+        put('refinance', bool(worth) or rf['freed'] >= 1000, rf['freed'] * 12,
+            '%d practice loan%s that are costly or on short schedules (%s a '
+            'month today); stretched over %d years at %.0f%% they free about '
+            '%s a month.' % (n, '' if n == 1 else 's',
+                             '${:,.0f}'.format(rf['payment_now']), _plan.REFI_YEARS,
+                             _plan.REFI_RATE * 100, '${:,.0f}'.format(rf['freed'])),
             invested=_invest('refi', rf['freed'] * 12, REFI_SHARE))
     if 'overhead' in g:
         put('overhead', True, g['overhead']['gain'], g['overhead']['basis'])
@@ -215,12 +226,34 @@ def propose(folder, D=None):
                 for r in soon) + '.', invested=[0, 0, 0])
     put('five_k_rule', True, None, 'Every consult: the firm advises on any '
                                    'decision over $5,000.', invested=[None, None, None])
+    # Claude's pass over the library: it fills in what the rules could not
+    # size, and adds what the rules do not know to look for.
+    if use_claude:
+        for c in _saved_candidates(folder):
+            key = re.sub(r'[^a-z0-9_]', '_', str(c['key']).lower())
+            have = out.get(key)
+            if have and have['suggested'] and have['gain'] is not None:
+                continue
+            gain = c.get('gain') if isinstance(c.get('gain'), (int, float)) else None
+            inv = [c.get('invested_year1') or 0, c.get('invested_year2') or 0,
+                   c.get('invested_year2') or 0]
+            year = 2 if str(c.get('year')) == '2' else 1
+            if key not in years:
+                years[key] = year
+                kinds[key] = 'cash'
+                LABEL[key] = c.get('label') or key
+            put(key, bool(c.get('suggested')), gain,
+                ((have or {}).get('basis') + ' ' if have and have.get('basis') else '') +
+                'Claude: ' + (c.get('basis') or ''),
+                invested=inv if any(inv) else None,
+                label=c.get('label') if key not in dict((k, 1) for k, *_r in CATALOG) else None)
     for key, _l, _y, _k in CATALOG:
         if key not in out:
             put(key, False, None, '')
     rows = list(out.values())
     order = [k for k, _l, _y, _k in CATALOG]
-    rows.sort(key=lambda r: (not r['suggested'], order.index(r['key'])))
+    rows.sort(key=lambda r: (not r['suggested'],
+                             order.index(r['key']) if r['key'] in order else len(order)))
     return rows
 
 
@@ -251,3 +284,121 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# ---- Claude reads the library against the client ---------------------------
+
+LIBRARY = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       'recommendations_library.md')
+SAVED = os.path.join('_Audit', 'recommendations_claude.json')
+
+PROMPT = """You are helping a Four Quadrants advisor prepare a consult for a dental
+practice owner. Below is the firm's library of recommendations (what each is,
+when it applies, the signs in the documents, how it is sized), then what the
+toolkit has found for this client, then what its own rules already propose.
+
+Go through the WHOLE library. For each recommendation that this client's
+facts point to, and that the rules did not already size, say so. Also
+propose anything the library does not have if the facts clearly call for it
+(give it a new key).
+
+LIBRARY
+{library}
+
+THIS CLIENT
+{facts}
+
+ALREADY PROPOSED BY THE RULES (key: figure a year, or null)
+{rules}
+
+Return JSON only:
+{{"candidates": [{{"key": "growth_trend", "label": "...",
+  "suggested": true, "year": 1 or 2,
+  "gain": number a year or null if it cannot be sized from these facts,
+  "invested_year1": number or null, "invested_year2": number or null,
+  "basis": "one or two sentences: which facts point to it and how it was sized"}}]}}
+Only use figures that appear in THIS CLIENT, or simple arithmetic on them
+(say the arithmetic in basis). Leave a figure null rather than guess."""
+
+
+def _fact_pack(folder, D):
+    import json as _json
+    pack = {'facts': D.get('facts'), 'concerns': (D.get('adv') or {}).get('concerns'),
+            'levers': {k: {'value': v.get('value'), 'basis': v.get('basis')}
+                       for k, v in (D.get('levers') or {}).items()},
+            'lever_inputs': D.get('lever_inputs'),
+            'pay_from_returns': D.get('income_facts'),
+            'practice_debts': D.get('practice_debts'),
+            'start_portfolio': D.get('start_parts'),
+            'current_savings': D.get('current_savings'),
+            'household_spend_a_year': D.get('spend')}
+    try:
+        import deck as _deck
+        pack['production_by_year'] = _deck.annual_pi(folder)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import inputs as _inputs
+        pack['accounts'] = [_inputs.value(folder, 'qualified_accounts'),
+                            _inputs.value(folder, 'nonqualified_accounts')]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import debt as _debt
+        pack['personal_debts'] = _debt.gather(folder).get('personal')
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import summary as _summary
+        pack['pnl'] = _summary.gather(folder)
+    except Exception:  # noqa: BLE001
+        pass
+    text = _json.dumps(pack, default=str)
+    return text[:60000]
+
+
+def claude_candidates(folder, D=None, log=print):
+    """Claude's pass over the library for this client, saved to _Audit and
+    reused until the client's facts change. [] when Claude is not available."""
+    import json as _json
+    import hashlib
+    saved_path = os.path.join(folder, SAVED)
+    if D is None:
+        import deck_template as _dt
+        D = _dt.figures(folder, None)
+    rules = {r['key']: r['gain'] for r in propose(folder, D, use_claude=False)
+             if r['suggested']}
+    facts = _fact_pack(folder, D)
+    library = open(LIBRARY).read() if os.path.exists(LIBRARY) else ''
+    stamp = hashlib.sha1((facts + library + _json.dumps(rules)).encode()).hexdigest()
+    try:
+        prev = _json.load(open(saved_path))
+        if prev.get('stamp') == stamp:
+            return prev.get('candidates') or []
+    except (OSError, ValueError):
+        prev = {}
+    try:
+        import ask_claude
+        got = ask_claude.ask_json(PROMPT.format(library=library, facts=facts,
+                                                rules=_json.dumps(rules)),
+                                  cache_dir=os.path.join(folder, '.fq_cache', 'recs'),
+                                  timeout=600, allow=())
+    except Exception as exc:  # noqa: BLE001
+        log('  recommendations: Claude pass skipped (%s)' % exc)
+        return prev.get('candidates') or []
+    cands = [c for c in (got or {}).get('candidates') or [] if c.get('key')]
+    try:
+        with open(saved_path, 'w') as fh:
+            _json.dump({'stamp': stamp, 'candidates': cands}, fh, indent=1)
+    except OSError:
+        pass
+    log('  recommendations: Claude proposed %d from the library' % len(cands))
+    return cands
+
+
+def _saved_candidates(folder):
+    import json as _json
+    try:
+        return _json.load(open(os.path.join(folder, SAVED))).get('candidates') or []
+    except (OSError, ValueError):
+        return []
