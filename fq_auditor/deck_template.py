@@ -1492,6 +1492,78 @@ def _drafts(folder, D, prs, fills, drop):
     return deck_drafts.draft(folder, D, holes(D, prs, fills, drop))
 
 
+# The concern cards on slide 3: (card, bar, heading, body) by shape name.
+_CARDS = [('Shape 5', 'Shape 6', 'Text 7', 'Text 8'),
+          ('Shape 9', 'Shape 10', 'Text 11', 'Text 12'),
+          ('Shape 13', 'Shape 14', 'Text 15', 'Text 16'),
+          ('Shape 17', 'Shape 18', 'Text 19', 'Text 20'),
+          ('Shape 21', 'Shape 22', 'Text 23', 'Text 24')]
+
+
+def _layout_concerns(slide, n):
+    """Lay the concern cards out for how many there are, and stop the text
+    shrinking to fit.
+
+    The template is three cards over two. With four concerns the fifth card
+    sat empty with its placeholders showing, and PowerPoint's shrink-to-fit
+    gave every card a different text size (Spaulding, 2 Nov: a heading
+    running past its card, one body at half the size of the others). Four
+    become a two-by-two grid, three one tall row; every heading and body
+    keeps the template's size and the boxes are sized to their card.
+    """
+    from pptx.util import Pt
+    from lxml import etree
+    A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+    by = {sh.name: sh for sh in slide.shapes}
+    if n >= 5 or n < 3:
+        boxes = [(48, 122, 438, 269), (501, 122, 438, 269), (954, 122, 438, 269),
+                 (48, 404, 664, 269), (728, 404, 664, 269)]
+    elif n == 4:
+        boxes = [(48, 122, 664, 269), (728, 122, 664, 269),
+                 (48, 404, 664, 269), (728, 404, 664, 269)]
+    else:
+        boxes = [(48, 122, 438, 551), (501, 122, 438, 551), (954, 122, 438, 551)]
+    for i, names in enumerate(_CARDS):
+        shapes = [by.get(x) for x in names]
+        if i >= len(boxes):
+            for sh in shapes:
+                if sh is not None:
+                    sh._element.getparent().remove(sh._element)
+            continue
+        x, y, w, h = boxes[i]
+        card, bar, head, body = shapes
+        if card is not None:
+            card.left, card.top, card.width, card.height = Pt(x), Pt(y), Pt(w), Pt(h)
+        if bar is not None:
+            bar.left, bar.top, bar.width = Pt(x), Pt(y), Pt(w)
+            # One accent colour across the cards once they are re-laid out
+            # (the template's bottom row is blue, its top row orange).
+            first = by.get(_CARDS[0][1])
+            if n in (3, 4) and first is not None and bar is not first:
+                try:
+                    bar.fill.solid()
+                    bar.fill.fore_color.rgb = first.fill.fore_color.rgb
+                except Exception:                            # noqa: BLE001
+                    pass
+        long_head = head is not None and len(head.text_frame.text) * 12.5 > (w - 44)
+        if head is not None:
+            head.left, head.top = Pt(x + 22), Pt(y + 25)
+            head.width, head.height = Pt(w - 44), Pt(66 if long_head else 36)
+        if body is not None:
+            top = y + (100 if long_head else 68)
+            body.left, body.top = Pt(x + 22), Pt(top)
+            body.width, body.height = Pt(w - 44), Pt(y + h - top - 18)
+        for sh in (head, body):
+            if sh is None:
+                continue
+            sh.text_frame.word_wrap = True
+            bp = sh.text_frame._txBody.find(A + 'bodyPr')
+            for old in list(bp):
+                if old.tag in (A + 'normAutofit', A + 'spAutoFit', A + 'noAutofit'):
+                    bp.remove(old)
+            etree.SubElement(bp, A + 'noAutofit')
+
+
 def render(folder, client, out, template=TEMPLATE):
     D = figures(folder, client)
     fills = slide_fills(D)
@@ -1558,6 +1630,10 @@ def render(folder, client, out, template=TEMPLATE):
                          % (len(asked), '' if len(asked) == 1 else 's'))
             slide.notes_slide.notes_text_frame.text = note.strip()
 
+    try:
+        _layout_concerns(prs.slides[2], len(adv.get('concerns') or []))
+    except Exception as exc:                                 # noqa: BLE001
+        print('   concerns layout left as the template: %s' % exc)
     for n in sorted(drop, reverse=True):
         _drop(prs, n - 1)
     prs.save(out)

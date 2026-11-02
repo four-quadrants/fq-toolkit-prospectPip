@@ -261,7 +261,7 @@ tr.off td{opacity:.55}
 
   <section data-tab="slides">
     <h2>Slide by slide <small id="scount"></small></h2>
-    <p class="note">Most of the deck fills itself from the numbers. Below are only the slides with something to check: the figures a slide is built on, and any box Claude drafted from the returns and statements. Each slide is shown beside its items, with those boxes outlined in orange and numbered. <b>Use</b>: goes on the slide as written (edit it freely). <b>Drop</b>: the box stays blank, to fill in later. The deck is an ordinary PowerPoint file, so anything can still be changed after it is built.</p>
+    <p class="note">The whole deck, slide by slide: each picture is the deck as it is built now, with every box that comes from this client outlined in orange and numbered to match the list beside it. Change any box and it goes on the slide at the next build; ask Claude to rebuild the deck and refresh this page to see the new pictures. Boxes Claude drafted have <b>Use</b> / <b>Drop</b>. The deck is an ordinary PowerPoint file, so anything can still be changed after it is built.</p>
     <div id="slides"><div class="card empty">The slides appear here once the analyst loads them.</div></div>
   </section>
 
@@ -586,6 +586,8 @@ function fqModel(P){
       right+=its.map(function(x){
         var d=sd[x.id]||'Use', t=(st[x.id]!=null&&st[x.id]!=='')?st[x.id]:x.text;
         var b=function(name,cls){return '<button type="button" class="'+cls+'" data-sid="'+esc(x.id)+'" data-s="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
+        if(x.data) return '<div class="q"><div class="top"><span class="n">'+esc(x.n||'')+'</span><span class="why">'+esc(x.hint||'')+'</span></div>'+
+          '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea></div>';
         return '<div class="q '+(d==='Drop'?'strike':'send')+'"><div class="top"><span class="n">'+esc(x.n||'')+'</span><span class="seg">'+b('Use','send')+b('Drop','strike')+'</span></div>'+
           '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea>'+
           '<div class="why">What goes here: '+esc(x.hint||'')+'</div></div>';
@@ -845,7 +847,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v37';
+  var BUILD='v38';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

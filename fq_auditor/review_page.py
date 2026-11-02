@@ -218,11 +218,23 @@ def apply(folder, plan_json):
             proposed = json.load(fh)
     except (OSError, ValueError):
         proposed = None
+    sd, st = rec.get('sdecisions') or {}, rec.get('stext') or {}
     if proposed is not None:
-        sd, st = rec.get('sdecisions') or {}, rec.get('stext') or {}
         out['slides'] = {k: (None if sd.get(k) == 'Drop' else
                              (st.get(k) if st.get(k) not in (None, '') else v))
                          for k, v in proposed.items()}
+    # His edits to any other box on the deck: kept only where he changed it,
+    # so everything he left alone still follows the figures when they move.
+    try:
+        with open(os.path.join(folder, '_Audit', 'review_slides_data.json')) as fh:
+            data_text = json.load(fh)
+    except (OSError, ValueError):
+        data_text = {}
+    edits = {k: v for k, v in st.items()
+             if k in data_text and v not in (None, '') and v.strip() != data_text[k].strip()}
+    if edits:
+        out.setdefault('slides', {}).update(edits)
+        print('   deck boxes he changed: %s' % ', '.join(sorted(edits)))
     with open(os.path.join(folder, '_Audit', 'review_decisions.json'), 'w') as fh:
         json.dump(out, fh, indent=1)
     print('   figures applied: %s' % (', '.join(changed) or 'none'))
@@ -545,6 +557,38 @@ def seed(folder, outdir, mode='consult'):
     slides = {'items': [{'id': w['id'], 'slide': w['slide'],
                          'heading': w['heading'], 'hint': w['example'],
                          'text': w['text']} for w in words]}
+    # Everything else the deck says about this client, box by box, so the
+    # lead advisor can read the whole deck slide by slide beside its picture
+    # and change any of it: the figures, the concerns, the lever rows, the
+    # debt wording. His edits are applied when the deck is built.
+    data_text = {}
+    if mode == 'consult':
+        try:
+            fills = dt.slide_fills(D)
+            drop_n = set(dt.dropped(D))
+            have = {it['id'] for it in slides['items']}
+            for n in sorted(fills):
+                if n in drop_n:
+                    continue
+                for name, val in fills[n].items():
+                    key = '%d.%s' % (n, name)
+                    text = str(val).replace('\u2019', "'")
+                    if key in have or not text.strip():
+                        continue
+                    blank = text.startswith(('[ADVISOR', '[TBD'))
+                    slides['items'].append({
+                        'id': key, 'slide': n, 'heading': '',
+                        'hint': ('still to write' if blank else
+                                 'from the documents and the plan; edit to change '
+                                 'it on the slide'),
+                        'text': '' if blank else text, 'data': True})
+                    data_text[key] = '' if blank else text
+        except Exception as exc:                             # noqa: BLE001
+            print('   deck boxes skipped: %s' % exc)
+        slides['items'].sort(key=lambda it: (it['slide'], int(
+            (re.findall(r'(\d+)$', it['id']) or ['0'])[0])))
+    with open(os.path.join(folder, '_Audit', 'review_slides_data.json'), 'w') as fh:
+        json.dump(data_text, fh, indent=1)
     fig_slides = sorted({f['slide'] for f in figs if f.get('slide')})
     pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides) \
         if mode == 'consult' else {}
@@ -554,7 +598,7 @@ def seed(folder, outdir, mode='consult'):
     try:
         from pptx import Presentation
         tp = Presentation(dt.TEMPLATE)
-        for n in fig_slides:
+        for n in sorted({it['slide'] for it in slides['items']} | set(fig_slides)):
             tx = [sh.text_frame.text.strip() for sh in tp.slides[n - 1].shapes
                   if sh.has_text_frame and sh.text_frame.text.strip()]
             titles[n] = ' / '.join(tx[:2])[:80]
@@ -713,9 +757,11 @@ def slide_pictures(folder, items, outdir, also=()):
     drop = dt.dropped(D)
     prs = Presentation(deck_path)
     want = {n: [] for n in also}
-    for i, it in enumerate(items, 1):
-        it['n'] = i
+    # Numbered within each slide, 1, 2, 3... in reading order, to match the
+    # list beside its picture.
+    for it in items:
         want.setdefault(it['slide'], []).append(it)
+        it['n'] = len(want[it['slide']])
     keep = {}
     for n, its in want.items():
         idx = n - 1 - sum(1 for d in drop if d < n)
