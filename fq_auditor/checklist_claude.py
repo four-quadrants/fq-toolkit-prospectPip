@@ -189,6 +189,52 @@ def portal_comments(folder):
     return []
 
 
+def call_context(folder, cap=3500):
+    """What the team already knows from the initial call.
+
+    The IC form, the onboarding specialist's notes and the Otter summary sit
+    in the client folder beside the documents, not among them. They answer
+    things the checklist asks (no associates, rents the building, no line of
+    credit) and say what the client is planning, so an item can be judged
+    against what was said, not only what was uploaded.
+    """
+    import glob
+    import subprocess
+    out = []
+    try:
+        import intake_form as _ic
+        src = _ic.find_form_near(folder)
+        if src:
+            form = _ic.parse(src)
+            out.append('  IC form (%s):' % os.path.basename(src))
+            for k, v in form.items():
+                if v not in (None, '', '\u2014'):
+                    out.append('    %s: %s' % (k, ' '.join(str(v).split())))
+    except Exception:                                        # noqa: BLE001
+        pass
+    for p in sorted(glob.glob(os.path.join(folder, '*'))):
+        name = os.path.basename(p)
+        low = name.lower()
+        text = ''
+        if low.endswith('.pdf') and 'notes' in low:
+            try:
+                text = subprocess.run(['pdftotext', '-layout', p, '-'],
+                                      capture_output=True, text=True,
+                                      timeout=60).stdout
+            except Exception:                                # noqa: BLE001
+                text = ''
+        elif low.endswith('.pages') and ('otter' in low or 'notes' in low):
+            try:
+                import iwork
+                text = iwork.text_of(p)
+            except Exception:                                # noqa: BLE001
+                text = ''
+        text = ' '.join(text.split())
+        if text:
+            out.append('  %s:\n    %s' % (name, text[:cap]))
+    return out
+
+
 def _judgment():
     """The firm's rules for what is worth asking a client for, kept by
     Claude in intake_judgment.md."""
@@ -201,7 +247,7 @@ def _judgment():
         return '(none)'
 
 
-def build_prompt(item, docs, names, comments=()):
+def build_prompt(item, docs, names, comments=(), call=()):
     lines = []
     for d in docs:
         bits = [b for b in (d['type'], d['side'], d['year'], d['period'],
@@ -229,6 +275,9 @@ WHAT THE CLIENT HAS SENT, with what we read from each:
 %s
 
 WHAT WAS TYPED IN THE PORTAL (client and team messages):
+%s
+
+WHAT THE TEAM ALREADY KNOWS FROM THE INITIAL CALL (IC form and call notes):
 %s
 
 Has the ask been satisfied?
@@ -262,6 +311,10 @@ How to judge:
   owner takes draws) settles the ask: mark it satisfied and say why.
 - A sole proprietor has no separate practice return; the practice is the
   Schedule C inside the personal 1040.
+- What the client said on the IC form or the call counts like a portal answer
+  ("no associates", "rents the building"). Where the documents disagree with
+  it (the form says no associates, the production report names a second
+  doctor), say so in team_notes.
 
 THE FIRM'S JUDGMENT (follow it over the general rules above):
 %s
@@ -281,6 +334,7 @@ How to write the asks:
   is the whole thing.""" % (
         asked, extra, '\n'.join(lines) or '  (nothing relevant has arrived)',
         '\n'.join(comments) or '  (nothing typed)',
+        '\n'.join(call) or '  (no IC form or call notes in the client folder)',
         SCHEMA, _judgment())
 
 
@@ -295,13 +349,14 @@ def main():
     docs = inventory(a.folder)
     names = names_for(a.folder)
     comments = portal_comments(a.folder)
+    call = call_context(a.folder)
     if a.only:
         items = [i for i in items if i.get('id') == a.only]
     print('%d checklist items, %d documents\n' % (len(items), len(docs)))
 
     if not a.run:
         item = items[0]
-        print(build_prompt(item, relevant(item, docs), names, comments))
+        print(build_prompt(item, relevant(item, docs), names, comments, call))
         print('\n[dry run. add --run to ask]')
         return
 
@@ -318,7 +373,7 @@ def main():
     import concurrent.futures
 
     def one(item):
-        prompt = build_prompt(item, relevant(item, docs), names, comments)
+        prompt = build_prompt(item, relevant(item, docs), names, comments, call)
         try:
             return item, ask_claude.ask_json(prompt, cache_dir=cdir,
                                              add_dirs=[os.path.abspath(a.folder)]), None

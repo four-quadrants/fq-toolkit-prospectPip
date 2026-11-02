@@ -74,6 +74,9 @@ def _iwa(data):
 RUN = re.compile(rb'[\x09\x0a\x20-\x7e\xc2-\xf4][\x09\x0a\x20-\x7e\x80-\xbf\xc2-\xf4]{19,}')
 
 
+PROSE = re.compile('[\\t\\n\\x20-\\x7e\\u00a0-\\u00ff\\u2010-\\u2027\\u202f]{20,}')
+
+
 def text_of(path):
     """The readable text of a .pages or .key file, in document order."""
     with zipfile.ZipFile(path) as z:
@@ -82,8 +85,16 @@ def text_of(path):
         blobs = [_iwa(z.read(n)) for n in sorted(names)]
     out, seen = [], set()
     for blob in blobs:
-        for run in RUN.findall(blob):
-            s = run.decode('utf-8', 'ignore').strip()
+        # Runs of readable text in the decoded blob. Matching on raw bytes
+        # glued Otter's summary onto a block of binary table data that happens
+        # to be valid UTF-8, and the letter filter then threw the whole summary
+        # away (Weiler's call notes read as empty).
+        for run in PROSE.findall(blob.decode('utf-8', 'ignore')):
+            s = run.strip()
+            # A protobuf length byte can land on '$' or '*' just before the
+            # text ("$Seth Weiler initial call ..."); style names start with
+            # '$' and a lower-case word, and stay filtered below.
+            s = re.sub(r'^[$*](?=[A-Z])', '', s)
             letters = sum(ch.isalpha() for ch in s)
             if len(s) < 20 or letters < 0.55 * len(s) or s in seen:
                 continue

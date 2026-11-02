@@ -85,6 +85,10 @@ class Bundle(object):
         # named a series row, which is exactly where a trend observation
         # belongs, and none of them reached the page.
         self.series_notes = {}
+        # {year: P&L and tax-basis overhead parts}, for the side-by-side table.
+        self.overhead_by_year = {}
+        # {'year', 'months'} when the newest year is a year to date.
+        self.ytd = None
 
     @property
     def forename(self):
@@ -250,9 +254,12 @@ def gather(folder, client=None):
             (_pf.gather(folder) or {}).get('doctor_days') or {},
             years, form.get('associate_comp'))
             or form.get('associate_comp')
+            or (pv_('associates')[0] and pv_('associates')[0] + (
+                ' The IC form says no associates.'
+                if str(form.get('has_associates') or '').strip().lower()
+                .startswith('no') else ''))
             or ('None' if str(form.get('has_associates') or '').strip()
-                .lower().startswith('no') else None)
-            or pv_('associates')[0], TEXT,
+                .lower().startswith('no') else None), TEXT,
              'Provider Summary, days-worked document, IC form'
              if not pv_('associates')[1] or _prod.load_roles(folder)
              else pv_('associates')[1],
@@ -296,8 +303,12 @@ def gather(folder, client=None):
             p.get('overhead_pct'), t.get('overhead_pct'),
             _ic.money(form.get('overhead_stated')), latest, tax_year), TEXT,
              'P&L, 1120-S and IC form', 'composed'),
-        Fact('Overhead, client says', _pct(_ic.money(form.get('overhead_stated'))),
-             PCT, ic_name, 'approximate overhead percentage'),
+        Fact('Overhead, client says',
+             _pct(_ic.money(form.get('overhead_stated')))
+             if re.fullmatch(r'\s*[\d.]+\s*%?\s*', str(form.get('overhead_stated') or ''))
+             else form.get('overhead_stated'),
+             PCT if re.fullmatch(r'\s*[\d.]+\s*%?\s*', str(form.get('overhead_stated') or ''))
+             else TEXT, ic_name, 'approximate overhead percentage'),
         Fact('Overhead, P&L basis', _pct(p.get('overhead_pct')), PCT,
              'P&L %s' % latest if p else None,
              'Expenses + Other Expenses less doctor wages and D&A, '
@@ -591,6 +602,44 @@ def gather(folder, client=None):
     bundle = Bundle(client, blocks, years, series, folder)
     bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0
                              for y in years}
+    # The newest year when it is a year to date: how many months the
+    # production covers (the P&L's months when the production report does not
+    # say), so the by year sheet can show it annualized beside the YTD.
+    bundle.ytd = None
+    if years:
+        y = years[-1]
+        m = (prod.get(y) or {}).get('months') or \
+            (pnl.get(y) or {}).get('months') or 0
+        if 0 < m < 12:
+            bundle.ytd = {'year': y, 'months': m}
+
+    # Overhead side by side: P&L against P&L, return against return, each
+    # year in its own column. The two bases differ by design (what the
+    # bookkeeper books versus what the preparer deducts), so a trend is only
+    # meaningful within one basis.
+    oh_years = sorted(set(pnl) | set(tax))[-3:]
+    bundle.overhead_by_year = {
+        y: {'pnl_income': (pnl.get(y) or {}).get('income'),
+            'pnl_other': (pnl.get(y) or {}).get('other_income'),
+            'pnl_base': (pnl.get(y) or {}).get('income_base'),
+            'pnl_expenses': ((pnl.get(y) or {}).get('expenses') or 0)
+            + ((pnl.get(y) or {}).get('other_expenses') or 0)
+            if pnl.get(y) else None,
+            'pnl_dr': (pnl.get(y) or {}).get('doctor_salary'),
+            'pnl_da': (pnl.get(y) or {}).get('depreciation_amort'),
+            'pnl_oh': (pnl.get(y) or {}).get('overhead'),
+            'pnl_pct': (pnl.get(y) or {}).get('overhead_pct'),
+            'pnl_months': (pnl.get(y) or {}).get('months'),
+            'pnl_source': (pnl.get(y) or {}).get('source')
+            or ('P&L %s' % y if pnl.get(y) else None),
+            'tax_base': (tax.get(y) or {}).get('income_base'),
+            'tax_deductions': (tax.get(y) or {}).get('total_deductions'),
+            'tax_officer': (tax.get(y) or {}).get('officer_comp'),
+            'tax_da': (tax.get(y) or {}).get('depreciation_amort'),
+            'tax_oh': (tax.get(y) or {}).get('overhead'),
+            'tax_pct': (tax.get(y) or {}).get('overhead_pct'),
+            'tax_source': (tax.get(y) or {}).get('source')}
+        for y in oh_years}
     return attach_notes(bundle, folder)
 
 

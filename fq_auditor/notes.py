@@ -61,7 +61,7 @@ def _short(v):
 # what no financial document does: why the client is here, what they are
 # worried about, what they said on the phone.
 NARRATIVE = ('case summary', 'call notes', 'call summary', 'notes',
-             'transcript', 'consult offer')
+             'transcript', 'consult offer', 'otter')
 
 
 def narrative_documents(folder, limit=3, chars=4000):
@@ -69,7 +69,7 @@ def narrative_documents(folder, limit=3, chars=4000):
     import glob as _glob
     out = []
     seen = set()
-    for pattern in ('*.docx', '*.pdf', '*.txt'):
+    for pattern in ('*.docx', '*.pdf', '*.txt', '*.pages'):
         for path in _glob.glob(os.path.join(folder, '**', pattern),
                                recursive=True):
             name = os.path.basename(path).lower()
@@ -93,6 +93,12 @@ def _read_any(path):
             import docx
             d = docx.Document(path)
             return '\n'.join(p.text for p in d.paragraphs)
+        except Exception:
+            return ''
+    if path.lower().endswith('.pages'):
+        try:
+            import iwork
+            return iwork.text_of(path)
         except Exception:
             return ''
     if path.lower().endswith('.pdf'):

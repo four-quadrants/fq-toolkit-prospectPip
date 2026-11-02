@@ -43,6 +43,19 @@ operator guide; the `plugin/fq-prospect` folder holds the Claude skills.
   Claude login, set `FQ_NO_CLAUDE=1`: saved readings in `_Audit` are used.
 - **No em dashes** in anything the team or clients read.
 
+## Read the whole client folder, not only the documents
+
+Beside `Original_sourcedocs` the client folder holds what the team gathered
+before any document arrived: the IC form (`IC form.eml`), the onboarding
+specialist's notes (often a scanned PDF with handwriting), and the Otter call
+summary (`.pages`). The audit and the initial notes both use them:
+`intake_form.py` reads the IC form, `checklist_claude.call_context` gives the
+form and call notes to the checklist check, and `notes.py` reads the call
+notes. Handwriting cannot be OCR'd reliably, so Claude looks at those pages
+itself. Where what the client said disagrees with the documents (no associates
+on the form, a second doctor in the production report), that is a flag for
+the team, not something to resolve quietly.
+
 ## When the code's readers miss a document
 
 The readers know a few layouts (QuickBooks P&L, comparative 1120-S page,

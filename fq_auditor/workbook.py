@@ -124,6 +124,124 @@ def _fact_row(ws, row, fact, cols=5):
     return row + 1
 
 
+def _overhead_simple(block_facts, by_year):
+    """The front sheet's overhead: one line per year and basis, nothing else.
+
+    The parts (income base, expenses, doctor wages, D&A) are on the by year
+    sheet. The facts that carry them stay in the bundle for the deck; they are
+    only not printed here.
+    """
+    by_label = {f.label: f for f in block_facts}
+    out = []
+    said = by_label.get('Overhead, client says')
+    if said is not None:
+        out.append(said)
+    years = sorted(by_year)
+    headline = by_label.get('Overhead')
+    last_pnl = [y for y in years if by_year[y].get('pnl_pct') is not None]
+    for basis, pct_key, src_key in (('P&L', 'pnl_pct', 'pnl_source'),
+                                    ('Tax return', 'tax_pct', 'tax_source')):
+        for y in years:
+            v = by_year[y].get(pct_key)
+            if v is None:
+                continue
+            m = by_year[y].get('pnl_months') if basis == 'P&L' else None
+            label = '%s overhead, %s%s' % (basis, y, ' (%d months)' % m
+                                           if m and m < 12 else '')
+            f = _facts.Fact(label, v / 100.0, PCT, by_year[y].get(src_key),
+                            'see the by year sheet for the figures')
+            if headline is not None and basis == 'P&L' and last_pnl \
+                    and y == last_pnl[-1]:
+                f.note, f.flags = headline.note, headline.flags
+                f.questions = headline.questions
+            out.append(f)
+    return out
+
+
+def _overhead_table(ws, row, by_year):
+    """Overhead year over year with every figure that goes into it.
+
+    P&L against P&L and return against return, the way the firm's old sheet
+    laid it out. The dollar overhead and the % are live formulas on the
+    figures above them, so an edited figure carries through.
+    """
+    years = sorted(by_year)
+
+    def ycol(i):
+        # The same columns as the year-by-year table above it: the first
+        # year, then each later year followed by its change column.
+        return 2 if i == 0 else 1 + 2 * i
+
+    last = ycol(len(years) - 1) + (1 if len(years) > 1 else 0)
+    ws.cell(row, 1, 'OVERHEAD').font = SECTION
+    for c in range(1, last + 1):
+        ws.cell(row, c).fill = F_SECTION
+    row += 1
+    for c in range(1, last + 1):
+        ws.cell(row, c).fill = F_HEAD
+    for i, y in enumerate(years):
+        m = by_year[y].get('pnl_months')
+        c = ws.cell(row, ycol(i), y if not m or m >= 12
+                    else '%s (%d mo P&L)' % (y, m))
+        c.font = HEAD
+        if i:
+            ws.cell(row, ycol(i) + 1, 'change').font = HEAD
+    row += 1
+
+    def line(label, key=None, formula=None, fmt=MONEY, bold=False):
+        nonlocal row
+        ws.cell(row, 1, label).font = Font(name='Arial', size=10, bold=bold)
+        ws.cell(row, 1).border = BOX
+        for i, y in enumerate(years):
+            col = ycol(i)
+            if formula:
+                v = formula(get_column_letter(col))
+            else:
+                v = by_year[y].get(key)
+            c = ws.cell(row, col, v)
+            c.number_format = fmt
+            c.font = Font(name='Arial', size=10, bold=bold,
+                          color=None if formula else '0000FF')
+            if v is None:
+                c.fill = F_NEEDED
+            if i and fmt == '0.0%':
+                prev = get_column_letter(ycol(i - 1))
+                d = ws.cell(row, col + 1, '=IFERROR((%s%d-%s%d)*100,"")'
+                            % (get_column_letter(col), row, prev, row))
+                d.number_format, d.font = '+0.0 "pts";-0.0 "pts";0.0', DERIVED
+        row += 1
+        return row - 1
+
+    ws.cell(row, 1, 'P&L basis').font = Font(name='Arial', bold=True, size=10)
+    row += 1
+    r_inc = line('income', 'pnl_income')
+    r_oth = line('other income', 'pnl_other')
+    r_base = line('income base', formula=lambda c: '=%s%d+%s%d' % (c, r_inc, c, r_oth))
+    r_exp = line('total expenses', 'pnl_expenses')
+    r_dr = line('less doctor wages', 'pnl_dr')
+    r_da = line('less depreciation and amortisation', 'pnl_da')
+    r_oh = line('overhead', formula=lambda c: '=%s%d-%s%d-%s%d'
+                % (c, r_exp, c, r_dr, c, r_da))
+    line('overhead %', formula=lambda c: '=IFERROR(%s%d/%s%d,"")'
+         % (c, r_oh, c, r_base), fmt='0.0%', bold=True)
+    row += 1
+    ws.cell(row, 1, 'Tax basis').font = Font(name='Arial', bold=True, size=10)
+    row += 1
+    t_base = line('gross income on the return', 'tax_base')
+    t_ded = line('total deductions', 'tax_deductions')
+    t_off = line('less officer compensation', 'tax_officer')
+    t_da = line('less depreciation and amortisation', 'tax_da')
+    t_oh = line('overhead', formula=lambda c: '=IF(%s%d="","",%s%d-%s%d-%s%d)'
+                % (c, t_ded, c, t_ded, c, t_off, c, t_da))
+    line('overhead %', formula=lambda c: '=IFERROR(%s%d/%s%d,"")'
+         % (c, t_oh, c, t_base), fmt='0.0%', bold=True)
+    note = ws.cell(row, 1, 'Compare within a basis, not across: the P&L is '
+                   'what the bookkeeper booked, the return is what the '
+                   'preparer deducted.')
+    note.font = NOTE
+    return row + 1
+
+
 def write(bundle, out):
     wb = Workbook()
 
@@ -143,18 +261,30 @@ def write(bundle, out):
             ws.cell(row, i, h).font = HEAD
             ws.cell(row, i).fill = F_HEAD
         row += 1
-        for fact in block.facts:
+        facts_shown = block.facts
+        if block.title == 'Overhead' and getattr(bundle, 'overhead_by_year', None):
+            facts_shown = _overhead_simple(block.facts, bundle.overhead_by_year)
+        for fact in facts_shown:
             row = _fact_row(ws, row, fact)
         row += 1
 
     # ------------------------------------------------------------ by year
     if bundle.years:
         ws2 = wb.create_sheet('by year')
+        ytd = getattr(bundle, 'ytd', None)
+        ytd_year = ytd['year'] if ytd else None
+        extra = 1 if ytd else 0
         r = _sheet_head(ws2, 'Practice, year by year  —  %s' % bundle.client,
                         'One column per year. Change columns compute '
-                        'themselves.',
-                        [34] + [15] * (len(bundle.years) * 2))
-        notes_col = 2 + len(bundle.years) * 2
+                        'themselves.' + (
+                            ' %s is year to date (%d months); the annualized '
+                            'column is YTD / %d x 12, and its change compares '
+                            'the annualized figure with the year before. '
+                            'Ratios are carried as they are.'
+                            % (ytd_year, ytd['months'], ytd['months'])
+                            if ytd else ''),
+                        [34] + [15] * (len(bundle.years) * 2 + extra))
+        notes_col = 2 + len(bundle.years) * 2 + extra
         ws2.column_dimensions[get_column_letter(notes_col)].width = 70
         ws2.cell(r, notes_col, 'note').font = HEAD
         ws2.cell(r, notes_col).fill = F_HEAD
@@ -162,18 +292,39 @@ def write(bundle, out):
         ws2.cell(r, 1).fill = F_HEAD
         col = 2
         for i, y in enumerate(bundle.years):
-            ws2.cell(r, col, y).font = HEAD
+            head = y
+            if y == ytd_year:
+                head = '%s YTD (%d mo)' % (y, ytd['months'])
+            ws2.cell(r, col, head).font = HEAD
             ws2.cell(r, col).fill = F_HEAD
             col += 1
+            if y == ytd_year:
+                ws2.cell(r, col, '%s annualized' % y).font = HEAD
+                ws2.cell(r, col).fill = F_HEAD
+                col += 1
             if i:
                 ws2.cell(r, col, 'change').font = HEAD
                 ws2.cell(r, col).fill = F_HEAD
                 col += 1
         r += 1
+        # These are in the overhead table below, with their parts, so they
+        # are not repeated in the metric list. (The bundle keeps them; the
+        # assumptions read them by name.)
+        in_oh_table = {'revenue (P&L)', 'doctor income (P&L)',
+                       'depreciation / amortisation', 'expenses (P&L)',
+                       'overhead, P&L basis', 'overhead, tax basis',
+                       'gross receipts (tax return)',
+                       'officer compensation (tax return)'} \
+            if getattr(bundle, 'overhead_by_year', None) else set()
         for name, by_year, fmt in bundle.series:
+            if name in in_oh_table:
+                continue
             ws2.cell(r, 1, name).font = LABEL
             col = 2
             prev_letter = None
+            # A total annualizes; a ratio (a %, or anything per patient or
+            # per day) is the same rate whatever the period.
+            is_rate = fmt == PCT or '/' in name or '%' in name
             for i, y in enumerate(bundle.years):
                 v = by_year.get(y)
                 c = ws2.cell(r, col, v)
@@ -183,6 +334,18 @@ def write(bundle, out):
                     c.fill = F_NEEDED
                 letter = get_column_letter(col)
                 col += 1
+                if y == ytd_year:
+                    ac = ws2.cell(r, col)
+                    if v is None:
+                        ac.value = None
+                    elif is_rate:
+                        ac.value = '=%s%d' % (letter, r)
+                    else:
+                        ac.value = '=%s%d/%d*12' % (letter, r, ytd['months'])
+                    ac.number_format = fmt
+                    ac.font = Font(name='Arial', size=10, italic=True)
+                    letter = get_column_letter(col)
+                    col += 1
                 if i:
                     # A live formula, so an edited figure updates its own
                     # change column rather than disagreeing with it.
@@ -205,6 +368,9 @@ def write(bundle, out):
                     cell.fill = PatternFill('solid', fgColor='FBEAE6')
             ws2.cell(r, 1).border = BOX
             r += 1
+
+        if getattr(bundle, 'overhead_by_year', None):
+            _overhead_table(ws2, r + 1, bundle.overhead_by_year)
 
     # ---------------------------------------------------------- source map
     ws3 = wb.create_sheet('Source Map')
