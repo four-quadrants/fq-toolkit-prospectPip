@@ -127,6 +127,7 @@ def build(folder):
             # string, and a balance printed without its date is the kind
             # of figure that gets quoted three months later.
             'bank': _bank_of(usable),
+            'kind': _kind_of(usable),
             'as_of': usable[-1].get('ends'),
             'periods': [_period(r) for r in usable],
             'beginning': [r['beginning'] for r in usable],
@@ -266,7 +267,8 @@ def _kind_of(rows):
         low = (r.get('file') or '').lower()
         for word, name in (('money market', 'Money Market'),
                            ('savings', 'Savings'), ('checking', 'Checking'),
-                           ('cking', 'Checking')):
+                           ('cking', 'Checking'), ('operating', 'Checking'),
+                           ('chk ', 'Checking'), ('sav ', 'Savings')):
             if word in low:
                 return name
     return None
@@ -477,6 +479,7 @@ def for_assumptions(folder):
                 'name': acct['name'],
                 'balance': acct['balance'],
                 'bank': acct.get('bank'),
+                'kind': acct.get('kind'),
                 'as_of': acct.get('as_of'),
                 'periods': periods,
                 'readable': bool(seen),

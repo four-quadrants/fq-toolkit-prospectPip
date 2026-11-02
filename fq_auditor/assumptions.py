@@ -312,6 +312,12 @@ def build(bundle, folder):
             m = re.search(r'x(\d{4})', a['name']) or re.search(r'(\d{4})', a['name'])
             if m:
                 tails.setdefault(m.group(1), []).append(a)
+        def _who(a):
+            # "Practice checking: x8478 (Fifth Third)". Whose account and what
+            # kind come first, because that is what the reader sorts by.
+            side = 'Personal' if a.get('entity') == 'Personal' else 'Practice'
+            kind = (a.get('kind') or 'account').lower()
+            return '%s %s: %s' % (side, kind, a['name'])
         for a in cash['accounts']:
             m = re.search(r'x(\d{4})', a['name']) or re.search(r'(\d{4})', a['name'])
             # One account, two readings: Oyler's Eden account x3309 came out
@@ -321,12 +327,12 @@ def build(bundle, folder):
                 continue
             if not a['readable']:
                 unread.append(a['name'])
-                listed.append({'label': a['name'],
+                listed.append({'label': _who(a),
                                'amount': _money(a['balance']),
                                'basis': 'Balance only. %s' % a['why']})
                 continue
             listed.append({
-                'label': a['name'],
+                'label': _who(a),
                 'amount': _money(a['balance']),
                 'basis': 'Average deposit %s, average expense %s, average '
                          '%s %s, across %d statement period%s.'
@@ -480,19 +486,30 @@ def build(bundle, folder):
                                if k in low), None)
                 name = '%s (%s)' % (what, lender) if lender else payee.title()
                 extra.append({'label': name, 'amount': 'not stated',
-                              'mid': None,
+                              'mid': 'not stated',
                               'detail': '%s/mo paid on the bank statements; '
                                         'balance, rate and term needed'
                                         % _money(monthly)})
         if rows or extra:
-            total = sum(r.value for r in rows)
-            out.append(Section(number,
-                'The following %s liability positions are worth mentioning.'
-                % label,
-                rows=[{'label': r.label, 'amount': _money(r.value),
-                       'mid': _maturity(folder, r.value),
+            def _isnum(v):
+                return isinstance(v, (int, float)) and not isinstance(v, bool)
+            total = sum(r.value for r in rows if _isnum(r.value))
+            listed = [{'label': r.label,
+                       'amount': _money(r.value) if _isnum(r.value)
+                       else str(r.value or 'not stated'),
+                       'mid': _maturity(folder, r.value if _isnum(r.value)
+                                        else None,
+                                        '%s %s' % (r.label or '', r.note or '')),
                        'detail': (r.note or '').replace('  ·  ', ', ') or None}
-                      for r in rows] + extra +
+                      for r in rows] + extra
+            # Earliest payoff first: what frees up cash soonest is what the
+            # plan reaches for first. Revolving lines, then anything with no
+            # maturity, go last.
+            listed.sort(key=_maturity_order)
+            out.append(Section(number,
+                'The following %s liability positions are worth mentioning, '
+                'earliest payoff first.' % label,
+                rows=listed +
                      [{'label': 'Total' + (' of stated balances' if extra else ''),
                        'amount': _money(total),
                        'detail': None, 'rule': True}],
@@ -641,7 +658,15 @@ def build(bundle, folder):
 _MATURITY = {}
 
 
-def _maturity(folder, balance):
+def _maturity_order(row):
+    m = str(row.get('mid') or '')
+    year = re.search(r'(\d{4})', m)
+    if year:
+        return (0, int(year.group(1)), m)
+    return (1 if 'revolving' in m else 2, 0, m)
+
+
+def _maturity(folder, balance, note=None):
     """The year an obligation matures, matched to its balance.
 
     Read from the debt schedule rather than from the fact's note, because
@@ -665,6 +690,31 @@ def _maturity(folder, balance):
             got = {}
         _MATURITY[folder] = got
     year = _MATURITY[folder].get(round(balance, 2)) if balance else None
+    if not year and re.search(r'credit card|line of credit|\bloc\b|heloc',
+                              str(note or ''), re.I):
+        return 'revolving'
+    if not year and re.search(r'\bpending\b', str(note or ''), re.I):
+        return 'pending'
+    if not year and balance and note:
+        # Worked out from the balance, rate and payment when nothing states
+        # the end date: n = -ln(1 - rB/P) / ln(1 + r), monthly.
+        import math
+        rate = re.search(r'(\d+(?:\.\d+)?)%', note)
+        pay = re.search(r'\$?([\d,]+(?:\.\d+)?)/mo', note)
+        if rate and pay:
+            r = float(rate.group(1)) / 100 / 12
+            P = float(pay.group(1).replace(',', ''))
+            B = float(balance)
+            if 'credit card' in note.lower() or 'line of credit' in note.lower():
+                return 'revolving'
+            n = None
+            if P > 0 and r == 0:
+                n = B / P
+            elif P > 0 and r * B < P:
+                n = -math.log(1 - r * B / P) / math.log(1 + r)
+            if n is not None and n < 12 * 40:
+                end = datetime.date.today() + datetime.timedelta(days=30.44 * n)
+                return 'about %d (est.)' % end.year
     if not year:
         return 'not stated'
     if year > datetime.date.today().year + 40:
@@ -745,6 +795,33 @@ def summarise(sections):
             lines.append((label, -total if subtract else total))
     net = sum(v for _l, v in lines)
     return lines, net, missing
+
+
+def payload(folder, client=None):
+    """The Assumptions as data, for the lead advisor's review page.
+
+    The same sections, rows and closing summary as the PDF, built by the same
+    code, so the page and the PDF cannot say different things.
+    """
+    import assumptions_pdf as _pdf
+    bundle = _facts.gather(folder, client=client)
+    sections = build(bundle, folder)
+    out = []
+    for sec in sections:
+        out.append({
+            'number': sec.number, 'title': _pdf.TITLES.get(sec.number, ''),
+            'text': sec.text, 'source': sec.source, 'flag': sec.flag,
+            'needed': sec.needed, 'why': sec.why, 'link': sec.link,
+            'heads': list(getattr(sec, 'heads', None) or ()),
+            'rows': [{'label': r.get('label'), 'amount': r.get('amount'),
+                      'mid': r.get('mid'),
+                      'detail': r.get('detail'), 'rule': bool(r.get('rule'))}
+                     for r in (getattr(sec, 'rows', None) or ())]})
+    lines, net, missing = summarise(sections)
+    return {'sections': out,
+            'done': sum(1 for x in sections if x.complete),
+            'summary': {'lines': [[a, b] for a, b in lines], 'net': net,
+                        'missing': missing}}
 
 
 def _in_block(bundle, fact, title):

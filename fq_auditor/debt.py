@@ -64,6 +64,31 @@ def _year_of(v):
     return int(m.group(1)) if m else None
 
 
+def _end_year_in(notes):
+    """A maturity year stated in a note, only when the note says it is one.
+
+    Spaulding's mortgage note reads "origination date Feb 2026"; taking the
+    first year in it made a new 30-year mortgage mature in 2026.
+    """
+    m = re.search(r'(?:end date|maturity|matures|maturing|payoff|paid off|'
+                  r'due|final payment)[^0-9]{0,20}(?:\d{1,2}/\d{1,2}/)?(20\d\d)',
+                  str(notes or ''), re.I)
+    return int(m.group(1)) if m else None
+
+
+def _end_from_terms(started, terms):
+    """Origination plus the term ("30-year fixed", "61 months", "10 yr")."""
+    start = _year_of(started)
+    t = str(terms or '').lower()
+    m = re.search(r'(\d+)\s*-?\s*(?:year|yr)', t)
+    if start and m:
+        return start + int(m.group(1))
+    m = re.search(r'(\d+)\s*-?\s*month', t)
+    if start and m:
+        return start + (int(m.group(1)) + 11) // 12
+    return None
+
+
 def read_schedule(path):
     """The firm's debt schedule template, as the office filled it in."""
     import openpyxl
@@ -184,7 +209,9 @@ def read_debt_sheet(path, rows):
             'balance': bal,
             'rate': _num(cell(r, c_rate)),
             'payment': _num(cell(r, c_pay)),
-            'maturity': _year_of(cell(r, c_end)) or _year_of(notes) or None,
+            'maturity': _year_of(cell(r, c_end)) or _end_year_in(notes)
+            or _end_year_in(' '.join(str(c) for c in r if isinstance(c, str)))
+            or _end_from_terms(cell(r, c_start), cell(r, c_terms)) or None,
             'terms': cell(r, c_terms),
             'started': cell(r, c_start),
             'side': side,

@@ -112,6 +112,22 @@ tr.off td{opacity:.55}
 .m-c{display:none} body:not(.mode-analysis) .m-a{display:none} body:not(.mode-analysis) .m-c{display:inline}
 .tabs .tc{font-weight:400;opacity:.8;font-size:12px}
 section[data-tab].tab-off{display:none}
+.asec{padding:0;overflow:hidden}
+.asec .ahead{display:flex;gap:10px;align-items:baseline;background:var(--ink);color:var(--card);padding:8px 14px;font:600 15px var(--display);letter-spacing:.02em}
+.asec .ahead .n{color:var(--accent);font-weight:700}
+.asec .abody{padding:12px 14px;display:grid;gap:10px}
+.asec .atext{margin:0}
+.asec table td.r{text-align:right;white-space:nowrap;color:var(--accent);font-weight:600}
+.asec table tr.rule td{border-top:2px solid var(--ink);font-weight:700}
+.asec .asrc{font-size:12px;color:var(--muted)}
+.asec .asrc b{letter-spacing:.08em;font-size:11px}
+.abox{border-left:3px solid var(--accent);background:var(--accent-soft);padding:8px 12px;border-radius:4px;font-size:14px}
+.abox b{display:block;font-size:11px;letter-spacing:.1em;color:var(--accent)}
+.asec td.mid{white-space:nowrap;color:var(--ink)}
+.asec textarea.anote{font-size:14px;min-height:2.2em;background:var(--bg)}
+.asec textarea.anote.set{border-color:var(--accent);background:var(--accent-soft)}
+.asum td.r{text-align:right;font-variant-numeric:tabular-nums}
+.asum tr.net td{border-top:2px solid var(--ink);font-weight:700}
 .qans{margin-top:6px;background:var(--pale,#f6f3ee)}
 #donebar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px 16px;background:#16324F;color:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.18)}
 #donebar .db-text{display:flex;flex-direction:column;font-size:14px;line-height:1.35;max-width:560px}
@@ -148,14 +164,21 @@ tr.off td{opacity:.55}
     <div class="note" id="heard">Checking the connection…</div>
   </header>
   <nav class="tabs" role="tablist" aria-label="Review sections">
-    <button type="button" data-tabgo="found" data-modes="analysis" aria-selected="true">1 What we found</button>
-    <button type="button" data-tabgo="qs" data-modes="analysis consult" aria-selected="false"><span class="m-a">2 Questions</span><span class="m-c">1 Open questions</span> <span class="tc" id="tc-qs"></span></button>
-    <button type="button" data-tabgo="email" data-modes="analysis" aria-selected="false">3 Email</button>
-    <button type="button" data-tabgo="plan" data-modes="consult" aria-selected="false">2 Plan</button>
-    <button type="button" data-tabgo="recs" data-modes="consult" aria-selected="false">3 Recommendations <span class="tc" id="tc-recs"></span></button>
-    <button type="button" data-tabgo="proj" data-modes="consult" aria-selected="false">4 Projections</button>
-    <button type="button" data-tabgo="slides" data-modes="consult" aria-selected="false">5 Slides <span class="tc" id="tc-slides"></span></button>
+    <button type="button" data-tabgo="assume" data-modes="analysis consult" aria-selected="true">1 Assumptions</button>
+    <button type="button" data-tabgo="found" data-modes="analysis" aria-selected="false">2 What we found</button>
+    <button type="button" data-tabgo="qs" data-modes="analysis consult" aria-selected="false"><span class="m-a">3 Questions</span><span class="m-c">2 Open questions</span> <span class="tc" id="tc-qs"></span></button>
+    <button type="button" data-tabgo="email" data-modes="analysis" aria-selected="false">4 Email</button>
+    <button type="button" data-tabgo="plan" data-modes="consult" aria-selected="false">3 Plan</button>
+    <button type="button" data-tabgo="recs" data-modes="consult" aria-selected="false">4 Recommendations <span class="tc" id="tc-recs"></span></button>
+    <button type="button" data-tabgo="proj" data-modes="consult" aria-selected="false">5 Projections</button>
+    <button type="button" data-tabgo="slides" data-modes="consult" aria-selected="false">6 Slides <span class="tc" id="tc-slides"></span></button>
   </nav>
+
+  <section data-tab="assume">
+    <h2>Assumptions <small id="as-count"></small></h2>
+    <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in.</p>
+    <div id="assume"><div class="card empty">Appears once the analyst loads this client.</div></div>
+  </section>
 
   <section data-tab="found">
     <h2>What the documents show <small>Check these before the plan is built on them</small></h2>
@@ -597,6 +620,48 @@ function fqModel(P){
     }catch(e){ clearTimeout(t); say('<span class="bad">Not saved: '+esc(e&&e.message||e)+'</span>'); }
   }
 
+  // ---- assumptions -------------------------------------------------------
+  function renderAssume(){
+    var el=$('assume'); if(!el||!plan) return;
+    var A=plan.assumptions;
+    if(!A||!A.sections){ el.innerHTML='<div class="card empty">The assumptions were not built for this client yet.</div>'; return; }
+    $('as-count').textContent=A.done+' of '+A.sections.length+' sections written from the documents';
+    var h='';
+    A.sections.forEach(function(s){
+      h+='<div class="card asec"><div class="ahead"><span class="n">'+s.number+'</span><span>'+esc(s.title)+'</span></div><div class="abody">';
+      if(s.text) h+='<p class="atext">'+esc(s.text)+'</p>';
+      if(s.rows&&s.rows.length){
+        var heads=(s.heads&&s.heads.length)?s.heads:['Item','Amount'], three=heads.length>2;
+        h+='<div class="ledger"><table><thead><tr><th>'+esc(heads[0])+'</th>'+(three?'<th>'+esc(heads[1])+'</th>':'')+'<th class="r">'+esc(heads[three?2:1]||'')+'</th></tr></thead><tbody>'+
+          s.rows.map(function(r){ return '<tr class="'+(r.rule?'rule':'')+'"><td><b>'+esc(r.label||'')+'</b>'+(r.detail?'<div class="basis">'+esc(r.detail)+'</div>':'')+'</td>'+(three?'<td class="mid">'+esc(r.mid||'')+'</td>':'')+'<td class="r">'+esc(r.amount||'')+'</td></tr>'; }).join('')+
+          '</tbody></table></div>';
+      }
+      if(s.source&&(s.text||(s.rows&&s.rows.length))) h+='<div class="asrc"><b>SOURCE</b>&nbsp; '+esc(s.source)+'</div>';
+      if(s.flag) h+='<div class="abox"><b>CHECK THIS</b>'+esc(s.flag)+'</div>';
+      if(s.needed) h+='<div class="abox"><b>STILL NEEDED</b>'+esc(s.needed)+(s.why?'<div>'+esc(s.why)+'</div>':'')+
+        (s.link?'<div><a href="'+esc(s.link)+'" target="_blank" rel="noopener">'+esc(s.link)+'</a></div>':'')+'</div>';
+      var an=((plan.assume_notes||{})[s.number])||'';
+      h+='<textarea class="anote" data-an="'+s.number+'" rows="1" placeholder="Your comment on this section (a change, a question, a correction)" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
+      h+='</div></div>';
+    });
+    var S=A.summary||{};
+    var sm=function(v){ return v==null?'':(v<0?'('+$m(-v)+')':$m(v)); };
+    if(S.lines&&S.lines.length){
+      h+='<div class="card asec"><div class="ahead"><span>Where this leaves the balance sheet</span></div><div class="abody"><table class="asum"><tbody>'+
+        S.lines.map(function(l){ return '<tr><td>'+esc(l[0])+'</td><td class="r">'+sm(l[1])+'</td></tr>'; }).join('')+
+        '<tr class="net"><td>Net</td><td class="r">'+sm(S.net)+'</td></tr></tbody></table>'+
+        '<div class="asrc">Each figure is the total of a table above'+(S.missing?'; '+S.missing+' asset'+(S.missing===1?' has':'s have')+' no figure yet, so the net is understated':'')+'.</div></div></div>';
+    }
+    el.innerHTML=h;
+  }
+
+  document.addEventListener('input',function(e){
+    var el=e.target; if(!el||!el.dataset||el.dataset.an==null||!plan) return;
+    plan.assume_notes=plan.assume_notes||{}; plan.assume_notes[el.dataset.an]=el.value; pending.an=true;
+    el.classList.toggle('set',!!el.value.trim());
+    debounce('an',function(){ write('plan/figures',{assume_notes:plan.assume_notes},function(){pending.an=false;},'comment on assumption '+el.dataset.an); });
+  });
+
   // ---- what we found (analysis review) ----------------------------------
   function renderFound(){
     if(!plan||!plan.findings) return; var F=plan.findings;
@@ -698,7 +763,7 @@ function fqModel(P){
   document.addEventListener('click',function(e){
     var b=e.target && e.target.closest && e.target.closest('[data-tabgo]'); if(b) showTab(b.dataset.tabgo);
   });
-  (function(){ var t='found'; try{ t=localStorage.getItem('review-tab')||'found'; }catch(e){} showTab(t); })();
+  (function(){ var t='assume'; try{ t=localStorage.getItem('review-tab')||'assume'; }catch(e){} showTab(t); })();
   function tabCounts(){
     var set=function(id,txt){ var el=$(id); if(el) el.textContent=txt; };
     set('tc-recs', ($('reccount')||{}).textContent ? '· '+$('reccount').textContent.split(' in ')[0] : '');
@@ -706,7 +771,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v28';
+  var BUILD='v30';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
@@ -748,11 +813,12 @@ function fqModel(P){
       if(plan && pending.st) incoming.stext=plan.stext;
       if(plan && pending.rec){ incoming.recs=plan.recs; incoming.recs_custom=plan.recs_custom; }
       if(plan && pending.note) incoming.notes=plan.notes;
+      if(plan && pending.an) incoming.assume_notes=plan.assume_notes;
       if(plan && pending.qa) incoming.qanswers=plan.qanswers;
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; }
       var a=document.activeElement;
-      if(plan && a && a.closest && (a.closest('#figs')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
-      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
+      if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
+      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
       showEmail(false);
       ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=plan.notes||''; });
       var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();

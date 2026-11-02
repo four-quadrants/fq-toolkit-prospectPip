@@ -192,7 +192,11 @@ def apply(folder, plan_json):
            # His reasoning, for whoever (or whatever) builds the deck next:
            # Claude reads these when it pulls the review in.
            'notes': (rec.get('notes') or '').strip(),
-           'recommendation_notes': notes}
+           'recommendation_notes': notes,
+           # His comments on the Assumptions, by section number.
+           'assumption_notes': {k: v.strip() for k, v in
+                                (rec.get('assume_notes') or {}).items()
+                                if (v or '').strip()}}
     # Slide wording: what was proposed, as edited, unless dropped.
     try:
         with open(os.path.join(folder, '_Audit', 'review_slides.json')) as fh:
@@ -212,12 +216,17 @@ def apply(folder, plan_json):
         print('   CLIENT ANSWERS (put what they settle into the plan before rebuilding):')
         for k, v in sorted(out['qanswers'].items()):
             print('     %s: %s' % (k, v))
-    if out['notes'] or notes:
+    if out['notes'] or notes or out['assumption_notes']:
         print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
         if out['notes']:
             print('     ' + out['notes'])
         for n in notes:
             print('     - ' + n)
+        titles = {str(x.get('number')): x.get('title') for x in
+                  ((rec.get('assumptions') or {}).get('sections') or ())}
+        for k, v in sorted(out['assumption_notes'].items(),
+                           key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
+            print('     - Assumptions %s (%s): %s' % (k, titles.get(str(k), ''), v))
     # The follow-up email, now that he has said which questions go.
     try:
         import duediligence as _dd
@@ -531,6 +540,14 @@ def seed(folder, outdir, mode='consult'):
             'question_ids': sorted(ids), 'mode': mode,
             'answered_by_docs': answered_by_docs,
             'findings': findings(folder, D) if mode == 'analysis' else None}
+    # The Assumptions, as the first tab: the lead advisor reads the plan's
+    # base figures in the layout he knows before anything else.
+    try:
+        import assumptions as _asm
+        plan['assumptions'] = _asm.payload(folder, p.get('client'))
+    except Exception as exc:                                 # noqa: BLE001
+        print('   assumptions tab skipped: %s' % exc)
+        plan['assumptions'] = None
     # What the lead advisor already decided on an earlier review (the
     # analysis review, or this page before a refresh) carries over, matched
     # by the question itself.
@@ -548,6 +565,7 @@ def seed(folder, outdir, mode='consult'):
         if qid and t:
             plan['qtext'][qid] = t
     plan['notes'] = prev_all.get('notes') or ''
+    plan['assume_notes'] = prev_all.get('assumption_notes') or {}
     with open(os.path.join(outdir, 'plan.json'), 'w') as fh:
         json.dump(plan, fh, default=str)
 
