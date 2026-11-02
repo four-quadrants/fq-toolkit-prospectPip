@@ -86,12 +86,20 @@ To have it reconnect at login: **System Settings > General > Login Items**, clic
 ### 6. The toolkit itself
 
 ```
-cd ~/Desktop
-git clone https://github.com/<firm org>/<repo>.git FQ_Toolkit/prospectPip
+mkdir -p ~/Desktop/FQ_Toolkit
+cd ~/Desktop/FQ_Toolkit
+git clone https://github.com/four-quadrants/fq-toolkit-prospectPip.git prospectPip
 ```
 
-(Use the address on the repo's GitHub page under the green **Code** button. You
-need to have been added to the repo first.)
+You need to have been added to the repo (four-quadrants/fq-toolkit-prospectPip)
+with your GitHub account first. The first time, git asks you to sign in to
+GitHub in the browser.
+
+**Getting the latest version later:**
+
+```
+cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
+```
 
 One file is deliberately **not** in git, because it holds masked wording from
 a client deck: `deck_examples.json` (box-by-box examples for drafted slide
