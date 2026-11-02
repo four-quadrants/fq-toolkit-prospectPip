@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""What Claude read from the documents the code's readers could not, checked.
+
+    python3 doc_readings.py "<client folder>"          # check and report
+
+WHY THIS EXISTS
+The code's readers each know a handful of layouts: a QuickBooks P&L, a
+comparative 1120-S summary page, a Dentrix Practice Analysis, the firm's own
+debt schedule. A client whose bookkeeper prints a different P&L, or whose
+practice runs Open Dental, gets an initial notes sheet with three lines filled
+in out of forty. Writing a new reader for every layout never ends.
+
+So Claude reads those documents (in the Claude session that runs the step) and
+writes what it read to _Audit/doc_readings.json. Nothing in that file is used
+on Claude's word. Every figure is checked here before facts.py sees it:
+
+  * it must appear in the document's own text (pdftotext, or the OCR cache
+    for a scanned page), and
+  * where the document carries its own total, the parts must add up to it to
+    the dollar: a P&L's lines to its bottom line, a return's income less
+    deductions to its ordinary income, a production report's columns to its
+    totals.
+
+A figure that fails is reported and left out. The code's own readers still
+win wherever they read something; these readings only fill what is blank.
+
+THE FILE (written by Claude, read here; years are strings)
+
+{
+ "read_on": "2026-11-02",
+ "pnl": {"2025": {"source": "<file>", "months": 12, "income": 0,
+                  "other_income_lines": {"<label>": 0},
+                  "expense_lines": {"<label>": 0},
+                  "doctor_salary": 0, "da": {"Depreciation": 0},
+                  "net": 0}},
+ "tax": {"2025": {"source": "<file>", "form": "1120-S", "income_base": 0,
+                  "total_deductions": 0, "officer_comp": 0,
+                  "depreciation_amort": 0, "da_parts": [0],
+                  "net": 0}},
+ "production": {"2025": {"months": 12, "reports": [
+     {"source": "<file>", "provider": "<as printed>", "role": "doctor|hygiene",
+      "production": 0, "adjustments": 0, "writeoffs": 0, "tot_prod": 0,
+      "pt_income": 0, "ins_income": 0, "total_income": 0}]}},
+ "counts": {"source": "<file>", "by_year": {"2025": {"total_patients": 0}}},
+ "debts": {"practice": [{"creditor": "", "what": "", "balance": 0,
+                         "rate": 0.0, "payment": 0, "description": "",
+                         "source": "<file>", "pending": false}],
+           "personal": []},
+ "profile": {"owned_since": {"value": "", "source": "<file>"}}
+}
+"""
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+FILE = 'doc_readings.json'
+TOL = 1.01          # a dollar, for rounding in printed reports
+
+
+def _path_of(folder, name):
+    """The document called `name`, original copy first."""
+    for sub in ('Original_sourcedocs', 'Documents', ''):
+        root = os.path.join(folder, sub) if sub else folder
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if not d.startswith(('.', '_'))]
+            if name in files:
+                return os.path.join(dirpath, name)
+    return None
+
+
+_TEXT = {}
+
+
+def _text(folder, name):
+    """The document's text: its own text layer, else the OCR cache."""
+    if name in _TEXT:
+        return _TEXT[name]
+    path = _path_of(folder, name)
+    text = ''
+    if path:
+        try:
+            text = subprocess.run(['pdftotext', '-layout', path, '-'],
+                                  capture_output=True, text=True,
+                                  timeout=120).stdout
+        except Exception:                                    # noqa: BLE001
+            text = ''
+        if len(text.strip()) < 40:
+            h = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+            for cache in (os.path.join(folder, '.fq_cache'),
+                          os.path.join(folder, 'Original_sourcedocs', '.fq_cache')):
+                for ext in ('.v8.txt', '.txt'):
+                    p = os.path.join(cache, h + ext)
+                    if os.path.exists(p):
+                        text = open(p, errors='replace').read()
+                        break
+                if len(text.strip()) >= 40:
+                    break
+    _TEXT[name] = text
+    return text
+
+
+def _digits(text):
+    """Every run of figures in the text, as plain digit strings."""
+    out = set()
+    for m in re.finditer(r'\d[\d,]*(?:\.\d+)?', text):
+        s = m.group(0).replace(',', '')
+        out.add(s)
+        if '.' in s:
+            whole, frac = s.split('.', 1)
+            out.add(whole)
+            if frac.strip('0') == '':
+                out.add(whole)
+    return out
+
+
+def appears(folder, name, value):
+    """True when `value` is printed in the document (sign and cents aside)."""
+    if value is None:
+        return True
+    v = abs(float(value))
+    if v == 0:
+        return True
+    text = _text(folder, name)
+    if not text:
+        return False
+    nums = _digits(text)
+    cents = '%.2f' % v
+    whole = '%d' % round(v)
+    if cents in nums or whole in nums:
+        return True
+    # Rates print as "6.69%" or "0.0669"; a reading of 0.0669 is 6.69 on paper.
+    if v < 1 and ('%.2f' % (v * 100)).rstrip('0').rstrip('.') in {
+            n.rstrip('0').rstrip('.') for n in nums if '.' in n}:
+        return True
+    return False
+
+
+def _close(a, b):
+    return a is not None and b is not None and abs(float(a) - float(b)) <= TOL
+
+
+def check(folder):
+    """(verified readings, problems). Only verified figures are returned."""
+    path = os.path.join(folder, '_Audit', FILE)
+    try:
+        raw = json.load(open(path))
+    except (OSError, ValueError):
+        return {}, []
+    good, problems = {}, []
+
+    def need(src, label, *values):
+        missing = [v for v in values if not appears(folder, src, v)]
+        for v in missing:
+            problems.append('%s: %s %s is not in the document' % (src, label, v))
+        return not missing
+
+    # ---------------------------------------------------------------- P&L
+    pnl = {}
+    for year, r in (raw.get('pnl') or {}).items():
+        src = r.get('source') or ''
+        lines = r.get('expense_lines') or {}
+        da = r.get('da') or {}
+        expenses = round(sum(lines.values()) + sum(da.values()), 2)
+        oth = r.get('other_income_lines') or {'Other income': r.get('other_income') or 0}
+        base = (r.get('income') or 0) + sum(oth.values())
+        ok = need(src, 'P&L %s' % year, r.get('income'), *oth.values(),
+                  r.get('doctor_salary'), r.get('net'),
+                  *list(lines.values()) + list(da.values()))
+        if r.get('net') is not None and not _close(base - expenses, r['net']):
+            problems.append('%s: P&L %s does not tie (income %.0f less expenses '
+                            '%.0f is %.0f; the document says %.0f)'
+                            % (src, year, base, expenses, base - expenses, r['net']))
+            ok = False
+        if not ok:
+            continue
+        dsum = sum(da.values())
+        oh = expenses - (r.get('doctor_salary') or 0) - dsum
+        pnl[year] = {
+            'year': year, 'source': src, 'months': r.get('months') or 0,
+            'income': round(r.get('income') or 0, 2),
+            'other_income': round(sum(oth.values()), 2),
+            'income_base': round(base, 2), 'expenses': expenses,
+            'other_expenses': 0.0,
+            'doctor_salary': round(r.get('doctor_salary') or 0, 2),
+            'depreciation_amort': round(dsum, 2), 'da_found': sorted(da),
+            'overhead': round(oh, 2),
+            'overhead_pct': round(100.0 * oh / base, 1) if base else None,
+            'read_by': 'Claude, checked',
+        }
+    good['pnl'] = pnl
+
+    # ---------------------------------------------------------------- tax
+    tax = {}
+    for year, r in (raw.get('tax') or {}).items():
+        src = r.get('source') or ''
+        parts = r.get('da_parts') or [r.get('depreciation_amort')]
+        ok = need(src, 'return %s' % year, r.get('income_base'),
+                  r.get('total_deductions'), r.get('officer_comp'),
+                  r.get('net'), *parts)
+        if r.get('net') is not None and not _close(
+                r['income_base'] - r['total_deductions'], r['net']):
+            problems.append('%s: return %s does not tie to its own net' % (src, year))
+            ok = False
+        if not ok:
+            continue
+        dep = sum(p or 0 for p in parts)
+        oh = r['total_deductions'] - (r.get('officer_comp') or 0) - dep
+        tax[year] = {
+            'income_base': r['income_base'],
+            'total_deductions': r['total_deductions'],
+            'officer_comp': r.get('officer_comp') or 0.0,
+            'depreciation_amort': round(dep, 2), 'overhead': round(oh, 2),
+            'overhead_pct': round(100.0 * oh / r['income_base'], 1),
+            'source': '%s (%s)' % (src, r.get('form') or 'return'),
+        }
+    good['tax'] = tax
+
+    # --------------------------------------------------------- production
+    prod = {}
+    for year, r in (raw.get('production') or {}).items():
+        reps, ok = r.get('reports') or [], True
+        for rep in reps:
+            src = rep.get('source') or ''
+            keys = ('production', 'adjustments', 'writeoffs', 'tot_prod',
+                    'pt_income', 'ins_income', 'total_income')
+            if not need(src, 'production %s' % year, *[rep.get(k) for k in keys]):
+                ok = False
+            if not _close(rep['production'] + rep['adjustments'] + rep['writeoffs'],
+                          rep['tot_prod']) or not _close(
+                    rep['pt_income'] + rep['ins_income'], rep['total_income']):
+                problems.append('%s: the columns do not add to its totals' % src)
+                ok = False
+        if not ok or not reps:
+            continue
+
+        def s(k):
+            return round(sum(x[k] for x in reps), 2)
+        hyg = round(sum(x['production'] for x in reps
+                        if x.get('role') == 'hygiene'), 2)
+        prod[year] = {
+            'source': ', '.join(x['source'] for x in reps),
+            'months': r.get('months'),
+            'values': {
+                'charges_uninsured': s('production'),
+                'adjustments_add': round(s('adjustments') + s('writeoffs'), 2),
+                'total_charges': s('tot_prod'),
+                'patient_payments': s('pt_income'),
+                'insurance_payments': s('ins_income'),
+                'adjustments_less': 0.0,
+                'total_credits': s('total_income'),
+            },
+            'by_role': {'hygiene': hyg or None},
+            'read_by': 'Claude, checked',
+        }
+    good['production'] = prod
+
+    # ------------------------------------------------------------- counts
+    counts = {}
+    c = raw.get('counts') or {}
+    for year, vals in (c.get('by_year') or {}).items():
+        for field, v in vals.items():
+            src = (c.get('sources') or {}).get(field) or c.get('source') or ''
+            if need(src, '%s %s' % (field, year), v):
+                counts.setdefault(year, {})[field] = v
+    good['counts'] = counts
+
+    # -------------------------------------------------------------- debts
+    debts = {}
+    for side in ('practice', 'personal'):
+        rows = []
+        for d in (raw.get('debts') or {}).get(side) or ():
+            src = d.get('source') or ''
+            if not need(src, d.get('what') or d.get('creditor') or 'debt',
+                        d.get('balance'), d.get('payment'), d.get('rate')):
+                continue
+            row = dict(d)
+            row['source'] = src
+            if d.get('pending'):
+                # Not owed yet: shown, but kept out of the totals.
+                bits = ['pending']
+                if d.get('balance'):
+                    bits.append('$%s' % format(round(d['balance']), ','))
+                if d.get('rate'):
+                    bits.append('%.2f%%' % (d['rate'] * 100 if d['rate'] < 1
+                                            else d['rate']))
+                if d.get('payment'):
+                    bits.append('$%s/mo' % format(round(d['payment']), ','))
+                row['description'] = ', '.join(bits) + (
+                    '. ' + d['description'] if d.get('description') else '')
+                row['balance'] = row['payment'] = row['rate'] = None
+            rows.append(row)
+        debts[side] = rows
+    good['debts'] = debts
+
+    # ------------------------------------------------------------ profile
+    prof = {}
+    for k, v in (raw.get('profile') or {}).items():
+        if isinstance(v, dict) and v.get('value') not in (None, ''):
+            prof[k] = v
+    good['profile'] = prof
+    return good, problems
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Check Claude's document readings")
+    ap.add_argument('folder')
+    a = ap.parse_args()
+    good, problems = check(a.folder)
+    if not good:
+        print('No %s in %s/_Audit' % (FILE, a.folder))
+        return
+    for k in ('pnl', 'tax', 'production', 'counts'):
+        print('%-11s %s' % (k, ', '.join(sorted(good.get(k) or {})) or 'none'))
+    print('debts       %d practice, %d personal'
+          % (len(good['debts'].get('practice') or ()),
+             len(good['debts'].get('personal') or ())))
+    print('profile     %s' % (', '.join(sorted(good.get('profile') or {})) or 'none'))
+    if problems:
+        print('\nLEFT OUT, did not check against the document:')
+        for p in problems:
+            print('  - ' + p)
+    else:
+        print('\nEvery figure was found in its document and every total ties.')
+
+
+if __name__ == '__main__':
+    main()

@@ -187,6 +187,39 @@ def gather(folder, client=None):
     except Exception:
         held = {'accounts': [], 'by_kind': {}, 'total': None}
 
+    # What Claude read from documents the readers above could not, each
+    # figure checked against its document (doc_readings.py). It only fills
+    # what the readers left blank.
+    profile = {}
+    try:
+        import doc_readings as _dr
+        got, _problems = _dr.check(folder)
+    except Exception:                                        # noqa: BLE001
+        got = {}
+    if got:
+        for y, v in (got.get('pnl') or {}).items():
+            pnl.setdefault(y, v)
+        for y, v in (got.get('tax') or {}).items():
+            tax.setdefault(y, v)
+        for y, v in (got.get('production') or {}).items():
+            if not prod.get(y):
+                prod[y] = v
+        for y, vals in (got.get('counts') or {}).items():
+            for k, v in vals.items():
+                counts.setdefault(y, {}).setdefault(k, v)
+        for side in ('practice', 'personal'):
+            if not debts.get(side) and (got.get('debts') or {}).get(side):
+                debts[side] = got['debts'][side]
+        profile = got.get('profile') or {}
+        for k in ('marital_status', 'dependents', 'ownership', 'pms', 'age'):
+            if not form.get(k) and profile.get(k):
+                form[k] = profile[k]['value']
+
+    def pv_(key):
+        """A profile line Claude read, with the document it came from."""
+        v = profile.get(key) or {}
+        return v.get('value'), v.get('source')
+
     years = sorted(set(pnl) | set(prod) | set(counts))[-3:]
     full = [y for y in years if (pnl.get(y, {}).get('months') or 0) >= 12]
     latest = full[-1] if full else (years[-1] if years else None)
@@ -202,8 +235,11 @@ def gather(folder, client=None):
              'document letterheads and the IC form', 'composed',
              needed='Ask on the call',
              why='Where it is, and on what terms, drives the overhead'),
-        Fact('Owned since', form.get('years_owned') and
-             '%s years' % form['years_owned'], TEXT, ic_name, 'years owned'),
+        Fact('Owned since', (form.get('years_owned') and
+                             '%s years' % form['years_owned'])
+             or pv_('owned_since')[0], TEXT,
+             ic_name if form.get('years_owned') else pv_('owned_since')[1],
+             'years owned'),
         Fact('Collections', _compose.collections(
             _ic.money(form.get('collections_last')), p.get('income'), latest),
              TEXT, 'P&L %s and IC form' % latest if p else ic_name,
@@ -215,8 +251,11 @@ def gather(folder, client=None):
             years, form.get('associate_comp'))
             or form.get('associate_comp')
             or ('None' if str(form.get('has_associates') or '').strip()
-                .lower().startswith('no') else None), TEXT,
-             'Provider Summary, days-worked document, IC form',
+                .lower().startswith('no') else None)
+            or pv_('associates')[0], TEXT,
+             'Provider Summary, days-worked document, IC form'
+             if not pv_('associates')[1] or _prod.load_roles(folder)
+             else pv_('associates')[1],
              'composed'),
         Fact('Chairs', form.get('chairs_total') and
              '%s total (%s op, %s hyg)' % (form.get('chairs_total'),
@@ -313,6 +352,11 @@ def gather(folder, client=None):
                 bits.append('%s/mo' % _fmt(r['payment']))
             if r.get('description'):
                 bits.append(r['description'])
+            if r.get('pending'):
+                out.append(Fact(name, 'Pending', TEXT, r.get('source'),
+                                'not owed yet, kept out of the totals',
+                                note='  ·  '.join(bits) or None))
+                continue
             out.append(Fact(name, r.get('balance'), MONEY, r.get('source'),
                             r.get('as_of') or 'current balance',
                             note='  ·  '.join(bits) or None))
@@ -448,7 +492,9 @@ def gather(folder, client=None):
     pats = {y: counts.get(y, {}).get('total_patients') for y in years}
     nps = {y: counts.get(y, {}).get('new_patients') for y in years}
     days = {y: counts.get(y, {}).get('doctor_days') for y in years}
-    hyg = {y: by_role(y, 'hygiene') for y in years}
+    hyg = {y: by_role(y, 'hygiene')
+           or ((prod.get(y) or {}).get('by_role') or {}).get('hygiene')
+           for y in years}
 
     series = [
         ('gross production', gross, MONEY),

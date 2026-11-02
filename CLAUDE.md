@@ -11,7 +11,7 @@ and do the work rather than describing it.
 |---|---|---|
 | LaunchBay pull (Claude skill) | lb_fetch.py, lb_checklist.py | launchbay_*.json, checklist |
 | Intake: audit, file | audit.py, classify.py, render_html.py | Intake Review, Filing Log |
-| Initial notes | facts.py, workbook.py, credit.py | Initial notes .xlsx, credit_report.json |
+| Initial notes | facts.py, workbook.py, credit.py, doc_readings.py | Initial notes .xlsx, credit_report.json, doc_readings.json |
 | Cash flow | bank_claude.py, statements.py, transactions.py, cashflow.py, cashflow_book.py | Cash flow .numbers, bank_statements.json |
 | Assumptions | assumptions.py, accounts.py, deck_drafts.py, recommendations.py | Assumptions .pdf, accounts.json, income_facts.json |
 | Analysis review / consult review (Claude) | review_page.py, assets/review_page.html | review pages on claude.ai |
@@ -42,6 +42,16 @@ operator guide; the `plugin/fq-prospect` folder holds the Claude skills.
   (it would overwrite the analyst's saved client root). In a sandbox with no
   Claude login, set `FQ_NO_CLAUDE=1`: saved readings in `_Audit` are used.
 - **No em dashes** in anything the team or clients read.
+
+## When the code's readers miss a document
+
+The readers know a few layouts (QuickBooks P&L, comparative 1120-S page,
+Dentrix Practice Analysis, the firm's debt schedule). When a client's documents
+are in another layout, Claude reads them and writes `_Audit/doc_readings.json`
+(format in `fq_auditor/doc_readings.py`). Every figure must appear in its
+document and every total must tie, or it is left out. Run
+`python3 fq_auditor/doc_readings.py "<client>"` and fix anything it lists
+before building.
 
 ## How to check a change
 

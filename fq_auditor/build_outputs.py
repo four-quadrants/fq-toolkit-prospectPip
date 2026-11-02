@@ -221,7 +221,9 @@ def main():
     # Every bank statement is read by Claude first, once, and used only
     # where its reading ties out (bank_claude). Everything below reads the
     # statements through statements.gather, which prefers those readings.
-    if set(want) & {'workbook', 'cashflow', 'assumptions', 'deck'}:
+    # The initial notes come before the cash flow and do not use the bank
+    # statements, so building them alone does not read them.
+    if set(want) & {'cashflow', 'assumptions', 'deck'}:
         try:
             import bank_claude as _bc
             _bc.ensure(a.folder)
