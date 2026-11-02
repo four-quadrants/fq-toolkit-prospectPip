@@ -131,25 +131,42 @@ The LaunchBay connector must be connected in your Claude account.
 
 ## Part 2: one client, start to finish
 
-The app's tabs run in this order, and the dots across the top show where each
-client stands (green: up to date; orange: something it is built from has
-changed). **Update N out of date** rebuilds whatever has gone orange, in order.
+Every step is asked for in Claude (the desktop app, with the `FQ_Toolkit` and
+Prospects folders connected). Claude runs the toolkit, reads the documents,
+checks what it read, and tells you what came out. The work comes in three
+stages; nothing from a later stage is built early.
 
-| Step | Where | What you do |
+**Stage 1, initial review**
+
+| Step | Say to Claude | What you get |
 |---|---|---|
-| Documents | Claude | "Pull [client] from LaunchBay" (or let the scheduled pull do it) |
-| 1 Intake | App | Pick the client; it downloads and audits. Review & file, then **Build File Tree** |
-| 2 Initial notes | App | Build. Claude reads the credit reports here the first time |
-| 3 Cash flow, Assumptions | App | Build each. Claude reads every bank statement (it must tie out to the dollar) and every investment statement |
-| 4 Analysis review | Claude | "Load [client]'s analysis review". Share the link with the lead advisor (edit access). He checks what was found and marks the questions; the email to the client writes itself on the page, and he copies it from there |
-| Answers come back | App | New documents go through Intake, then **Update** |
-| 5 Consult review | Claude | "Load [client]'s consult review". He works through open questions, the plan, recommendations, projections, slides |
-| Pull in | Claude | "Pull in [client]'s consult review". Claude reads his notes first |
-| Deck | App | **Build the deck**. It opens in Keynote or PowerPoint and stays editable |
+| Documents | "Pull [client] from LaunchBay" | The client's uploads and checklist |
+| Intake | "Run [client]'s intake" | Documents filed into Documents/Business and Personal; what is missing; the follow-up email to copy into Outlook |
+| Initial notes | "Build [client]'s initial notes" | Initial notes .xlsx in the client folder |
 
-The first build of a client takes longer (Claude reading statements and
-reports, a few minutes to twenty for a large client). After that, only new
-documents are read.
+Then the consult offer call. If the client accepts, send the Expanded List.
+
+**Stage 2, consult accepted**
+
+| Step | Say to Claude | What you get |
+|---|---|---|
+| Documents | "Pull [client] again" and "run [client]'s intake" | The expanded documents filed, and what is still missing |
+| Cash flow | "Build [client]'s cash flow" | Every bank statement read and tied to the dollar; the cash flow |
+| Portfolio | "Run [client]'s portfolio analysis" | Accounts, returns and fees |
+| Assumptions | "Build [client]'s assumptions" | The Assumptions PDF |
+
+**Stage 3, the lead advisor's deep dive and the consult**
+
+| Step | Say to Claude | What you get |
+|---|---|---|
+| Analysis review | "Load [client]'s analysis review" | A page for the lead advisor: he checks the findings and picks his questions; the email to the client is built on the page and copied from there |
+| Answers come back | "Run [client]'s intake", then "update [client]" | New documents filed; anything they change rebuilt |
+| Consult review | "Load [client]'s consult review" | A page for the plan, recommendations, projections and slides |
+| Pull in | "Pull in [client]'s consult review" | His decisions saved |
+| Deck | "Build [client]'s deck" | Consult deck .pptx, editable in Keynote or PowerPoint |
+
+The first time Claude reads a client's statements and reports it takes a few
+minutes. After that, only new documents are read.
 
 ---
 

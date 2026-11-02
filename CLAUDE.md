@@ -7,19 +7,43 @@ and do the work rather than describing it.
 
 ## The pipeline, in order
 
-| Step | Code (fq_auditor/) | Output in `<client>/_Audit` |
+Claude is the front door: the analyst asks for each step in a Claude session
+with the toolkit and the Prospects folder connected, and Claude runs the code
+below. The work happens in three stages, and nothing from a later stage is
+built early.
+
+**Stage 1, initial review** (the initial document list)
+
+| Step | Code (fq_auditor/) | Output |
 |---|---|---|
 | LaunchBay pull (Claude skill) | lb_fetch.py, lb_checklist.py | launchbay_*.json, checklist |
-| Intake: audit, file | audit.py, classify.py, render_html.py | Intake Review, Filing Log |
-| Initial notes | facts.py, workbook.py, credit.py, doc_readings.py | Initial notes .xlsx, credit_report.json, doc_readings.json |
+| Intake: audit, file, follow-up email | audit.py, classify.py, checklist_claude.py, intake_email.py | Documents/ tree, _Audit/Intake follow-up |
+| Initial notes | facts.py, workbook.py, credit.py, doc_readings.py | Initial notes .xlsx in the client folder |
+
+Then the team holds the consult offer call. No cash flow, assumptions or
+portfolio work happens before the client accepts the consult.
+
+**Stage 2, consult accepted** (the Expanded List is sent and comes back)
+
+| Step | Code (fq_auditor/) | Output |
+|---|---|---|
+| Pull and intake again, for the expanded documents | as above | |
 | Cash flow | bank_claude.py, statements.py, transactions.py, cashflow.py, cashflow_book.py | Cash flow .numbers, bank_statements.json |
-| Assumptions | assumptions.py, accounts.py, deck_drafts.py, recommendations.py | Assumptions .pdf, accounts.json, income_facts.json |
-| Analysis review / consult review (Claude) | review_page.py, assets/review_page.html | review pages on claude.ai |
+| Portfolio analysis | accounts.py (and the prospect-portfolio-review skill) | accounts.json |
+| Assumptions | assumptions.py, deck_drafts.py, recommendations.py | Assumptions .pdf, income_facts.json |
+
+**Stage 3, the lead advisor's deep dive and the consult**
+
+| Step | Code (fq_auditor/) | Output |
+|---|---|---|
+| Analysis review: findings and his questions to the client | review_page.py, assets/review_page.html | review page on claude.ai; the questions email is copied from it |
+| Answers come back: intake, then rebuild what changed | as above | |
+| Consult review: plan, recommendations, projections, slides | review_page.py | review page on claude.ai |
 | Deck | deck_template.py (+ plan.py, savings.py, levers.py) | Consult deck .pptx |
 
-The app is `fq_app.py` (local web page, port 8765), started by
-`Open FQ Toolkit.command`. Builds run `build_outputs.py`. `SETUP.md` is the
-operator guide; the `plugin/fq-prospect` folder holds the Claude skills.
+The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the
+steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
+`plugin/fq-prospect` folder holds the Claude skills.
 
 ## Rules that are not negotiable
 
@@ -42,6 +66,13 @@ operator guide; the `plugin/fq-prospect` folder holds the Claude skills.
   (it would overwrite the analyst's saved client root). In a sandbox with no
   Claude login, set `FQ_NO_CLAUDE=1`: saved readings in `_Audit` are used.
 - **No em dashes** in anything the team or clients read.
+
+## Emails to the client
+
+Claude never sends or drafts email in anyone's mailbox. The intake follow-up
+is shown in the chat as plain text for the analyst to copy into Outlook (and
+saved as `_Audit/Intake follow-up - <Surname>.txt`). The later questions email
+is built on the lead advisor's analysis review page and copied from there.
 
 ## Read the whole client folder, not only the documents
 
