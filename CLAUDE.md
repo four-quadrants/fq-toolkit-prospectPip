@@ -30,7 +30,7 @@ portfolio work happens before the client accepts the consult.
 | Pull and intake again, for the expanded documents | as above | |
 | Cash flow | bank_claude.py, statements.py, transactions.py, cashflow.py, cashflow_book.py | Cash flow .numbers, bank_statements.json |
 | Portfolio analysis | accounts.py (and the prospect-portfolio-review skill) | accounts.json |
-| Assumptions | assumptions.py, deck_drafts.py, recommendations.py | Assumptions .pdf, income_facts.json |
+| Assumptions | assumptions.py, deck_drafts.py, recommendations.py | the review page's Assumptions tab (a PDF only on request), income_facts.json |
 
 **Stage 3, the lead advisor's deep dive and the consult**
 

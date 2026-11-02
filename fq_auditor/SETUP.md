@@ -153,7 +153,7 @@ Then the consult offer call. If the client accepts, send the Expanded List.
 | Documents | "Pull [client] again" and "run [client]'s intake" | The expanded documents filed, and what is still missing |
 | Cash flow | "Build [client]'s cash flow" | Every bank statement read and tied to the dollar; the cash flow |
 | Portfolio | "Run [client]'s portfolio analysis" | Accounts, returns and fees |
-| Assumptions | "Build [client]'s assumptions" | The Assumptions PDF |
+| Assumptions | "Build [client]'s assumptions" | The assumptions, shown on the review page's first tab. Need a PDF? Print the page, or ask Claude to "print the assumptions as a PDF" |
 
 **Stage 3, the lead advisor's deep dive and the consult**
 

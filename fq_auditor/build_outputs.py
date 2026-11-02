@@ -136,9 +136,14 @@ def step_assumptions(folder, client, outdir):
     import assumptions_pdf as _pdf
     bundle = _facts.gather(folder, client=client)
     sections = _asm.build(bundle, folder)
-    out = os.path.join(outdir, 'Assumptions - %s.pdf'
-                       % (bundle.surname or _surname(folder, client)))
-    _pdf.render(sections, bundle.client or client or 'Client', out)
+    # The Assumptions now live on the review page (its first tab). A PDF is
+    # made only when someone asks for one (FQ_ASSUMPTIONS_PDF=1, or "print
+    # the assumptions as a PDF" to Claude).
+    out = None
+    if os.environ.get('FQ_ASSUMPTIONS_PDF') == '1':
+        out = os.path.join(outdir, 'Assumptions - %s.pdf'
+                           % (bundle.surname or _surname(folder, client)))
+        _pdf.render(sections, bundle.client or client or 'Client', out)
     done = sum(1 for s in sections if s.complete)
     print('   %d of %d sections written from documents' % (done, len(sections)))
     # What the lead advisor's review page needs from the documents, read now
@@ -241,12 +246,16 @@ def main():
             print('   could not build it: %s' % e)
             traceback.print_exc(limit=2)
             continue
-        made.append(path)
-        print('   %s  (%ds)' % (os.path.basename(path), time.time() - began))
+        if path:
+            made.append(path)
+            print('   %s  (%ds)' % (os.path.basename(path), time.time() - began))
+        else:
+            print('   done, nothing to open: it shows on the review page  (%ds)'
+                  % (time.time() - began))
 
     print('')
     print('%d built, %d failed. They are in %s'
-          % (len(made), len(failed), outdir))
+          % (len(want) - len(failed), len(failed), outdir))
     # The app reads these lines to turn each output into a button, so the
     # prefix is a contract rather than decoration.
     for path in made:

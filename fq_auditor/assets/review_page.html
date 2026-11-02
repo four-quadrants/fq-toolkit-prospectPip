@@ -203,9 +203,9 @@ tr.off td{opacity:.55}
 
   <section data-tab="email">
     <h2>The email to the client <small>Written from the questions marked Send</small></h2>
-    <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Edit anything here; your edits are kept. <b>Start over from the questions</b> rewrites it if you change the questions afterwards.</p>
+    <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Once you edit the email here, it stops rewriting itself so your edits are kept. If you then change the questions, <b>Rewrite from the questions</b> rebuilds it from them (your edits to the email are dropped).</p>
     <div class="card pad"><textarea id="emailtext" rows="22" style="width:100%" aria-label="Email to the client"></textarea>
-    <div class="row-actions"><button type="button" id="emailcopy" class="primary-btn">Copy the email</button><button type="button" id="emailredo" class="ghost-btn">Start over from the questions</button></div></div>
+    <div class="row-actions"><button type="button" id="emailcopy" class="primary-btn">Copy the email</button><button type="button" id="emailredo" class="ghost-btn">Rewrite from the questions (drops your edits)</button></div></div>
   </section>
 
   <section data-tab="plan">
@@ -843,7 +843,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v34';
+  var BUILD='v35';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
