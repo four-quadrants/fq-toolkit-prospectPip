@@ -34,6 +34,7 @@ import os
 import re
 import sys
 import json
+HERE = os.path.dirname(os.path.abspath(__file__))
 import argparse
 import datetime
 
@@ -564,27 +565,12 @@ def seed(folder, outdir, mode='consult'):
     data_text = {}
     if mode == 'consult':
         try:
-            fills = dt.slide_fills(D)
-            drop_n = set(dt.dropped(D))
             have = {it['id'] for it in slides['items']}
-            for n in sorted(fills):
-                if n in drop_n:
+            for it in deck_boxes(folder, D):
+                if it['id'] in have:
                     continue
-                for name, val in fills[n].items():
-                    key = '%d.%s' % (n, name)
-                    text = str(val).replace('\u2019', "'")
-                    if key in have or not text.strip():
-                        continue
-                    blank = text.startswith(('[ADVISOR', '[TBD')) or text.strip() == 'TBD'
-                    status = 'needed' if blank else _box_status(n, text, D)
-                    slides['items'].append({
-                        'id': key, 'slide': n, 'heading': '', 'status': status,
-                        'hint': {'needed': 'still to write',
-                                 'check': 'worded by the code from the documents: read it',
-                                 'sure': 'a figure from the checked documents or a '
-                                         'decision already made'}[status],
-                        'text': '' if blank else text, 'data': True})
-                    data_text[key] = '' if blank else text
+                slides['items'].append(it)
+                data_text[it['id']] = it['text']
         except Exception as exc:                             # noqa: BLE001
             print('   deck boxes skipped: %s' % exc)
         slides['items'].sort(key=lambda it: (it['slide'], int(
@@ -729,6 +715,59 @@ def seed(folder, outdir, mode='consult'):
     print('   %d figures, %d concerns, %d questions written to %s'
           % (len(figs), len(plan['concerns']), len(ids), outdir))
     return outdir
+
+
+def deck_boxes(folder, D):
+    """Every box on the deck as it is built now that says something about
+    this client: its text, how much it needs a person, and what the firm
+    usually puts there.
+
+    Read from a deck built for the purpose, against the template: a box whose
+    text is still the template's is the firm's standing wording and left
+    out; everything else (figures, sentences, and every box still marked for
+    the advisor) is listed. Reading the built deck rather than the fill list
+    is what catches the boxes nothing fills, like the fees and 4Q's returns.
+    """
+    import tempfile
+    from pptx import Presentation
+    import deck_template as dt
+    scratch = tempfile.mkdtemp()
+    path = os.path.join(scratch, 'boxes.pptx')
+    dt.render(folder, None, path)
+    built = Presentation(path)
+    tmpl = Presentation(dt.TEMPLATE)
+    drop = sorted(dt.dropped(D))
+    keep_n = [n for n in range(1, len(tmpl.slides) + 1) if n not in drop]
+    try:
+        with open(os.path.join(HERE, 'assets', 'deck_examples.json')) as fh:
+            examples = json.load(fh)
+    except (OSError, ValueError):
+        examples = {}
+    out = []
+    for idx, slide in enumerate(built.slides):
+        n = keep_n[idx]
+        was = {sh.name: sh.text_frame.text.strip()
+               for sh in tmpl.slides[n - 1].shapes if sh.has_text_frame}
+        for sh in slide.shapes:
+            if not sh.has_text_frame:
+                continue
+            text = sh.text_frame.text.strip()
+            blank = text.startswith(('[ADVISOR', '[TBD')) or text == 'TBD'
+            if not text or (text == was.get(sh.name) and not blank):
+                continue
+            status = 'needed' if blank else _box_status(n, text, D)
+            ex = examples.get('%d.%s' % (n, sh.name))
+            out.append({'id': '%d.%s' % (n, sh.name), 'slide': n, 'heading': '',
+                        'status': status, 'data': True,
+                        'text': '' if blank else text.replace('\u2019', "'"),
+                        'hint': ('Like: \u201c%s\u201d' % ex[:120]) if ex and ex.strip()
+                        not in ('#', '$#', '#%') else
+                        {'needed': 'still to write',
+                         'check': 'worded by the code from the documents: read it',
+                         'sure': 'from the checked documents or a decision already made'}[status]})
+    import shutil
+    shutil.rmtree(scratch, ignore_errors=True)
+    return out
 
 
 # Slides whose wording is the code's own judgment, worth a read even when

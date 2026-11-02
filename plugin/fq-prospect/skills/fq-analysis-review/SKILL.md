@@ -9,7 +9,7 @@ The review page for a prospect's analysis, worked in two passes on the same
 page:
 
 1. **The analyst's check: the Assumptions only.** A new page opens in the
-   analyst stage and shows only the Assumptions tab. The analyst comments on
+   analyst stage and shows the Assumptions and What we found tabs (so the analyst sees what the documents already settle). The analyst comments on
    any section that is wrong or missing and asks Claude to pull in the check.
    Claude fixes what the comments point to and refreshes the page. Repeat
    until it is clean, then the analyst presses **Ready for the lead advisor**

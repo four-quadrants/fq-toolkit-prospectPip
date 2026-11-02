@@ -121,7 +121,7 @@ Then the consult offer call. If the client accepts, send the Expanded List.
 
 | Step | Say to Claude | What you get |
 |---|---|---|
-| Assumptions: your check | "Build [client]'s assumptions" or "Load [client]'s analysis review" (the same step) | Runs the cash flow and the investment accounts first if they are not done, then builds the assumptions and opens the review page on them (Assumptions tab only). Comment on any section that is wrong or missing, then "pull in my check": Claude fixes what you flagged and refreshes the page. Repeat until it is clean |
+| Assumptions: your check | "Build [client]'s assumptions" or "Load [client]'s analysis review" (the same step) | Runs the cash flow and the investment accounts first if they are not done, then builds the assumptions and opens the review page on them (the Assumptions and What we found tabs). Comment on any section that is wrong or missing, then "pull in my check": Claude fixes what you flagged and refreshes the page. Repeat until it is clean |
 | Hand it over | Press **Ready for the lead advisor** (click twice) | The page shows its link and the steps: **Share** menu, add him with **Can edit**, send him the link. Or ask Claude for the link |
 | Analysis review: lead advisor | He checks the assumptions and findings, comments, picks his questions, presses Done | The email to the client is built on the page; copy it into Outlook. Then "pull in [client]'s analysis review" |
 | Answers come back | "Run [client]'s intake", then "update [client]" | New documents filed; anything they change rebuilt |

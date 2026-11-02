@@ -169,7 +169,7 @@ tr.off td{opacity:.55}
 <div class="wrap">
   <header>
     <div class="eyebrow">Due diligence · Four Quadrants</div>
-    <h1 id="title">Consult review</h1>
+    <h1 id="title">Review</h1>
     <p class="lede">The toolkit's proposal for each figure the consult deck is built from, the client's biggest concerns, the slide wording Claude drafted, and the follow-up questions. Leave a box blank to accept the proposal. Everything saves as you go.</p>
     <div class="status" id="status">Loading the plan…</div>
     <div class="note" id="heard">Checking the connection…</div>
@@ -301,8 +301,12 @@ tr.off td{opacity:.55}
 
   function renderPlan(){
     if(!plan) return;
-    $('title').textContent=(plan.client||'Client')+' · consult review';
-    document.title=(plan.surname||'Client')+' Consult Review';
+    var an=(plan.mode==='analysis');
+    $('title').textContent=(plan.client||'Client')+' · '+(an?'analysis review':'consult review');
+    document.title=(plan.surname||'Client')+(an?' Analysis Review':' Consult Review');
+    var ld=document.querySelector('.lede');
+    if(ld) ld.textContent=an?(isAnalyst()?'The assumptions and what the documents show, for the analyst to check before the lead advisor sees them. Comment on anything wrong or missing; everything saves as you go.':'The assumptions, what the documents show, the follow-up questions and the email to the client. Comment on any section, mark each question, and the email writes itself. Everything saves as you go.')
+      :'The plan, the recommendations, the projections and every slide of the deck, for the lead advisor to shape. Leave a box blank to accept the proposal. Everything saves as you go.';
     var lastG=null;
     var rows=(plan.figures||[]).filter(function(f){return !f.slide}).map(function(f,i){
       var mine=(plan.decided||{})[f.key];
@@ -841,9 +845,10 @@ function fqModel(P){
   function applyMode(){
     var mode=(plan&&plan.mode)||'consult';
     document.body.classList.toggle('mode-analysis',mode==='analysis');
-    // The analyst's check is the Assumptions only; the lead advisor gets
-    // every tab once it is handed over.
-    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume'); });
+    // The analyst's check is the Assumptions and What we found (so the
+    // analyst can see what the documents already settle and not ask it
+    // again); the lead advisor gets every tab once it is handed over.
+    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume' && b.dataset.tabgo!=='found'); });
     var cur=document.querySelector('[data-tabgo][aria-selected=true]');
     if(!cur||cur.hidden){ var first=document.querySelector('[data-tabgo]:not([hidden])'); if(first) showTab(first.dataset.tabgo); }
     var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+
@@ -870,7 +875,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v39';
+  var BUILD='v41';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
