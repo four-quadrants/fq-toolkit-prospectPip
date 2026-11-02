@@ -556,7 +556,7 @@ def seed(folder, outdir, mode='consult'):
         words = []
     slides = {'items': [{'id': w['id'], 'slide': w['slide'],
                          'heading': w['heading'], 'hint': w['example'],
-                         'text': w['text']} for w in words]}
+                         'text': w['text'], 'status': 'check'} for w in words]}
     # Everything else the deck says about this client, box by box, so the
     # lead advisor can read the whole deck slide by slide beside its picture
     # and change any of it: the figures, the concerns, the lever rows, the
@@ -575,12 +575,14 @@ def seed(folder, outdir, mode='consult'):
                     text = str(val).replace('\u2019', "'")
                     if key in have or not text.strip():
                         continue
-                    blank = text.startswith(('[ADVISOR', '[TBD'))
+                    blank = text.startswith(('[ADVISOR', '[TBD')) or text.strip() == 'TBD'
+                    status = 'needed' if blank else _box_status(n, text, D)
                     slides['items'].append({
-                        'id': key, 'slide': n, 'heading': '',
-                        'hint': ('still to write' if blank else
-                                 'from the documents and the plan; edit to change '
-                                 'it on the slide'),
+                        'id': key, 'slide': n, 'heading': '', 'status': status,
+                        'hint': {'needed': 'still to write',
+                                 'check': 'worded by the code from the documents: read it',
+                                 'sure': 'a figure from the checked documents or a '
+                                         'decision already made'}[status],
                         'text': '' if blank else text, 'data': True})
                     data_text[key] = '' if blank else text
         except Exception as exc:                             # noqa: BLE001
@@ -729,6 +731,31 @@ def seed(folder, outdir, mode='consult'):
     return outdir
 
 
+# Slides whose wording is the code's own judgment, worth a read even when
+# every figure in it is right: the tax red flags and the debt structuring.
+_JUDGED_SLIDES = {7, 10}
+
+
+def _box_status(n, text, D):
+    """How much a deck box needs a person: 'sure', or 'check'.
+
+    Sure: a figure carried from the checked documents or the plan, or the
+    lead advisor's own words (his concerns on slide 3). Check: a sentence the
+    code composed, an estimate, or anything on a judged slide. Blank boxes are
+    'needed' and decided by the caller.
+    """
+    t = str(text).strip()
+    if n == 3 and (D.get('adv') or {}).get('concerns'):
+        return 'sure'
+    if re.search(r'\b(est\.|about|approx|roughly|likely|look like)\b|~|\?', t, re.I):
+        return 'check'
+    if n in _JUDGED_SLIDES and len(t) > 25:
+        return 'check'
+    if len(t) > 70:
+        return 'check'
+    return 'sure'
+
+
 def slide_pictures(folder, items, outdir, also=()):
     """A picture of each slide that has wording to approve, from the client's
     built deck, with every box on it outlined and numbered to match the list
@@ -776,12 +803,17 @@ def slide_pictures(folder, items, outdir, also=()):
             box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, sh.left, sh.top,
                                          sh.width, sh.height)
             box.fill.background()
-            box.line.color.rgb = RGBColor(0xE0, 0x6C, 0x00)
+            # The outline says how much the box needs a person, as the list
+            # beside the picture does: needed, to check, sure.
+            col = {'needed': RGBColor(0xC2, 0x41, 0x0C), 'sure': RGBColor(0x1E, 0x7A, 0x46),
+                   'check': RGBColor(0xE0, 0xB4, 0x00)}.get(it.get('status'),
+                                                            RGBColor(0xE0, 0x6C, 0x00))
+            box.line.color.rgb = col
             box.line.width = Pt(2.5)
             tag = slide.shapes.add_shape(MSO_SHAPE.OVAL, sh.left - Pt(9),
                                          sh.top - Pt(9), Pt(20), Pt(20))
             tag.fill.solid()
-            tag.fill.fore_color.rgb = RGBColor(0xE0, 0x6C, 0x00)
+            tag.fill.fore_color.rgb = col
             tag.line.fill.background()
             tf = tag.text_frame
             tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0

@@ -125,6 +125,14 @@ section[data-tab].tab-off{display:none}
 /* The analyst's notes, as the lead advisor sees them: highlighter yellow so
    they cannot be missed. */
 :root{--an-bg:#FFF2A8;--an-line:#E0B400;--an-ink:#5A4600}
+.sfilter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted);margin-bottom:12px}
+.sf{font:600 13px var(--display);padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer}
+.sf[aria-pressed=true].sf-needed{background:#C2410C;border-color:#C2410C;color:#fff}
+.sf[aria-pressed=true].sf-check{background:#E0B400;border-color:#E0B400;color:#3D3000}
+.sf[aria-pressed=true].sf-sure{background:var(--ok);border-color:var(--ok);color:#fff}
+.st{font:600 11px var(--display);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:99px}
+.st-needed{background:#FDE2D3;color:#9A3412}.st-check{background:#FFF2A8;color:#5A4600}.st-sure{background:var(--ok-soft);color:var(--ok)}
+.q.q-needed{border-left:4px solid #C2410C}.q.q-check{border-left:4px solid #E0B400}.q.q-sure{border-left:4px solid var(--ok)}
 .anfrom{border:2px solid var(--an-line);border-left-width:6px;background:var(--an-bg);color:var(--text);padding:9px 12px;border-radius:6px;font-size:15px;white-space:pre-wrap}
 .anfrom b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--an-ink);margin-bottom:2px}
 body.stage-analyst .asec textarea.anote.set{border:2px solid var(--an-line);background:var(--an-bg)}
@@ -262,6 +270,7 @@ tr.off td{opacity:.55}
   <section data-tab="slides">
     <h2>Slide by slide <small id="scount"></small></h2>
     <p class="note">The whole deck, slide by slide: each picture is the deck as it is built now, with every box that comes from this client outlined in orange and numbered to match the list beside it. Change any box and it goes on the slide at the next build; ask Claude to rebuild the deck and refresh this page to see the new pictures. Boxes Claude drafted have <b>Use</b> / <b>Drop</b>. The deck is an ordinary PowerPoint file, so anything can still be changed after it is built.</p>
+    <div id="sfilter" class="sfilter"></div>
     <div id="slides"><div class="card empty">The slides appear here once the analyst loads them.</div></div>
   </section>
 
@@ -563,6 +572,12 @@ function fqModel(P){
     debounce('note',function(){ write('plan/figures',{notes:plan.notes},function(){pending.note=false;},'notes'); });
   });
   var SL=[];
+  // Which boxes the Slides tab shows: the ones that need a person first.
+  var SF={needed:true, check:true, sure:false};
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('button[data-sf]'); if(!b) return;
+    SF[b.dataset.sf]=!SF[b.dataset.sf]; renderSlides();
+  });
   function figRow(f){
     var mine=(plan.decided||{})[f.key];
     return '<tr><td><b>'+esc(f.label)+'</b><div class="basis">'+esc(f.basis||'')+'</div></td>'+
@@ -576,22 +591,30 @@ function fqModel(P){
     var nums={}; SL.forEach(function(x){nums[x.slide]=1}); figs.forEach(function(f){nums[f.slide]=1});
     var order=Object.keys(nums).map(Number).sort(function(a,b){return a-b});
     if(!order.length) return;
-    var use=SL.filter(function(x){return (sd[x.id]||'Use')==='Use'}).length;
-    $('scount').textContent=SL.length?(use+' of '+SL.length+' drafted boxes going on the slides'):'';
+    var cnt={needed:0,check:0,sure:0};
+    SL.forEach(function(x){ cnt[x.status||'check']=(cnt[x.status||'check']||0)+1; });
+    var chip=function(k,label){ return '<button type="button" class="sf sf-'+k+'" data-sf="'+k+'" aria-pressed="'+(!!SF[k])+'">'+label+' · '+(cnt[k]||0)+'</button>'; };
+    $('sfilter').innerHTML='Show: '+chip('needed','Needed')+chip('check','To check')+chip('sure','Sure')+
+      '<span class="note"> Start with Needed and To check; Sure boxes are figures from the checked documents or decisions already made.</span>';
+    $('scount').textContent='';
     $('slides').innerHTML=order.map(function(n){
-      var its=SL.filter(function(x){return x.slide===n}), fs=figs.filter(function(f){return f.slide===n});
+      var all=SL.filter(function(x){return x.slide===n}), fs=figs.filter(function(f){return f.slide===n});
+      var its=all.filter(function(x){ return SF[x.status||'check']; });
+      var hidden=all.length-its.length;
+      if(!its.length && !fs.length) return '';
       var any=its[0]||{}, pic=any.pic||(plan.pics||{})[n], head=any.heading||(plan.slide_titles||{})[n]||('Slide '+n);
       var right='';
       if(fs.length) right+='<div class="ledger"><table><thead><tr><th>Figure</th><th style="text-align:right">Proposed</th><th>Your figure</th></tr></thead><tbody>'+fs.map(figRow).join('')+'</tbody></table></div>';
       right+=its.map(function(x){
         var d=sd[x.id]||'Use', t=(st[x.id]!=null&&st[x.id]!=='')?st[x.id]:x.text;
         var b=function(name,cls){return '<button type="button" class="'+cls+'" data-sid="'+esc(x.id)+'" data-s="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
-        if(x.data) return '<div class="q"><div class="top"><span class="n">'+esc(x.n||'')+'</span><span class="why">'+esc(x.hint||'')+'</span></div>'+
+        var tag='<span class="st st-'+(x.status||'check')+'">'+({needed:'Needed',check:'To check',sure:'Sure'}[x.status||'check'])+'</span>';
+        if(x.data) return '<div class="q q-'+(x.status||'check')+'"><div class="top"><span class="n">'+esc(x.n||'')+'</span>'+tag+'<span class="why">'+esc(x.hint||'')+'</span></div>'+
           '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea></div>';
         return '<div class="q '+(d==='Drop'?'strike':'send')+'"><div class="top"><span class="n">'+esc(x.n||'')+'</span><span class="seg">'+b('Use','send')+b('Drop','strike')+'</span></div>'+
           '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea>'+
           '<div class="why">What goes here: '+esc(x.hint||'')+'</div></div>';
-      }).join('');
+      }).join('')+(hidden?'<div class="why">'+hidden+' more box'+(hidden===1?'':'es')+' on this slide hidden by the filter above.</div>':'');
       return '<div class="slidegroup"><div class="slidepicwrap"><h3 class="slidehead">'+esc(head)+'</h3>'+
         (pic?'<img class="slidepic" src="'+esc(pic)+'" alt="The slide, with each box to check outlined and numbered">':'<div class="empty">Picture appears after the deck is built.</div>')+
         '</div><div class="slideitems">'+right+'</div></div>';
@@ -847,7 +870,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v38';
+  var BUILD='v39';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
