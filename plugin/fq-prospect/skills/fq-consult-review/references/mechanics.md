@@ -59,7 +59,7 @@ Never overwrite the lead advisor's work. Re-seed, then:
   `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`
   (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
-  `email_edited`, `assume_notes` alone.
+  `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes` alone.
 - `set` plan/workings, plan/slides and every question doc.
 - Question ids are made from the question itself, so decisions stay attached.
 - Do not republish the page itself unless the page design changed (republishing

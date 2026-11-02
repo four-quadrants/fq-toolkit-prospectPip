@@ -126,6 +126,18 @@ section[data-tab].tab-off{display:none}
 .asec td.mid{white-space:nowrap;color:var(--ink)}
 .asec textarea.anote{font-size:14px;min-height:2.2em;background:var(--bg)}
 .asec textarea.anote.set{border-color:var(--accent);background:var(--accent-soft)}
+#sharebox ol{margin:6px 0;padding-left:20px}
+.sharelink{display:flex;gap:8px;flex-wrap:wrap}
+.sharelink input{flex:1;min-width:220px}
+/* The analyst's notes, as the lead advisor sees them: highlighter yellow so
+   they cannot be missed. */
+:root{--an-bg:#FFF2A8;--an-line:#E0B400;--an-ink:#5A4600}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#4A3E05;--an-line:#E0B400;--an-ink:#FFE680}}
+:root[data-theme="dark"]{--an-bg:#4A3E05;--an-line:#E0B400;--an-ink:#FFE680}
+.anfrom{border:2px solid var(--an-line);border-left-width:6px;background:var(--an-bg);color:var(--text);padding:9px 12px;border-radius:6px;font-size:15px;white-space:pre-wrap}
+.anfrom b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--an-ink);margin-bottom:2px}
+body.stage-analyst .asec textarea.anote.set{border:2px solid var(--an-line);background:var(--an-bg)}
+body.stage-analyst #donebtn{background:var(--accent)}
 .asum td.r{text-align:right;font-variant-numeric:tabular-nums}
 .asum tr.net td{border-top:2px solid var(--ink);font-weight:700}
 .qans{margin-top:6px;background:var(--pale,#f6f3ee)}
@@ -176,7 +188,7 @@ tr.off td{opacity:.55}
 
   <section data-tab="assume">
     <h2>Assumptions <small id="as-count"></small></h2>
-    <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in.</p>
+    <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own.</p>
     <div id="assume"><div class="card empty">Appears once the analyst loads this client.</div></div>
   </section>
 
@@ -185,6 +197,7 @@ tr.off td{opacity:.55}
     <p class="note">Read from the statements, returns and credit reports, each with where it came from. Anything wrong or missing: say so in a note or a question to the client.</p>
     <div id="found"><div class="card empty">Appears once the analyst loads this client.</div></div>
     <h2 style="margin-top:26px">Notes for the team <small>Read before the plan is built</small></h2>
+    <div class="anfrom" id="an-note" style="display:none"></div>
     <div class="card pad"><textarea id="gnote2" rows="3" placeholder="What looks off, what to ask, what to keep in mind for the plan." aria-label="Notes" style="width:100%"></textarea></div>
   </section>
 
@@ -268,6 +281,7 @@ tr.off td{opacity:.55}
   </section>
 </div>
 
+<div id="sharebox" class="card pad" style="display:none;max-width:980px;margin:0 auto 90px"></div>
 <div id="donebar" role="region" aria-label="Finish this review">
   <div class="db-text"><b id="donetitle">When you have been through every tab</b><span id="donestate">press the button so the team knows the review is finished.</span></div>
   <button type="button" id="donebtn">I'm done with this review</button>
@@ -640,8 +654,11 @@ function fqModel(P){
       if(s.flag) h+='<div class="abox"><b>CHECK THIS</b>'+esc(s.flag)+'</div>';
       if(s.needed) h+='<div class="abox"><b>STILL NEEDED</b>'+esc(s.needed)+(s.why?'<div>'+esc(s.why)+'</div>':'')+
         (s.link?'<div><a href="'+esc(s.link)+'" target="_blank" rel="noopener">'+esc(s.link)+'</a></div>':'')+'</div>';
-      var an=((plan.assume_notes||{})[s.number])||'';
-      h+='<textarea class="anote" data-an="'+s.number+'" rows="1" placeholder="Your comment on this section (a change, a question, a correction)" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
+      var mine=isAnalyst()?(plan.an_assume_notes||{}):(plan.assume_notes||{});
+      var theirs=((plan.an_assume_notes||{})[s.number])||'';
+      if(!isAnalyst()&&theirs.trim()) h+='<div class="anfrom"><b>\u270e Analyst\u2019s note</b>'+esc(theirs)+'</div>';
+      var an=mine[s.number]||'';
+      h+='<textarea class="anote'+(an.trim()?' set':'')+'" data-an="'+s.number+'" rows="1" placeholder="'+(isAnalyst()?'Your check: anything wrong, missing or to fix (Claude reads this)':'Your comment on this section (a change, a question, a correction)')+'" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
       h+='</div></div>';
     });
     var S=A.summary||{};
@@ -657,9 +674,10 @@ function fqModel(P){
 
   document.addEventListener('input',function(e){
     var el=e.target; if(!el||!el.dataset||el.dataset.an==null||!plan) return;
-    plan.assume_notes=plan.assume_notes||{}; plan.assume_notes[el.dataset.an]=el.value; pending.an=true;
+    var f=isAnalyst()?'an_assume_notes':'assume_notes';
+    plan[f]=plan[f]||{}; plan[f][el.dataset.an]=el.value; pending.an=true;
     el.classList.toggle('set',!!el.value.trim());
-    debounce('an',function(){ write('plan/figures',{assume_notes:plan.assume_notes},function(){pending.an=false;},'comment on assumption '+el.dataset.an); });
+    debounce('an',function(){ var patch={}; patch[f]=plan[f]; write('plan/figures',patch,function(){pending.an=false;},'comment on assumption '+el.dataset.an); });
   });
 
   // ---- what we found (analysis review) ----------------------------------
@@ -677,6 +695,11 @@ function fqModel(P){
   }
   document.addEventListener('input',function(e){
     if(!e.target||e.target.id!=='gnote2'||!plan) return;
+    if(isAnalyst()){
+      plan.an_notes=e.target.value; pending.ann=true;
+      debounce('ann',function(){ write('plan/figures',{an_notes:plan.an_notes},function(){pending.ann=false;},'your notes for the lead advisor'); });
+      return;
+    }
     plan.notes=e.target.value; pending.note=true;
     debounce('note',function(){ write('plan/figures',{notes:plan.notes},function(){pending.note=false;},'notes'); });
   });
@@ -725,8 +748,32 @@ function fqModel(P){
       '<div class="note" style="margin:4px 0 8px">The toolkit no longer needs to ask these: the documents that came in settle them.</div>'+
       '<ul style="margin:0;padding-left:18px">'+a.map(function(x){ return '<li class="basis" style="margin:3px 0">'+esc(x.text)+'</li>'; }).join('')+'</ul>';
   }
+  // What the analyst does next, shown the moment the page is handed over.
+  function showShare(){
+    var el=$('sharebox'); if(!el||!plan) return;
+    var url=plan.page_url||'';
+    el.style.display='';
+    el.innerHTML='<b>Handed over. Now send it to the lead advisor:</b>'+
+      '<ol><li>Open this page\u2019s <b>Share</b> menu (top right) and add him with <b>Can edit</b>. Without edit access nothing he marks will save.</li>'+
+      '<li>Send him the link (Teams or email)'+(url?':':'. Ask Claude for \u201cthe link to this analysis review\u201d.')+'</li></ol>'+
+      (url?'<div class="sharelink"><input type="text" id="shareurl" readonly value="'+esc(url)+'" aria-label="Link to this page"><button type="button" id="sharecopy" class="primary-btn">Copy the link</button></div>':'')+
+      '<div class="note">He sees every tab: your assumption comments are shown above his own.</div>';
+  }
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='sharecopy') return;
+    var t=$('shareurl'); t.select();
+    try{ navigator.clipboard.writeText(t.value).then(function(){ say('<b>Link copied.</b>'); },function(){ document.execCommand('copy'); say('<b>Link copied.</b>'); }); }
+    catch(err){ try{ document.execCommand('copy'); say('<b>Link copied.</b>'); }catch(e2){ say('Select the link and copy it.'); } }
+  });
   function renderDone(){
     var b=$('donebtn'), st=$('donestate'), t=$('donetitle'), bar=$('donebar'); if(!b||!plan) return;
+    if(isAnalyst()){
+      bar.classList.remove('is-done');
+      t.textContent='When the assumptions check out';
+      st.textContent='hand them to the lead advisor. Anything to fix first: comment, ask Claude to pull in your check, then come back.';
+      b.textContent='Ready for the lead advisor';
+      return;
+    }
     if(plan.done){
       bar.classList.add('is-done');
       t.textContent='\u2713 Review finished '+String(plan.done).slice(0,10);
@@ -741,17 +788,42 @@ function fqModel(P){
   }
   document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='donebtn'||!plan) return;
+    if(isAnalyst()){
+      // Pop-up confirmations are blocked in the Claude app's viewer (found
+      // 2 Nov: the button did nothing), so the button asks for a second click.
+      var b2=$('donebtn');
+      if(!b2.dataset.armed){
+        b2.dataset.armed='1'; b2.textContent='Click again to hand it over';
+        $('donestate').textContent='The lead advisor will see the page with your comments. Nothing happens unless you click again.';
+        setTimeout(function(){ if(b2.dataset.armed){ delete b2.dataset.armed; renderDone(); } },6000);
+        return;
+      }
+      delete b2.dataset.armed;
+      plan.stage='lead'; plan.handoff=new Date().toISOString();
+      write('plan/figures',{stage:'lead',handoff:plan.handoff},null,'handed to the lead advisor');
+      applyMode(); renderDone(); renderAssume(); showShare(); return;
+    }
     plan.done=plan.done?null:new Date().toISOString();
     write('plan/figures',{done:plan.done},null,plan.done?'review marked done: tell the analyst it is ready to pull in':'review reopened');
     renderDone();
   });
+  // Who is working the page. An analysis review starts with the analyst, who
+  // checks and clears it up, then hands it to the lead advisor. A page from
+  // before stages existed is the lead advisor's.
+  function isAnalyst(){ return !!(plan && plan.stage==='analyst'); }
   function applyMode(){
     var mode=(plan&&plan.mode)||'consult';
     document.body.classList.toggle('mode-analysis',mode==='analysis');
-    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0; });
+    // The analyst's check is the Assumptions only; the lead advisor gets
+    // every tab once it is handed over.
+    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume'); });
     var cur=document.querySelector('[data-tabgo][aria-selected=true]');
     if(!cur||cur.hidden){ var first=document.querySelector('[data-tabgo]:not([hidden])'); if(first) showTab(first.dataset.tabgo); }
-    var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+' · Four Quadrants';
+    var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+
+      (mode==='analysis'?(isAnalyst()?' · analyst check':' · lead advisor'):'')+' · Four Quadrants';
+    document.body.classList.toggle('stage-analyst',isAnalyst());
+    var gn=$('gnote2'); if(gn) gn.placeholder=isAnalyst()?'For the lead advisor: what you checked, what you could not settle, what to look at first.':'What looks off, what to ask, what to keep in mind for the plan.';
+    var an=$('an-note'); if(an){ var t=(plan&&plan.an_notes)||''; an.style.display=(!isAnalyst()&&t)?'':'none'; an.innerHTML='<b>\u270e From the analyst</b>'+esc(t); }
   }
   // ---- tabs ------------------------------------------------------------
   function showTab(t){
@@ -771,7 +843,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v30';
+  var BUILD='v34';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
@@ -813,14 +885,15 @@ function fqModel(P){
       if(plan && pending.st) incoming.stext=plan.stext;
       if(plan && pending.rec){ incoming.recs=plan.recs; incoming.recs_custom=plan.recs_custom; }
       if(plan && pending.note) incoming.notes=plan.notes;
-      if(plan && pending.an) incoming.assume_notes=plan.assume_notes;
+      if(plan && pending.an){ incoming.assume_notes=plan.assume_notes; incoming.an_assume_notes=plan.an_assume_notes; }
+      if(plan && pending.ann) incoming.an_notes=plan.an_notes;
       if(plan && pending.qa) incoming.qanswers=plan.qanswers;
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
       plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
       showEmail(false);
-      ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=plan.notes||''; });
+      ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=(id==='gnote2'&&isAnalyst())?(plan.an_notes||''):(plan.notes||''); });
       var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();
       if(!/Saved|Not saved|Still saving/.test($('status').textContent)) say('<b>Up to date</b> · decisions save as you go.');
     });

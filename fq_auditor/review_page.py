@@ -196,7 +196,15 @@ def apply(folder, plan_json):
            # His comments on the Assumptions, by section number.
            'assumption_notes': {k: v.strip() for k, v in
                                 (rec.get('assume_notes') or {}).items()
-                                if (v or '').strip()}}
+                                if (v or '').strip()},
+           # The analyst's check, made on the same page before the lead
+           # advisor sees it.
+           'stage': rec.get('stage') or 'lead',
+           'handoff': rec.get('handoff'),
+           'analyst_notes': (rec.get('an_notes') or '').strip(),
+           'analyst_assumption_notes': {k: v.strip() for k, v in
+                                        (rec.get('an_assume_notes') or {}).items()
+                                        if (v or '').strip()}}
     # Slide wording: what was proposed, as edited, unless dropped.
     try:
         with open(os.path.join(folder, '_Audit', 'review_slides.json')) as fh:
@@ -216,6 +224,18 @@ def apply(folder, plan_json):
         print('   CLIENT ANSWERS (put what they settle into the plan before rebuilding):')
         for k, v in sorted(out['qanswers'].items()):
             print('     %s: %s' % (k, v))
+    titles_an = {str(x.get('number')): x.get('title') for x in
+                 ((rec.get('assumptions') or {}).get('sections') or ())}
+    if out['analyst_notes'] or out['analyst_assumption_notes']:
+        print("   THE ANALYST'S CHECK (%s):" % (
+            'still with the analyst: fix these, then refresh the page'
+            if out['stage'] == 'analyst' else
+            'handed to the lead advisor %s' % (out['handoff'] or '')[:10]))
+        if out['analyst_notes']:
+            print('     ' + out['analyst_notes'])
+        for k, v in sorted(out['analyst_assumption_notes'].items(),
+                           key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
+            print('     - Assumptions %s (%s): %s' % (k, titles_an.get(str(k), ''), v))
     if out['notes'] or notes or out['assumption_notes']:
         print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
         if out['notes']:
@@ -566,6 +586,21 @@ def seed(folder, outdir, mode='consult'):
             plan['qtext'][qid] = t
     plan['notes'] = prev_all.get('notes') or ''
     plan['assume_notes'] = prev_all.get('assumption_notes') or {}
+    plan['an_notes'] = prev_all.get('analyst_notes') or ''
+    plan['an_assume_notes'] = prev_all.get('analyst_assumption_notes') or {}
+    # A new analysis review starts with the analyst; the consult review is
+    # the lead advisor's.
+    plan['stage'] = ('analyst' if mode == 'analysis' and
+                     prev_all.get('stage') != 'lead' else 'lead')
+    plan['handoff'] = prev_all.get('handoff')
+    # The page's own link, so the hand-off can show it. Known once the page
+    # has been published (review_pages.json); Claude writes it after the
+    # first publish otherwise.
+    try:
+        with open(os.path.join(folder, '_Audit', 'review_pages.json')) as fh:
+            plan['page_url'] = (json.load(fh) or {}).get(mode)
+    except (OSError, ValueError):
+        plan['page_url'] = None
     with open(os.path.join(outdir, 'plan.json'), 'w') as fh:
         json.dump(plan, fh, default=str)
 

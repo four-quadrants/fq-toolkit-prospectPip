@@ -36,7 +36,8 @@ portfolio work happens before the client accepts the consult.
 
 | Step | Code (fq_auditor/) | Output |
 |---|---|---|
-| Analysis review: findings and his questions to the client | review_page.py, assets/review_page.html | review page on claude.ai; the questions email is copied from it |
+| Analysis review, analyst's check: the analyst works the page first, Claude fixes what he flags | review_page.py, assets/review_page.html | review page on claude.ai (stage "analyst") |
+| Analysis review, lead advisor: the analyst hands it over; he checks and picks his questions | as above | the same page (stage "lead"); the questions email is copied from it |
 | Answers come back: intake, then rebuild what changed | as above | |
 | Consult review: plan, recommendations, projections, slides | review_page.py | review page on claude.ai |
 | Deck | deck_template.py (+ plan.py, savings.py, levers.py) | Consult deck .pptx |

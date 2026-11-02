@@ -159,7 +159,9 @@ Then the consult offer call. If the client accepts, send the Expanded List.
 
 | Step | Say to Claude | What you get |
 |---|---|---|
-| Analysis review | "Load [client]'s analysis review" | A page for the lead advisor: he checks the findings and picks his questions; the email to the client is built on the page and copied from there |
+| Analysis review: your check | "Load [client]'s analysis review" | The review page, opening on the Assumptions only. Comment on any section that is wrong or missing, then "pull in my check": Claude fixes what you flagged and refreshes the page. Repeat until it is clean |
+| Hand it over | Press **Ready for the lead advisor** (click twice) | The page shows its link and the steps: **Share** menu, add him with **Can edit**, send him the link. Or ask Claude for the link |
+| Analysis review: lead advisor | He checks the assumptions and findings, comments, picks his questions, presses Done | The email to the client is built on the page; copy it into Outlook. Then "pull in [client]'s analysis review" |
 | Answers come back | "Run [client]'s intake", then "update [client]" | New documents filed; anything they change rebuilt |
 | Consult review | "Load [client]'s consult review" | A page for the plan, recommendations, projections and slides |
 | Pull in | "Pull in [client]'s consult review" | His decisions saved |
