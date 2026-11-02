@@ -747,6 +747,10 @@ def _box_status(n, text, D):
     t = str(text).strip()
     if n == 3 and (D.get('adv') or {}).get('concerns'):
         return 'sure'
+    # The firm's standing wording with the client's name or balance dropped
+    # in (tax solutions, the cash flow process): the same on every deck.
+    if n in (8, 13):
+        return 'sure'
     if re.search(r'\b(est\.|about|approx|roughly|likely|look like)\b|~|\?', t, re.I):
         return 'check'
     if n in _JUDGED_SLIDES and len(t) > 25:
