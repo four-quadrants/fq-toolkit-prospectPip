@@ -10,15 +10,8 @@
   --display:"Barlow Semi Condensed","Barlow",system-ui,sans-serif;
   --body:"Barlow",system-ui,-apple-system,sans-serif;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0F1A25; --card:#16232F; --ink:#CFE2F1; --text:#DCE4EB; --muted:#93A3B1;
-  --line:#2A3A49; --accent:#F08A3E; --accent-soft:#3A2617; --pale:#1B2E3F;
-  --ok:#5CC48A; --ok-soft:#153222; --off:#8A939C; --off-soft:#222D37; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0F1A25; --card:#16232F; --ink:#CFE2F1; --text:#DCE4EB; --muted:#93A3B1;
-  --line:#2A3A49; --accent:#F08A3E; --accent-soft:#3A2617; --pale:#1B2E3F;
-  --ok:#5CC48A; --ok-soft:#153222; --off:#8A939C; --off-soft:#222D37; color-scheme:dark}
 body{background:var(--bg);color:var(--text);font:16px/1.5 var(--body)}
+:root{color-scheme:light}
 .wrap{max-width:1440px;margin:0 auto;padding-block:28px 60px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   display:grid;gap:28px}
@@ -132,8 +125,6 @@ section[data-tab].tab-off{display:none}
 /* The analyst's notes, as the lead advisor sees them: highlighter yellow so
    they cannot be missed. */
 :root{--an-bg:#FFF2A8;--an-line:#E0B400;--an-ink:#5A4600}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#4A3E05;--an-line:#E0B400;--an-ink:#FFE680}}
-:root[data-theme="dark"]{--an-bg:#4A3E05;--an-line:#E0B400;--an-ink:#FFE680}
 .anfrom{border:2px solid var(--an-line);border-left-width:6px;background:var(--an-bg);color:var(--text);padding:9px 12px;border-radius:6px;font-size:15px;white-space:pre-wrap}
 .anfrom b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--an-ink);margin-bottom:2px}
 body.stage-analyst .asec textarea.anote.set{border:2px solid var(--an-line);background:var(--an-bg)}
@@ -854,7 +845,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v36';
+  var BUILD='v37';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

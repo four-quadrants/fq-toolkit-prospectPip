@@ -18,6 +18,11 @@ a private claude.ai artifact per client per stage, with a small database (the
   `{"analysis": "<artifact url>", "consult": "<artifact url>"}`. Read it first;
   write it after publishing a new page.
 
+- **First thing in a session**: read `prospectPip/CLAUDE.md` (the rules and
+  the map). On a Mac not used before, or if anything fails to import, run
+  `python3 fq_auditor/readycheck.py "<Prospects folder>"` and install what it
+  lists before going on.
+
 ## Seeding (building the page's data)
 
 Run in the shell, from TOOLKIT/prospectPip/fq_auditor:

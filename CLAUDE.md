@@ -46,6 +46,13 @@ The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the
 steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
 `plugin/fq-prospect` folder holds the Claude skills.
 
+## A new Mac, or "check the FQ toolkit is ready"
+
+Run `python3 fq_auditor/readycheck.py "<Prospects folder>"`. It lists any
+missing library or tool with the command that installs it in the workspace;
+install them, run it again, and say it is ready. The Mac itself needs only
+the Claude app, the Analysis share and the cloned toolkit (SETUP.md Part 1).
+
 ## Rules that are not negotiable
 
 - **No client data in git.** `.gitignore` is an allowlist (code and docs only).

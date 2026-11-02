@@ -1,6 +1,6 @@
 ---
 name: fq-analysis-review
-description: "Load or pull in a Four Quadrants prospect's ANALYSIS REVIEW: the lead advisor's first review page, showing what the documents show (accounts, debts, credit cards, pay from the returns, bank accounts) and the follow-up questions for the client, with the client email built on the page. Use when someone says \"load [client]'s analysis review\", \"make the analysis review for [client]\", \"refresh [client]'s analysis review\", \"pull in [client]'s analysis review\", or \"pull in [client]'s questions\". Comes after the app has built the client's Assumptions, and before the consult review."
+description: "Build, load or pull in a Four Quadrants prospect's ANALYSIS REVIEW, which is also how the ASSUMPTIONS are built and reviewed: one page whose first tab is the assumptions, then what the documents show, the follow-up questions and the client email. Use when someone says \"build [client]'s assumptions\", \"load [client]'s assumptions\", \"assumptions for [client]\", \"load [client]'s analysis review\", \"make the analysis review for [client]\", \"refresh [client]'s analysis review\", \"pull in my check\", \"pull in [client]'s analysis review\", or \"pull in [client]'s questions\". Comes after the cash flow, and before the consult review."
 ---
 
 # Analysis review
@@ -23,17 +23,31 @@ page:
 Read `references/mechanics.md` for how pages are found, seeded, published,
 refreshed and pulled in.
 
-## Load
+## Load (also: "build the assumptions")
+
+"Assumptions" and "analysis review" are one step to the analyst: the
+assumptions are built and then shown as the page's first tab. Never make a PDF
+unless asked.
 
 1. Find the toolkit and the client folder (mechanics: Finding things). Check
    `_Audit/review_pages.json` for an existing analysis page; if there is one,
    this is a refresh, not a new page.
-2. Seed with `--mode analysis`. A new page starts in the analyst stage.
-3. Before publishing, read `plan.json`'s `assumptions`, `findings` and the
+2. Build everything the assumptions rest on, in order, in one run: from
+   fq_auditor, `python3 build_outputs.py "<client folder>" --what
+   cashflow,assumptions`. That reads every bank statement (each must tie to
+   the dollar), writes the cash flow workbook, reads the investment
+   statements (accounts and returns), then works out the 14 sections and
+   reads, once, what the page needs (pay from the returns, account returns,
+   drafted wording, recommendation picks). Where a reading needs Claude and
+   the session has no Claude CLI, do that reading in the session and save it
+   where the code expects it (as with bank_statements.json and
+   doc_readings.json), checked against the document.
+3. Seed with `--mode analysis`. A new page starts in the analyst stage.
+4. Before publishing, read `plan.json`'s `assumptions`, `findings` and the
    questions, and tell the analyst briefly what stands out: accounts or debts
    that look wrong or missing, statements that did not tie, questions that
    look mistaken.
-4. Publish a new page, or refresh the existing one's data. After a FIRST
+5. Publish a new page, or refresh the existing one's data. After a FIRST
    publish, record the URL in `_Audit/review_pages.json` and write it to the
    page as `page_url` (ArtifactData `update` plan/figures), so the hand-off
    can show the link. The analyst checks the Assumptions first; do not tell
