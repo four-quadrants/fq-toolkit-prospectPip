@@ -19,13 +19,13 @@
   --line:#2A3A49; --accent:#F08A3E; --accent-soft:#3A2617; --pale:#1B2E3F;
   --ok:#5CC48A; --ok-soft:#153222; --off:#8A939C; --off-soft:#222D37; color-scheme:dark}
 body{background:var(--bg);color:var(--text);font:16px/1.5 var(--body)}
-.wrap{max-width:980px;margin:0 auto;padding-block:28px 60px;
+.wrap{max-width:1440px;margin:0 auto;padding-block:28px 60px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   display:grid;gap:28px}
 header{display:grid;gap:6px}
 .eyebrow{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
 h1{font:700 34px/1.1 var(--display);color:var(--ink);margin:0;text-wrap:balance}
-.lede{color:var(--muted);max-width:66ch;margin:0}
+.lede{color:var(--muted);max-width:90ch;margin:0}
 .status{font-size:13px;color:var(--muted)}
 .status b{color:var(--ink)}
 .status .bad{color:var(--accent);font-weight:600}
@@ -203,9 +203,10 @@ tr.off td{opacity:.55}
 
   <section data-tab="email">
     <h2>The email to the client <small>Written from the questions marked Send</small></h2>
-    <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Once you edit the email here, it stops rewriting itself so your edits are kept. If you then change the questions, <b>Rewrite from the questions</b> rebuilds it from them (your edits to the email are dropped).</p>
+    <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Edit it freely; your edits are kept. If you change the questions after editing it, a yellow note offers to rebuild it from them.</p>
     <div class="card pad"><textarea id="emailtext" rows="22" style="width:100%" aria-label="Email to the client"></textarea>
-    <div class="row-actions"><button type="button" id="emailcopy" class="primary-btn">Copy the email</button><button type="button" id="emailredo" class="ghost-btn">Rewrite from the questions (drops your edits)</button></div></div>
+    <div id="emailstale" class="abox" style="display:none"><b>THE QUESTIONS CHANGED</b>You edited this email before changing the questions, so it no longer matches them. <button type="button" id="emailredo" class="ghost-btn">Rebuild it from the questions</button> (your edits to the email are replaced)</div>
+    <div class="row-actions"><button type="button" id="emailcopy" class="primary-btn">Copy the email</button></div></div>
   </section>
 
   <section data-tab="plan">
@@ -281,7 +282,7 @@ tr.off td{opacity:.55}
   </section>
 </div>
 
-<div id="sharebox" class="card pad" style="display:none;max-width:980px;margin:0 auto 90px"></div>
+<div id="sharebox" class="card pad" style="display:none;max-width:1440px;margin:0 auto 90px"></div>
 <div id="donebar" role="region" aria-label="Finish this review">
   <div class="db-text"><b id="donetitle">When you have been through every tab</b><span id="donestate">press the button so the team knows the review is finished.</span></div>
   <button type="button" id="donebtn">I'm done with this review</button>
@@ -717,16 +718,25 @@ function fqModel(P){
     lines.push('I think this is all the clarity we have on my end for now; as you can see, we\u2019ve gone over everything pretty detailed so far, but still may have a few minor clarifications in the near future depending on the answers. Please feel free to piecemeal the information as you get it instead of waiting and sending all at once (you can either use the portal or just email them to me directly, whatever is easiest/quickest).  From a priority standpoint, we\u2019re most concerned about #'+(hi.length?hi.join(', '):'1')+' first and foremost.  Lastly, please email this information by '+days[due.getDay()]+', '+(due.getMonth()+1)+'/'+due.getDate()+', at 5:00pm EST if not sooner so my team can continue their research and stay on schedule for the '+(((plan&&plan.decided)||{}).consult_date||'[CONSULT DATE]')+' consultation.  Additionally, if you think there will be a problem with getting this back to us by then, please let me know ASAP.  Thanks in advance and don\u2019t hesitate to reach out if you have further clarifications.');
     return lines.join('\n');
   }
+  // Which questions the email was written from, so an edited email can say
+  // when the questions have moved on since.
+  function qsig(){
+    var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
+    return JSON.stringify(qs.filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'; })
+      .map(function(q){ return [q.id, qt[q.id]!=null?qt[q.id]:q.text]; }));
+  }
   function showEmail(force){
     var et=$('emailtext'); if(!et||!plan) return;
+    var st=$('emailstale');
+    if(st) st.style.display=(plan.email_edited && plan.email_qsig && plan.email_qsig!==qsig())?'':'none';
     if(document.activeElement===et && !force) return;
     if(force||!plan.email_edited){ et.value=buildEmail(); }
     else { et.value=plan.email||''; }
   }
   document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='emailredo'||!plan) return;
-    plan.email_edited=false; plan.email=''; showEmail(true);
-    write('plan/figures',{email:'',email_edited:false},null,'email rewritten from the questions');
+    plan.email_edited=false; plan.email=''; plan.email_qsig=''; showEmail(true);
+    write('plan/figures',{email:'',email_edited:false,email_qsig:''},null,'email rebuilt from the questions');
   });
   document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='emailcopy') return;
@@ -737,7 +747,8 @@ function fqModel(P){
   document.addEventListener('input',function(e){
     if(!e.target||e.target.id!=='emailtext'||!plan) return;
     plan.email=e.target.value; plan.email_edited=true; pending.email=true;
-    debounce('email',function(){ write('plan/figures',{email:plan.email,email_edited:true},function(){pending.email=false;},'email edited'); });
+    if(!plan.email_qsig) plan.email_qsig=qsig();
+    debounce('email',function(){ write('plan/figures',{email:plan.email,email_edited:true,email_qsig:plan.email_qsig},function(){pending.email=false;},'email edited'); });
   });
   function renderAnswered(){
     var el=$('answered'); if(!el||!plan) return;
@@ -843,7 +854,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v35';
+  var BUILD='v36';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
@@ -888,7 +899,7 @@ function fqModel(P){
       if(plan && pending.an){ incoming.assume_notes=plan.assume_notes; incoming.an_assume_notes=plan.an_assume_notes; }
       if(plan && pending.ann) incoming.an_notes=plan.an_notes;
       if(plan && pending.qa) incoming.qanswers=plan.qanswers;
-      if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; }
+      if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; incoming.email_qsig=plan.email_qsig; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
       plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
