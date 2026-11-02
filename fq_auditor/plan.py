@@ -19,6 +19,7 @@ Everything the advisor enters in the deck entry of plan_inputs.json still wins:
 a figure here is a proposal, never an override.
 """
 import math
+import re
 
 PRACTICE_MULTIPLE = 0.65     # of collections, as in every worksheet read
 PRACTICE_GROWTH = 0.03       # his K column
@@ -202,7 +203,13 @@ def refinance(rows, this_year=None):
     import datetime as _dt
     this_year = this_year or _dt.date.today().year
     cands, keep = [], []
-    for r in rows or ():
+    # A credit card paid in full each month is not a loan: Spaulding's
+    # Costco and ADA cards made "eight loans" of the six her deck counts.
+    def card(r):
+        t = ' '.join(str(r.get(k) or '') for k in ('creditor', 'description')).lower()
+        return 'credit card' in t or re.search(r'\b(visa|mastercard|amex|discover)\b', t)
+    rows = [r for r in rows or () if not card(r)]
+    for r in rows:
         bal = r.get('balance') or 0
         rate = r.get('rate')
         rate = rate / 100.0 if rate and rate > 1 else rate

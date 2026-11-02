@@ -105,7 +105,8 @@ def apply(folder, plan_json):
                 entry[key] = v
                 changed.append(key)
             continue
-        if key in ('retire_age', 'target_income', 'sale_net', 'start_portfolio',
+        if key in ('retire_age', 'target_income', 'sale_net', 'sale_net_fq',
+                   'start_portfolio',
                    'current_savings', 'ideal_bank_balance', 'target_overhead',
                    'income_w2_proposed', 'income_tax_rate_proposed',
                    'income_w2', 'income_deferral', 'income_total_tax',
@@ -118,6 +119,12 @@ def apply(folder, plan_json):
                 changed.append(key)
     if schedule:
         entry['savings_schedule'] = [[y, schedule[y]] for y in sorted(schedule)]
+    # The years he typed himself ("Savings in 2030", a 401(k) starting, a
+    # profit share later) are kept apart too, so the schedule the
+    # recommendations build can be extended by them rather than replace them.
+    typed = {int(k[5:]): _num(v) for k, v in decided.items()
+             if k.startswith('save_') and v not in (None, '') and _num(v) is not None}
+    entry['savings_steps'] = [[y, typed[y]] for y in sorted(typed)]
     if rec.get('concerns'):
         entry['concerns'] = [[c.get('head', ''), c.get('body', '')]
                              for c in rec['concerns'] if c.get('head')]
@@ -392,6 +399,13 @@ def seed(folder, outdir, mode='consult'):
         dict(key='sale_net', label='Practice and building sale, net',
              proposed=money(p['sale_net']),
              basis='65% of collections grown to retirement, plus the building, after tax.'),
+        # The sale on the 4Q path: a better-run practice sells for more. The
+        # lead advisor's Spaulding deck used $0.937M on the current path and
+        # $1.791M with 4Q; without this figure the page could only set one.
+        dict(key='sale_net_fq', label='Practice sale, net, on the 4Q path',
+             proposed=money(D['adv'].get('sale_net_fq') or p['sale_net']),
+             basis='Same as the current path unless you set it: the practice '
+                   'the plan builds should sell for more.'),
         dict(key='start_portfolio', label='Starting portfolio', proposed=money(p['start']),
              basis='Qualified plus non-qualified investable assets on file.'),
         dict(key='current_savings', label='Saved a year today',

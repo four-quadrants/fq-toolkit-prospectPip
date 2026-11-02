@@ -189,6 +189,21 @@ def _production_inputs(folder):
         got = {}
     if not got:
         pi = annual_pi(folder)
+        # The current year once it has six months in it, annualised: the
+        # lead advisor's Spaulding deck used 2026 to June (adjustments 40.5%,
+        # collections 91.3%, on the year annualised), not 2025, whose
+        # collections read 103% against production.
+        for year in sorted(pi, reverse=True):
+            t = pi[year]
+            m = t.get('months') or 0
+            if t['partial'] and m >= 6 and t['gross'] and t['net']:
+                k = 12.0 / m
+                return {'gross_production': t['gross'] * k,
+                        'adjust_pct': t['adjustments'] / t['gross'],
+                        'net_production': t['net'] * k,
+                        'collection_pct': t['income'] / t['net'],
+                        'production_year': '%s, %d months annualised' % (year, m)}
+            break
         for year in sorted(pi, reverse=True):
             t = pi[year]
             if t['partial'] or not t['gross']:

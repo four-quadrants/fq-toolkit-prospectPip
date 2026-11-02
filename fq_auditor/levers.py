@@ -134,9 +134,16 @@ def compute(x):
         out['new_patients'] = _need('patients seen', 'new patient % by year')
 
     # Fee study, scoped to fee-for-service.
+    # On net production, as the lead advisor sizes it (Spaulding: 4.8% on
+    # about $1.03M, $49,274 more revenue). With no fee-for-service share on
+    # file the whole practice is assumed fee-for-service, and the lever is
+    # marked held below so it is not counted as savings without a look.
     off, ffs = g('fees_off'), g('ffs_share')
-    if None not in (off, ffs, gross):
-        v = max(0.0, gross * off * ffs * COLLECT_IDEAL * owner)
+    if off is not None and ffs is None:
+        ffs, x['ffs_share_assumed'] = 1.0, True
+    base_f = g('net_production') or gross
+    if None not in (off, ffs, base_f):
+        v = max(0.0, base_f * off * ffs * owner)
         out['fees'] = _ok(v, 'Fees %.1f%% below the benchmark on the %.0f%% '
                           'of production that is fee-for-service.'
                           % (100 * off, 100 * ffs))

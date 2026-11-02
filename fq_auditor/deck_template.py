@@ -459,6 +459,17 @@ def _figures(folder, client):
     D['schedule_derived'] = not D['schedule']
     if not D['schedule'] and D['current_savings']:
         D['schedule'] = _plan.schedule(D['gains'], first_plan_year)
+    # Steps the lead advisor typed for particular years (the 401(k) starting
+    # in 2030, a profit share in 2039) go on top of the schedule the
+    # recommendations build: his Spaulding plan kept rising after year two,
+    # and without these the path stayed flat and ran out at 75.
+    steps = adv.get('savings_steps') or []
+    if steps and D['schedule']:
+        merged = dict((int(y), v) for y, v in D['schedule'])
+        for y, v in steps:
+            if N(v) is not None:
+                merged[int(y)] = N(v)
+        D['schedule'] = sorted(merged.items())
 
     # ---- the two retirement paths -----------------------------------------
     D['proj'] = D['proj2'] = None
@@ -815,6 +826,21 @@ def slide_fills(D):
         if v:
             cur, goal = now_goal.get(key, ('TBD', 'TBD'))
             rows.append((label, cur or 'TBD', goal or 'TBD', v / owner, v))
+    # Practice items the lead advisor added on the review page that no lever
+    # computes ("current growth trend continues", more hygiene days, an
+    # associate change): his figure, with no current/goal to show.
+    computed = {'overhead', 'adjustment', 'new_patients', 'fees', 'collections',
+                'per_patient', 'hygiene'}
+    for g in adv.get('gains_table') or ():
+        k = g.get('key') or ''
+        if k in computed or k in ('current', 's_corp', 'five_k_rule'):
+            continue
+        if k not in ('growth_trend', 'per_day', 'associate_change', 'hygiene') \
+                and g.get('kind') != 'practice':
+            continue
+        v = N(g.get('gain'))
+        if v:
+            rows.append((g.get('label') or k, '\u2013', '\u2013', v / owner, v))
     rows.sort(key=lambda r: -r[4])
     # Five rows, as the lead advisor shows them. A lever already at goal is still a
     # finding worth a row ("adjustments 5.3%, below where dropping carriers
@@ -872,25 +898,49 @@ def slide_fills(D):
     if D['debt_service']:
         rf = _plan.refinance(D.get('practice_debts'))
         n, c = rf['loans'], len(rf['candidates'])
+        # The payments on the loans themselves (cards paid in full are not
+        # loans), and what they would be after the candidates are combined.
+        pay = rf['all_payments'] or D['debt_service']
+        after = max(0.0, pay - rf['freed'])
 
         def rng(v):
             lo, hi = max(0, int(v // 1000)), int(v // 1000) + 2
             return '$%d\u2013%dk/mo' % (lo, hi)
-        out[10] = {'Text 3': '%s/mo in payments today' % M(D['debt_service']),
-                   'Text 28': '%s/mo' % M(D['debt_service']),
+
+        def name(r):
+            # "Patterson Dental (Solea Laser)", not the lender four times.
+            cred = re.sub(r'\s*/.*$', '', str(r.get('creditor') or '')).strip()
+            what = re.sub(r'\s*\(\d+\)\s*$', '', str(r.get('description') or '')).strip(' )')
+            same = sum(1 for x in rf['candidates']
+                       if re.sub(r'\s*/.*$', '', str(x.get('creditor') or '')).strip() == cred)
+            return '%s (%s)' % (cred, what) if same > 1 and what and what != cred else cred
+        recent = 0
+        for r in rf['candidates'] + rf['kept']:
+            st = r.get('started')
+            try:
+                d = st if hasattr(st, 'year') else datetime.date.fromisoformat(str(st)[:10])
+                if hasattr(d, 'date'):
+                    d = d.date()
+                if (datetime.date.today() - d).days <= 14 * 31:
+                    recent += 1
+            except (TypeError, ValueError):
+                pass
+        out[10] = {'Text 3': '%s/mo in payments today' % M(pay),
+                   'Text 28': '%s/mo' % M(pay),
                    'Text 4': 'across the %s practice loans' % (WORDS.get(n, str(n)).lower())}
         if c:
             out[10].update({
                 'Text 2': '%s LOANS, %s TO REFINANCE' % (WORDS.get(n, str(n)),
                                                         WORDS.get(c, str(c))),
-                'Text 6': 'There are %d practice loans today, and %d of them look '
+                'Text 6': 'There are %d practice loans today%s, and %d of them look '
                           'like candidates for a refinance: %s.'
-                          % (n, c, ', '.join(re.sub(r'\s*/.*$', '', str(r.get('creditor')))
-                                             for r in rf['candidates'])),
+                          % (n, (', %d added in the last 14 months' % recent)
+                             if recent >= 2 else '', c,
+                             ', '.join(name(r) for r in rf['candidates'])),
                 'Text 8': 'Freed-up income is reallocated to build the practice bank '
                           'account first, then savings.',
                 'Text 25': '%d refinance candidate%s of %d' % (c, '' if c == 1 else 's', n),
-                'Text 30': rng(rf['payment_new']),
+                'Text 30': rng(after),
                 'Text 33': rng(rf['freed']),
             })
         else:
