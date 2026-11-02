@@ -153,6 +153,60 @@ documents are read.
 
 ---
 
+## Part 3: changing the toolkit yourself
+
+The toolkit is meant to be changed by whoever runs it, with Claude doing the
+coding. Set this up once.
+
+### GitHub access
+
+1. Make a GitHub account (github.com) with your work email if you do not have one.
+2. Ask an owner of the **four-quadrants** organization to invite you, and to
+   give you **Admin** on the `fq-toolkit-prospectPip` repo
+   (repo **Settings > Collaborators and teams**). Accept the email invite.
+3. Sign this Mac in to GitHub so git can push:
+   ```
+   brew install gh
+   gh auth login
+   ```
+   Choose **GitHub.com**, **HTTPS**, **Yes** (authenticate git), **Login with a
+   web browser**, and follow it.
+4. Tell git who you are (shows on each change):
+   ```
+   git config --global user.name "Your Name"
+   git config --global user.email "you@4quadrant.com"
+   ```
+
+### Making a change
+
+1. Get the latest first:
+   ```
+   cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
+   ```
+2. Ask Claude to make the change. Either:
+   - in the **Claude desktop app** (Cowork), with the `FQ_Toolkit` folder and the
+     Prospects folder connected: describe what you want ("the cash flow should
+     treat X as Y"; "add this to the deck"); or
+   - in **Terminal**: `cd ~/Desktop/FQ_Toolkit/prospectPip && claude`, then
+     describe it.
+
+   Claude reads `CLAUDE.md` at the top of the repo first: the map of the code
+   and the rules (client data never goes into git, test on `_TEST` copies, how
+   to check its work).
+3. Test it: restart the app, run the step you changed on a `_TEST` client, and
+   compare with what you expect.
+4. Save it to GitHub (always this order):
+   ```
+   cd ~/Desktop/FQ_Toolkit/prospectPip && git add -A && python3 fq_auditor/precommit_check.py && git commit -m "what changed" && git push
+   ```
+5. Everyone else gets it with `git pull`, then restarts the app.
+
+If two people change the same file, `git pull` may say there is a conflict;
+ask Claude ("git pull says there is a conflict, sort it out") and it will
+merge the two.
+
+---
+
 ## Things worth knowing
 
 - **Originals are never moved.** Filing makes copies; `Original_sourcedocs`
