@@ -883,6 +883,11 @@ def guard_email(text, docs):
 
     for d in docs:
         stem = os.path.splitext(d['file'])[0]
+        # Only names that look like files: "Fee Schedule" and "New Patients"
+        # are also plain English, and refusing every email that said "fee
+        # schedule" left a prospect with no email at all.
+        if not re.search(r'[\d_]|\.\w{2,4}$', stem):
+            continue
         if len(stem) > 6 and stem.lower() in text.lower():
             problems.append(f"internal filename '{d['file']}' appears in the client email")
 

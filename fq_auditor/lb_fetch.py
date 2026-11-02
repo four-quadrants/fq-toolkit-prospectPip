@@ -48,6 +48,23 @@ INTAKE = 'Original_sourcedocs'
 # firm sent OUT, and filing them back as client documents would be wrong.
 CLIENT_UPLOAD_TYPES = {'collection', 'upload'}
 
+# An 'attachment' is usually a form the firm sent out, but a client who posts
+# a file with a portal comment gets the same label (a prospect's land purchase
+# agreement, the one document an item asked for). The firm's own attachments
+# are a short, known set of templates and examples; anything else attached is
+# taken as the client's.
+FIRM_ATTACHMENT = re.compile(r'example|template|privacy principles|ach form|'
+                             r'document request|request list|engagement letter|'
+                             r'planning agreement|file checklist|four quadrants',
+                             re.I)
+
+
+def _is_client_file(f):
+    kind = f.get('kind') or 'collection'
+    if kind in CLIENT_UPLOAD_TYPES:
+        return True
+    return kind == 'attachment' and not FIRM_ATTACHMENT.search(f.get('name') or '')
+
 
 def load_json(path, default):
     try:
@@ -139,7 +156,7 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
 
     todo, skipped_seen, skipped_kind = [], 0, 0
     for f in files:
-        if (f.get('kind') or 'collection') not in CLIENT_UPLOAD_TYPES:
+        if not _is_client_file(f):
             skipped_kind += 1
             continue
         fid = str(f.get('id') or f.get('url') or '')

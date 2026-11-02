@@ -496,7 +496,8 @@ _TYPE_WORDS = re.compile(
     r'stmt|statement|w-?2|paystub|pay\s?stub|payroll|p\s?&\s?l|profit|loss|balance|'
     r'tax|return|1040|1120|lease|roster|bonus|hours|fee|debt|credit\s?report|'
     r'insur\w*|\bins\b|policy|day\s?sheet|productivity|brokerage|ira|roth|529|hsa|'
-    r'\bcc\b|\bcard\b', re.I)
+    r'\bcc\b|\bcard\b|pnl|production|patients|days\s?worked|doctor\s?days|'
+    r'agreement|contract|checking|savings', re.I)
 
 
 def is_ambiguous_name(fname):
@@ -537,6 +538,11 @@ def name_loses_information(old_name, new_name):
     # kept, so statements still get renamed.
     # Dates are stripped first, or the "30" in "2026-06-30" reads as a fact worth
     # keeping and blocks a perfectly good rename.
+    # A year the client put in the name that the new name drops or contradicts
+    # ("2024 YTD PNL" becoming "P&L (year TBD)") is information lost.
+    for yr in set(re.findall(r'\b(?:19|20)\d{2}\b', old_stem)):
+        if yr not in new_low:
+            return True
     stripped = re.sub(r'\d{1,4}[./-]\d{1,2}[./-]\d{2,4}|\b(19|20)\d{2}[-/]\d{1,2}\b',
                       ' ', old_stem)
     for num in set(re.findall(r'\b\d{2,7}\b', stripped)):
@@ -1335,6 +1341,13 @@ button.mdrow i{flex:0 0 auto;width:9px;height:9px;border-radius:3px;margin-top:5
   border-bottom:1px solid #F1EDE5}
 .ckline.quiet .cklab{font-size:13.5px;color:var(--fq-slate)}
 .ckwhy{font-size:12.5px;color:var(--fq-slate);margin-top:3px}
+.followup{background:#EAF2FA;border-radius:8px;padding:9px 12px;margin:8px 0 12px;font-size:14px}
+.followup textarea{display:block;width:100%;box-sizing:border-box;margin:8px 0;font:inherit;font-size:13.5px;line-height:1.45;padding:9px;border:1px solid #C9D6E3;border-radius:6px;background:#fff}
+.followup button{margin-left:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:7px;border:0;background:#16324F;color:#fff;cursor:pointer}
+.ckteam{font-size:12.5px;color:#3D4F61;background:#F1F3F5;border-radius:5px;padding:3px 7px;margin-top:4px;line-height:1.4}
+.ckask{font-size:12.5px;color:#9A4A06;background:#FFF4EA;border-radius:5px;padding:3px 7px;margin-top:4px;line-height:1.4}
+.ckclaude{font-size:12.5px;color:#16324F;margin-top:4px;line-height:1.4}
+.ckask{font-size:12.5px;color:#9A4A06;background:#FFF4EA;border-radius:5px;padding:3px 7px;margin-top:4px;line-height:1.4}
 .ckdt{margin-left:6px;color:#8A9099;font-weight:400}
 .ckx{display:none}
 button.ckmore{font-size:11.5px;margin-top:0;background:var(--fq-baby-pale);border:1px dashed #9FC2DA;color:var(--fq-navy);border-radius:7px;padding:3px 9px;cursor:pointer}
@@ -1631,6 +1644,16 @@ function wire(){
     draw(0);
   }
 
+  (function(){
+    var b=document.getElementById('copyfollowup'); if(!b) return;
+    b.onclick=function(){
+      var t=document.getElementById('followuptext'), m=document.getElementById('copiedmsg');
+      t.select();
+      var done=function(){ m.textContent=' Copied. Paste it into a new Outlook message.'; };
+      try{ navigator.clipboard.writeText(t.value).then(done,function(){ document.execCommand('copy'); done(); }); }
+      catch(e){ try{ document.execCommand('copy'); done(); }catch(e2){ m.textContent=' Select the text and press Cmd+C.'; } }
+    };
+  })();
   document.querySelectorAll('button.openfile').forEach(function(b){
     b.addEventListener('click', function(){
       current = b.dataset.path;
@@ -2025,13 +2048,15 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
     # dropdown reading "satisfied" while the dot stayed orange and the count
     # still said "needs you" — the same item disagreeing with itself in two
     # places, which reads as the click not having worked.
-    if verdicts:
-        try:
-            from reconcile import apply_item_verdicts, apply_claude_verdicts
-            apply_claude_verdicts(results, load_claude_verdicts(None))
+    # Claude's checked answers always apply, not only when someone has also
+    # saved decisions of their own.
+    try:
+        from reconcile import apply_item_verdicts, apply_claude_verdicts
+        apply_claude_verdicts(results, load_claude_verdicts(None))
+        if verdicts:
             apply_item_verdicts(results, verdicts)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     for r in results:
         v = (verdicts or {}).get(str(r['item'].get('id'))) or {}
@@ -2047,6 +2072,28 @@ def render_checklist_summary(a, results, client, verdicts=None, n_review=0):
 
     a('<div class="sum">')
     a('<div class="sumhead">%s</div>' % _e(client))
+    # The email to the client for what is still missing, written from
+    # Claude's checked answers (intake_email.py). Opens as a new message.
+    # Asks from Claude's check, less anything the analyst marked satisfied.
+    email_items = []
+    for r in results:
+        if (r.get('_verdict') == 'satisfied'
+                and (r.get('claude_verdict') or '').lower() != 'satisfied'):
+            continue
+        for ask in r.get('claude_asks') or []:
+            if (ask.get('text') or '').strip():
+                email_items.append((ask.get('section') or 'Practice', ask['text'].strip()))
+    email_items.sort(key=lambda x: x[0] != 'Practice')
+    if email_items:
+        import intake_email as _ie
+        last = (client or '').replace('Dr ', '').replace('Dr. ', '').split()
+        body = _ie.render_text('Dr. ' + (last[-1] if last else ''), email_items)
+        a('<div class="followup"><b>Follow-up email for the client</b> '
+          '(%d item%s). Edit it here if you like, then copy it into Outlook.'
+          '<textarea id="followuptext" rows="14">%s</textarea>'
+          '<button type="button" id="copyfollowup">Copy the email</button>'
+          '<span id="copiedmsg" class="note"></span></div>'
+          % (len(email_items), '' if len(email_items) == 1 else 's', _e(body)))
 
     # Where the client stands, first and as a picture. Collapsing this to one
     # line of prose and pushing the answered list to the bottom of the page made
@@ -2240,6 +2287,18 @@ def _render_item(a, r, show_why=True, quiet=False):
         why.append(_e(r['note']))
     if why:
         a('<div class="ckwhy">%s</div>' % ' \u00b7 '.join(why))
+    # What Claude found when it opened the documents, what the team should
+    # know, and what the client will be asked: the part of the audit worth
+    # reading, which this screen used to leave out.
+    if not quiet:
+        if r.get('claude_reasoning'):
+            a('<div class="ckclaude"><b>Claude checked:</b> %s</div>' % _e(r['claude_reasoning']))
+        for note in r.get('claude_notes') or []:
+            a('<div class="ckteam"><b>For the team:</b> %s</div>' % _e(note))
+        for ask in r.get('claude_asks') or []:
+            a('<div class="ckask"><b>Ask the client%s:</b> %s</div>' % (
+                (' (%s)' % _e(ask.get('section'))) if ask.get('section') else '',
+                _e(ask.get('text') or '')))
 
     docs = r.get('docs') or []
     if docs and not quiet:

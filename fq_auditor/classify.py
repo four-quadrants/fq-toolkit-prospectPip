@@ -729,8 +729,13 @@ RULES = [
        lambda h, t: has(h, r'PROVIDER\s+PRODUCTIVITY')),
     _r('day_sheet', 'EagleSoft Day Sheet report', 'Practice',
        lambda h, t: has(h, r'\bDay\s*Sheet\b', r'DAYSHEET')),
+    # Accountants' own wording as well as QuickBooks': "Statement of Assets,
+    # Liabilities, and Equity - Income Tax Basis" is a balance sheet (a
+    # prospect's 2025 and 2026 ones came back "unknown" under that title).
     _r('balance_sheet', 'Balance sheet', 'Practice',
-       lambda h, t: has(h, r'\bBalance\s*Sheet\b')),
+       lambda h, t: has(h, r'\bBalance\s*Sheet\b',
+                        r'statement\s+of\s+assets,?\s+liabilities',
+                        r'statement\s+of\s+financial\s+position')),
     # "Total for Income" is QuickBooks' wording; a bare "Total Income" test
     # silently missed every P&L this practice sends
     _r('pnl', 'Profit & loss / income statement', 'Practice',
@@ -916,8 +921,13 @@ RULES = [
     _r('provider_schedule', 'Provider schedule', 'Practice',
        lambda h, t: has(h, r'provider schedule', r'doctor schedule', r'hygiene schedule')),
     _r('debt_schedule', 'Debt schedule', None,
-       lambda h, t: has(h, r'\bdebts?\b')
-                    and has(h, r'balance|interest rate|payoff|monthly payment')),
+       lambda h, t: (has(h, r'\bdebts?\b')
+                     and has(h, r'balance|interest rate|payoff|monthly payment'))
+                    # a typed list of loans with no word "debt" in it: "Loan
+                    # Description | Original Amount | Current Amount | Term |
+                    # Interest Rate | Monthly Payment"
+                    or (has(h, r'loan\s+description|personal\s+loans|business\s+loans')
+                        and has(h, r'interest\s+rate') and has(h, r'monthly\s+payment'))),
     # After debt_schedule on purpose: a debt sheet that happens to LIST a line of
     # credit is still a debt sheet. This is for the LOC's own paperwork — the
     # bank's statement or agreement for the facility itself. No forced side; a
@@ -1011,6 +1021,14 @@ def infer_side(head, doc_type, practice_names=(), full=None, home_tokens=()):
     for tok in (home_tokens or ()):
         if tok and re.search(re.escape(tok), hay, re.I):
             return 'Personal'
+    # The bank's own name for the product says whose it is: "Account Type: BUS
+    # RELNSHP SAVINGS", "Business Checking", "Commercial Savings". A practice's
+    # savings statement carries almost no transactions and no practice name
+    # in the body, and was left for a person to decide.
+    if re.search(r'account\s+type\s*:?\s*(?:\S+\s+)?bus\b|\bbusiness\s+(?:checking|savings|'
+                 r'money\s*market|elite|interest)|\bcommercial\s+(?:checking|savings)|'
+                 r'analyzed\s+business', head, re.I):
+        return 'Practice'
     p = count(head, *PRACTICE_HINTS)
     q = count(head, *PERSONAL_HINTS)
     if p > q and p >= 2:

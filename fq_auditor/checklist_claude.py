@@ -48,6 +48,8 @@ SCHEMA = """{
   "verdict": "satisfied, partly satisfied, or missing",
   "reasoning": "one or two sentences a person can disagree with",
   "evidence": ["the documents that satisfy it, by filename"],
+  "checked": ["the documents you opened to confirm, by filename, with what you found if it differed"],
+  "team_notes": ["things the team should know or chase later, that are NOT asked of the client now"],
   "asks": [
     {"section": "Personal or Practice",
      "text": "one or two short sentences asking for what is outstanding"}
@@ -101,6 +103,7 @@ def inventory(folder):
         if own:
             period = 'statement dated %s' % own.group(1)
         out.append({
+            'path': os.path.abspath(path),
             'sha': os.path.basename(path).split('.')[0],
             'type': doc.get('doc_type'),
             'side': doc.get('owner_side'),
@@ -186,16 +189,28 @@ def portal_comments(folder):
     return []
 
 
+def _judgment():
+    """The firm's rules for what is worth asking a client for, kept by
+    Claude in intake_judgment.md."""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'intake_judgment.md')
+    try:
+        text = open(p).read()
+        i = text.find('\n## ')
+        return text[i:].strip() if i >= 0 else text
+    except OSError:
+        return '(none)'
+
+
 def build_prompt(item, docs, names, comments=()):
     lines = []
     for d in docs:
         bits = [b for b in (d['type'], d['side'], d['year'], d['period'],
                             ('x%s' % d['account']) if d['account'] else None,
                             d['issuer']) if b]
-        lines.append('  - %s\n      [%s]\n      "%s"'
+        lines.append('  - %s\n      [%s]\n      "%s"\n      text: %s'
                      % (names.get(d['sha'], d['sha'][:12]),
                         ', '.join(str(b) for b in bits),
-                        d['first_words'][:140]))
+                        d['first_words'][:140], d.get('path', '')))
     asked = item.get('client_ask') or item.get('label')
     extra = ''
     if item.get('years'):
@@ -232,8 +247,15 @@ How to judge:
 - "Most recent" means most recent when the client sent it. Do not mark an item
   partly because a newer statement or stub may exist by now; the request is
   judged as of when it was answered, not as of today.
-- Judge only from the two lists above. Do not open other files in the folder,
-  and do not speculate about zips, temp files or files that could not be read.
+- CHECK BEFORE YOU PASS IT. For every document you rely on to call an item
+  satisfied, open its text file (the "text:" path) and confirm what we read:
+  the right year or period, the right person, practice or entity, the right
+  account, and that it is complete (a tax return with its schedules and
+  statements, not just the summary or the e-file page; a statement with all
+  its pages). If it is not what the list says, it does not satisfy the item:
+  say what it really is in the reasoning. List what you opened in "checked".
+- Open only the files listed above. Do not speculate about zips, temp files
+  or files that could not be read.
 - A typed answer in the portal counts. Counts, dates, birthdates and similar
   facts typed by the client satisfy an ask for that information. "We don't
   have one" (no line of credit, no financial plan, no pay stubs because the
@@ -241,8 +263,12 @@ How to judge:
 - A sole proprietor has no separate practice return; the practice is the
   Schedule C inside the personal 1040.
 
+THE FIRM'S JUDGMENT (follow it over the general rules above):
+%s
+
 How to write the asks:
-- If it is satisfied, asks is an empty list.
+- If it is satisfied, asks is an empty list, except for a confirmation the
+  firm's judgment calls for (then the item is still satisfied).
 - An item covering both sides of the house produces TWO asks, one marked
   Personal and one Practice. They are two different things to chase, and a
   client reading a Practice heading should not find their own 1040 under it.
@@ -255,7 +281,7 @@ How to write the asks:
   is the whole thing.""" % (
         asked, extra, '\n'.join(lines) or '  (nothing relevant has arrived)',
         '\n'.join(comments) or '  (nothing typed)',
-        SCHEMA)
+        SCHEMA, _judgment())
 
 
 def main():
@@ -286,14 +312,24 @@ def main():
 
     cdir = os.path.join(a.folder, CACHE, 'checklist')
     out, counts = {}, {}
-    for item in items:
+
+    # Four items at a time: each one now opens the documents it relies on,
+    # which takes longer, and the items do not depend on each other.
+    import concurrent.futures
+
+    def one(item):
         prompt = build_prompt(item, relevant(item, docs), names, comments)
         try:
-            ans = ask_claude.ask_json(prompt, cache_dir=cdir,
-                                      add_dirs=[os.path.abspath(a.folder)])
+            return item, ask_claude.ask_json(prompt, cache_dir=cdir,
+                                             add_dirs=[os.path.abspath(a.folder)]), None
         except ask_claude.NotAvailable as exc:
-            print('stopped: %s' % exc)
-            break
+            return item, None, exc
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        results = list(pool.map(one, items))
+    for item, ans, err in results:
+        if err:
+            print('not answered (%s): %s' % ((item.get('label') or '')[:40], err))
+            continue
         if not ans:
             continue
         out[item['id']] = {'label': item.get('label'), **ans}
@@ -318,6 +354,12 @@ def main():
         json.dump(out, fh, indent=1)
     print('\n' + '  '.join('%s: %d' % (k, v) for k, v in sorted(counts.items())))
     print('written to %s' % path)
+    # The client follow-up, from these checked answers.
+    try:
+        import intake_email
+        intake_email.write(os.path.abspath(a.folder))
+    except Exception as exc:                                 # noqa: BLE001
+        print('follow-up email not written: %s' % exc)
 
 
 if __name__ == '__main__':

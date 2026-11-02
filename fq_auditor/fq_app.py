@@ -486,7 +486,7 @@ def lb_status(folder):
     failed = dict(state.get('__failed__') or {})
     waiting = 0
     for f in man.get('files') or []:
-        if (f.get('kind') or 'collection') not in lb_fetch.CLIENT_UPLOAD_TYPES:
+        if not lb_fetch._is_client_file(f):
             continue
         fid = str(f.get('id') or f.get('url') or '')
         if fid in failed or fid in state:

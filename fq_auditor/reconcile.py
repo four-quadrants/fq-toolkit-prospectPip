@@ -692,6 +692,7 @@ def apply_claude_verdicts(results, verdicts):
         r['rule_status'] = r.get('rule_status', r['status'])
         r['status'] = rule['status']
         r['claude_verdict'] = v.get('verdict')
+        r['claude_notes'] = [n for n in (v.get('team_notes') or []) if n]
         r['claude_reasoning'] = v.get('reasoning')
         r['claude_confidence'] = v.get('confidence')
         # What the client will actually be asked for, written as they will
