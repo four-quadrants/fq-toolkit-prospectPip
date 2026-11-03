@@ -8,7 +8,7 @@ a private claude.ai artifact per client per stage, with a small database (the
 ## Finding things
 
 - **The toolkit**: a connected folder containing `prospectPip/fq_auditor/`
-  (normally `~/Desktop/FQ_Toolkit`). Call it TOOLKIT.
+  (on the share: `Prospects/FQ_Toolkit`). Call it TOOLKIT.
 - **The client folder**: under the connected Prospects folder
   (`/Volumes/Analysis/Brogan/Prospects/2026`), named like "Example, Jane" or
   "Example, Jane - TEST". If the name is ambiguous, ask which.

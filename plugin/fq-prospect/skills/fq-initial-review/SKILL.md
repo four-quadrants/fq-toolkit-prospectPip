@@ -9,13 +9,13 @@ The analyst says one line. Do the whole step without asking for more.
 
 ## Before anything
 
-If the toolkit (`~/Desktop/FQ_Toolkit`) or the client folders
-(`/Volumes/Analysis/Brogan/Prospects`) are not connected to this chat, ask
-for them yourself with the folder-access tool (`request_cowork_directory`),
-one at a time, telling the analyst only "click Allow". Never ask the analyst
-to find or connect a folder by hand.
+Everything is in one folder on the share: `/Volumes/Analysis/Brogan/Prospects`.
+The toolkit is `Prospects/FQ_Toolkit/prospectPip`; clients are under
+`Prospects/2026`. If that folder is not connected to this chat, ask for it
+yourself with the folder-access tool (`request_cowork_directory`) and tell the
+analyst only "click Allow". Never ask the analyst to find a folder by hand.
 
-Read `FQ_Toolkit/prospectPip/CLAUDE.md` (the toolkit's rules) and follow its
+Read `Prospects/FQ_Toolkit/prospectPip/CLAUDE.md` (the toolkit's rules) and follow its
 section "A short request means the whole step". The short version:
 
 1. **Find the client folder** under `Prospects/2026` by surname. Work in the
@@ -37,7 +37,7 @@ section "A short request means the whole step". The short version:
 ## Initial notes
 
 `python3 build_outputs.py "<client folder>" --what workbook`, from
-`FQ_Toolkit/prospectPip/fq_auditor`. If a document is in a layout the readers
+`Prospects/FQ_Toolkit/prospectPip/fq_auditor`. If a document is in a layout the readers
 do not know, follow "When the code's readers miss a document" in CLAUDE.md.
 
 If the team's own initial notes are in the folder, compare figure by figure
@@ -50,4 +50,4 @@ If `lb_fetch.py` reports "Tunnel connection failed: 403", the firm's network
 setting does not yet allow `cdn.filestackcontent.com` in this chat. Give the
 analyst this one line to paste into Terminal, then carry on:
 
-    cd ~/Desktop/FQ_Toolkit/prospectPip && python3 fq_auditor/lb_fetch.py "<client folder on the Mac>"
+    cd "/Volumes/Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip" && python3 fq_auditor/lb_fetch.py "<client folder on the Mac>"

@@ -73,10 +73,11 @@ assumptions"). Claude does everything that step needs without being told:
 
 ## Setting someone up
 
-`START_HERE.md` (a copy also sits in the Prospects folder on the share,
-`Analysis/Brogan/Prospects/START HERE - FQ Toolkit.md`, so a new person can
-reach it before they have the code) is the script Claude follows to set up a new Mac. Edit the repo copy and
-copy it to the share when it changes.
+The toolkit runs from the share: `Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip`,
+so connecting the Prospects folder gives a chat both the code and the
+clients. `START_HERE.md` (copied to `Prospects/START HERE - FQ Toolkit.md`)
+is the script Claude follows to set up a new Mac. Edit the repo copy and copy
+it to the share when it changes.
 
 ## A new Mac, or "check the FQ toolkit is ready"
 

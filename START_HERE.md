@@ -45,46 +45,18 @@ ever disappears, the fix is Finder, **Go > Connect to Server** (`Cmd + K`),
 to reconnect at login, **System Settings > General > Login Items**, add the
 **Analysis** drive.
 
-### 3. GitHub access
+### 3. The toolkit (nothing to install)
 
-The toolkit's code lives in the firm's GitHub repo
-`four-quadrants/fq-toolkit-prospectPip`. Ask whether they have a GitHub account
-that has been added to it.
+The toolkit lives on the share, inside the Prospects folder they already
+connected: `Prospects/FQ_Toolkit/prospectPip`. Check that
+`prospectPip/CLAUDE.md` is there, then **read it**: it is the map and the
+rules. Nothing goes on their Desktop and they need no Terminal or GitHub to
+run the pipeline.
 
-- No account: they make one at github.com with their work email, then send
-  the username to an owner of the `four-quadrants` organization to be added
-  (Admin on the repo if they will change the toolkit). They accept the email
-  invite. Wait for this before step 4; there is nothing to clone until it is
-  done.
+GitHub is only for someone who will change the toolkit's code. Skip it for
+now; it is covered in `fq_auditor/SETUP.md` Part 3.
 
-### 4. The toolkit, on their Desktop
-
-First ask for the folder `~/Desktop/FQ_Toolkit` to be connected (request the
-directory). If it does not exist yet, or has no `prospectPip` inside it, have
-them open **Terminal** (`Cmd + Space`, type "terminal", return) and paste:
-
-```
-xcode-select --install
-```
-
-A window opens; **Install**, and wait. If it says the tools are already
-installed, carry on. Then paste:
-
-```
-mkdir -p ~/Desktop/FQ_Toolkit && cd ~/Desktop/FQ_Toolkit && git clone https://github.com/four-quadrants/fq-toolkit-prospectPip.git prospectPip
-```
-
-The first time, git opens a browser to sign in to GitHub. When it finishes,
-connect `~/Desktop/FQ_Toolkit` and check `prospectPip/CLAUDE.md` is there.
-From here on, **read `prospectPip/CLAUDE.md`**: it is the map and the rules.
-
-If the toolkit is already there, have them update it instead:
-
-```
-cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
-```
-
-### 5. The ready check
+### 4. The ready check
 
 Run, in the shell, from the toolkit folder:
 
@@ -96,7 +68,7 @@ python3 fq_auditor/readycheck.py "<the Prospects/2026 folder>"
 Install anything it lists with the command it prints, run it again, and tell
 them "Ready" once it is clean.
 
-### 6. The FQ Prospect plugin
+### 5. The FQ Prospect plugin
 
 It holds the steps (pull, intake, initial notes, assumptions, the review
 pages, the deck), so every person's Claude runs them the same way. If it is
@@ -104,13 +76,13 @@ not installed, zip `prospectPip/plugin/fq-prospect` into `fq-prospect.plugin`
 in your outputs folder, present the file, and ask them to install it from the
 card. Confirm it shows in their plugins afterwards.
 
-### 7. LaunchBay (only if they will pull documents)
+### 6. LaunchBay (only if they will pull documents)
 
 Pulling a client's documents needs the LaunchBay connector in their Claude
 account. If they will do pulls, ask them to connect it (Claude's connectors
 settings) and confirm you can see it. The lead advisor usually does not need it.
 
-### 8. One real test
+### 7. One real test
 
 Ask which prospect they are working on, and build that client's initial notes
 into your outputs folder (not into the client folder):
@@ -121,9 +93,9 @@ cd fq_auditor && python3 build_outputs.py "<Prospects/2026/that client's folder>
 
 Present the workbook so they see it open. It is their real client, so it
 doubles as useful work. If it fails, read the error, fix
-what you can (usually a missing library from step 5), and run it again.
+what you can (usually a missing library from step 4), and run it again.
 
-### 9. The tour (five minutes)
+### 8. The tour (five minutes)
 
 - The eight steps, who does each, and what to say for each: the Prospect
   Pipeline Showcase, https://claude.ai/artifact/1DwNs2bqHXXuAeFemNXpWm
@@ -135,7 +107,7 @@ what you can (usually a missing library from step 5), and run it again.
 If a link does not open for them, it has not been shared with them yet; tell
 them to ask whoever owns it.
 
-### 10. Wrap up
+### 9. Wrap up
 
 Finish with the checklist: what is set up, anything still waiting (GitHub
 invite, LaunchBay), and the one sentence to start real work: "Pull [client]
