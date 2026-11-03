@@ -105,7 +105,7 @@ stages; nothing from a later stage is built early.
 |---|---|---|
 | Documents | "Pull [client] from LaunchBay" | The client's uploads and checklist |
 | Intake | "Run [client]'s intake" | Documents filed into Documents/Business and Personal; what is missing; the follow-up email to copy into Outlook |
-| Initial notes | "Build [client]'s initial notes" | Initial notes .xlsx in the client folder |
+| Initial notes | "Build [client]'s initial notes" | Initial notes .xlsx in the client folder. Claude pulls from LaunchBay and runs the intake first if they have not been done, so this one line is enough |
 
 Then the consult offer call. If the client accepts, send the Expanded List.
 

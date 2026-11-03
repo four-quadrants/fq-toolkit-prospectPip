@@ -46,6 +46,31 @@ The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the
 steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
 `plugin/fq-prospect` folder holds the Claude skills.
 
+## A short request means the whole step
+
+The analyst says one line ("build [client]'s initial notes", "build [client]'s
+assumptions"). Claude does everything that step needs without being told:
+
+1. **Find the client folder** under `Prospects/2026` by surname. Work in it
+   (the live folder) unless the analyst says test.
+2. **Read the whole folder first**: IC form, call notes (.eml, .pages, scans),
+   the initial docs list, and anything the team made (e.g. their own initial
+   notes). See "Read the whole client folder" below.
+3. **Run any earlier step that is missing or stale, in order.** No
+   `launchbay_manifest.json`, or older than 3 days: pull from LaunchBay. New
+   documents not yet filed: run the intake. Then the step asked for. Say in
+   one line which earlier steps you ran.
+4. **The team's word settles the checklist.** LaunchBay is not the only
+   source: documents also arrive by email, QuickBooks logins and calls. If a
+   team comment says the documents are complete, or the client has a consult
+   booked, nothing is "missing": list gaps as team notes only.
+5. **No client email unless asked.** The intake follow-up is drafted only in
+   Stage 1, before the consult offer call, and only when the analyst asks for
+   it.
+6. **If the team's own version of the output is in the folder** (their
+   initial notes, Assumptions PDF, deck), compare against it and say which
+   figures match and which do not before calling the step done.
+
 ## Setting someone up
 
 `START_HERE.md` (a copy also sits in the Prospects folder on the share,
