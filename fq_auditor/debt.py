@@ -89,6 +89,21 @@ def _end_from_terms(started, terms):
     return None
 
 
+# Home, car and student debt listed on the practice's debt template.
+_PERSONAL_DEBT = re.compile(r'\b(home|house|residence|primary|car|auto|vehicle|'
+                            r'truck|student|school loan|personal)\b', re.I)
+
+# The template's own example rows ("Rows 3 & 4 are examples, please remember
+# to delete these"). The firm's blank template gets downloaded with the
+# client's uploads, and its examples were read as the client's debts.
+_EXAMPLE_ROWS = {('bank of america', 638462.87), ('american express', 5267.94)}
+
+
+def _template_example(r):
+    return ((str(r.get('creditor') or '').strip().lower(),
+             round(r.get('balance') or 0, 2)) in _EXAMPLE_ROWS)
+
+
 def read_schedule(path):
     """The firm's debt schedule template, as the office filled it in."""
     import openpyxl
@@ -127,7 +142,12 @@ def read_schedule(path):
             'payment': get('minimum monthly'),
             'maturity': _year_of(next((r[i] for i in col('maturity')), None)),
             'available_credit': get('available credit'),
-            'side': 'Practice',
+            # The template has no side column, so a home mortgage or a car
+            # loan listed on it was counted as practice debt (2.08m against
+            # the lead advisor's 935k). Rows that say what they are go to
+            # the personal side.
+            'side': ('Personal' if _PERSONAL_DEBT.search(
+                str(r[1]) if len(r) > 1 and r[1] else '') else 'Practice'),
             'source': os.path.basename(path),
             'as_of': next((cols[i] for i in reversed(bals)
                            if _num(r[i]) is not None), None),
@@ -371,7 +391,7 @@ def gather(folder):
         if digest in seen:
             continue
         seen.add(digest)
-        sched += read_schedule(path)
+        sched += [r for r in read_schedule(path) if not _template_example(r)]
     statements = dedupe_statements(read_statements(folder))
     # A Debt Sheet carries personal rows too. They are the client's own
     # account; a mortgage statement for the same loan is not added twice.
