@@ -44,9 +44,12 @@ def _num(v):
         return float(v)
     s = re.sub(r'[^\d.\-]', '', str(v))
     try:
-        return float(s)
+        n = float(s)
     except ValueError:
         return None
+    # A rate typed as text ("0.9%") means 0.009, the way a formatted cell
+    # stores it; read as 0.9 it showed as a 90% car loan.
+    return n / 100 if '%' in str(v) else n
 
 
 def _year_of(v):

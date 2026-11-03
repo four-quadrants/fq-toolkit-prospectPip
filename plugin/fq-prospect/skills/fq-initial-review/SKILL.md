@@ -1,6 +1,6 @@
 ---
 name: fq-initial-review
-description: "Stage 1 of the Four Quadrants prospect pipeline: build a prospect's INITIAL NOTES, and run the INTAKE (file and check their documents). Use when someone says \"build [client]'s initial notes\", \"initial notes for [client]\", \"run [client]'s intake\", \"file [client]'s documents\", or \"what is [client] missing\". One line is enough: this skill runs the LaunchBay pull and the intake itself when they have not been done."
+description: "Stage 1 of the Four Quadrants prospect pipeline: run the INTAKE (pull, audit, file, and report the open items to the analyst), then build the INITIAL NOTES. Use when someone says \"build [client]'s initial notes\", \"initial notes for [client]\", \"run [client]'s intake\", \"file [client]'s documents\", or \"what is [client] missing\". One line is enough: this skill runs the LaunchBay pull and the intake itself when they have not been done."
 ---
 
 # Initial review (Stage 1)
@@ -28,11 +28,12 @@ section "A short request means the whole step". The short version:
    `python3 fq_auditor/lb_fetch.py "<client folder>"`. Not filed: the
    intake (`audit.py ... --file-them`, then Claude's checklist check). Say in
    one line which of these you ran.
-4. **The team's word settles the checklist.** Documents also come by email,
-   QuickBooks logins and calls. A team comment that the documents are
-   complete, or a consult already booked, means nothing is "missing": gaps
-   are team notes only.
-5. **No client email unless asked.** Only in Stage 1, only on request.
+4. **Report the intake to the analyst** before anything else: every
+   checklist item as received, answered in the portal, or open, then the open
+   items as a short list. The analyst decides what is truly needed before the
+   consult offer call. Team comments (documents complete, consult booked) and
+   portal answers count as received; never call those missing.
+5. **No client email unless the analyst asks**, after they pick what to chase.
 
 ## Claude's readings (do these yourself)
 

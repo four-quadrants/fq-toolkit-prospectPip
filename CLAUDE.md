@@ -17,7 +17,7 @@ built early.
 | Step | Code (fq_auditor/) | Output |
 |---|---|---|
 | LaunchBay pull (Claude skill) | lb_fetch.py, lb_checklist.py | launchbay_*.json, checklist |
-| Intake: audit, file, follow-up email | audit.py, classify.py, checklist_claude.py, intake_email.py | Documents/ tree, _Audit/Intake follow-up |
+| Intake: audit, file, report open items to the analyst | audit.py, classify.py, checklist_claude.py, intake_email.py | Documents/ tree; the open-items list in the chat (a follow-up email only if asked) |
 | Initial notes | facts.py, workbook.py, credit.py, doc_readings.py | Initial notes .xlsx in the client folder |
 
 Then the team holds the consult offer call. No cash flow, assumptions or
@@ -60,13 +60,13 @@ assumptions"). Claude does everything that step needs without being told:
    `launchbay_manifest.json`, or older than 3 days: pull from LaunchBay. New
    documents not yet filed: run the intake. Then the step asked for. Say in
    one line which earlier steps you ran.
-4. **The team's word settles the checklist.** LaunchBay is not the only
-   source: documents also arrive by email, QuickBooks logins and calls. If a
-   team comment says the documents are complete, or the client has a consult
-   booked, nothing is "missing": list gaps as team notes only.
-5. **No client email unless asked.** The intake follow-up is drafted only in
-   Stage 1, before the consult offer call, and only when the analyst asks for
-   it.
+4. **The intake always ends with a report to the analyst**: every checklist
+   item as received, answered in the portal, or open, with the open items
+   listed plainly. The analyst decides which of those are truly needed before
+   the consult offer call. Team comments ("we have everything", a consult
+   already booked) and portal answers count as received.
+5. **No client email unless the analyst asks for one**, after they have
+   picked the open items to chase.
 6. **If the team's own version of the output is in the folder** (their
    initial notes, Assumptions PDF, deck), compare against it and say which
    figures match and which do not before calling the step done.
@@ -110,8 +110,8 @@ the Claude app, the Analysis share and the cloned toolkit (SETUP.md Part 1).
 
 ## Emails to the client
 
-Claude never sends or drafts email in anyone's mailbox. The intake follow-up
-is shown in the chat as plain text for the analyst to copy into Outlook (and
+Claude never sends or drafts email in anyone's mailbox. The intake follow-up,
+written only once the analyst has picked the open items to chase, is shown in the chat as plain text for the analyst to copy into Outlook (and
 saved as `_Audit/Intake follow-up - <Surname>.txt`). The later questions email
 is built on the lead advisor's analysis review page and copied from there.
 
