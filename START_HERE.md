@@ -1,6 +1,7 @@
 # START HERE: set up the FQ Toolkit on a new Mac
 
-**For Claude.** A teammate has connected this Prospects folder and said
+**For Claude.** A teammate has connected the Prospects folder
+(`Analysis/Brogan/Prospects`) and said
 something like "read START HERE and set me up". Walk them through the setup
 below, one step at a time. Check each step yourself wherever you can, say
 plainly what you checked and what you found, and only ask the person to do
@@ -17,8 +18,8 @@ time, and tell them Terminal shows nothing while they type a password.
 
 - **Firm Claude account only.** If anything shows an `ANTHROPIC_API_KEY`, stop
   and tell them to remove it: the toolkit never bills outside the team seat.
-- **No client data in git**, ever. **Test on `_TEST` copies** under
-  `Prospects/2026/_TEST/`; do not enter a live client folder unless they ask.
+- **No client data in git**, ever. Do not open a client folder they have not
+  named.
 - **Never send email, never change who a page is shared with, never enter a
   password or credential.** Those are always the person's own clicks.
 - **No em dashes** in anything you write for them.
@@ -37,8 +38,8 @@ Ask them to confirm they are signed in to the Claude desktop app with their
 
 ### 2. The client folders
 
-They connected this folder to read this file, so the share is mounted. Check
-that `Prospects/2026` lists client folders and a `_TEST` folder. If the share
+They connected the Prospects folder to read this file, so the share is
+mounted. Check that `Prospects/2026` lists the client folders. If the share
 ever disappears, the fix is Finder, **Go > Connect to Server** (`Cmd + K`),
 `smb://192.168.62.170/Analysis`, sign in, tick **Remember this password**; and
 to reconnect at login, **System Settings > General > Login Items**, add the
@@ -91,6 +92,7 @@ Run, in the shell, from the toolkit folder:
 python3 fq_auditor/readycheck.py "<the Prospects/2026 folder>"
 ```
 
+
 Install anything it lists with the command it prints, run it again, and tell
 them "Ready" once it is clean.
 
@@ -108,16 +110,17 @@ Pulling a client's documents needs the LaunchBay connector in their Claude
 account. If they will do pulls, ask them to connect it (Claude's connectors
 settings) and confirm you can see it. The lead advisor usually does not need it.
 
-### 8. One real test, on a _TEST client
+### 8. One real test
 
-Build the initial notes for a _TEST client into your outputs folder (not into
-the client folder), for example:
+Ask which prospect they are working on, and build that client's initial notes
+into your outputs folder (not into the client folder):
 
 ```
-cd fq_auditor && python3 build_outputs.py "<Prospects/2026/_TEST/Weiler, Seth - TEST>" --what workbook --outdir "<your outputs folder>"
+cd fq_auditor && python3 build_outputs.py "<Prospects/2026/that client's folder>" --what workbook --outdir "<your outputs folder>"
 ```
 
-Present the workbook so they see it open. If it fails, read the error, fix
+Present the workbook so they see it open. It is their real client, so it
+doubles as useful work. If it fails, read the error, fix
 what you can (usually a missing library from step 5), and run it again.
 
 ### 9. The tour (five minutes)
@@ -126,7 +129,7 @@ what you can (usually a missing library from step 5), and run it again.
   Pipeline Showcase, https://claude.ai/artifact/1DwNs2bqHXXuAeFemNXpWm
 - The analyst guide: `prospectPip/fq_auditor/SETUP.md`, Part 2.
 - How to change the toolkit: say what is wrong and propose a solution, ask for
-  a preview of the fix on a _TEST client, save it once verified with the commit
+  a preview of the fix, save it once verified with the commit
   line Claude gives. Getting everyone else's changes: `git pull`.
 
 If a link does not open for them, it has not been shared with them yet; tell
