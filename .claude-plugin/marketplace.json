@@ -1,0 +1,11 @@
+{
+  "name": "four-quadrants",
+  "owner": { "name": "Four Quadrants" },
+  "plugins": [
+    {
+      "name": "fq-prospect",
+      "source": "./plugin/fq-prospect",
+      "description": "The FQ Toolkit prospect pipeline in Claude: initial notes and intake, the LaunchBay pull, the analysis and consult review pages."
+    }
+  ]
+}

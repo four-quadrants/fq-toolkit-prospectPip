@@ -34,6 +34,25 @@ section "A short request means the whole step". The short version:
    are team notes only.
 5. **No client email unless asked.** Only in Stage 1, only on request.
 
+## Claude's readings (do these yourself)
+
+The notes are only as good as two files Claude writes into `_Audit`:
+
+- `notes.json`: the analyst's lines (composition, movement, contradictions
+  between the IC form, the call notes and the documents). Format and rules in
+  `fq_auditor/notes.py`.
+- `doc_readings.json`: figures from documents the code's readers do not know
+  (P&Ls, returns, production, counts, debts). Format in
+  `fq_auditor/doc_readings.py`; check it with
+  `python3 fq_auditor/doc_readings.py "<client folder>"` and fix what it lists.
+
+The toolkit's own Claude calls (`ask_claude.py`) are not signed in inside this
+workspace, so do not wait on them: read the documents and write these files
+yourself, then build with `FQ_NO_CLAUDE=1`. The same goes for the checklist
+check in the intake (`_Audit/claude_checklist.json`, format in
+`fq_auditor/checklist_claude.py`). Without these files the notes come out
+half empty.
+
 ## Initial notes
 
 `python3 build_outputs.py "<client folder>" --what workbook`, from
