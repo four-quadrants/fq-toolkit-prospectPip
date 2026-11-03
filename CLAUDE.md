@@ -46,6 +46,13 @@ The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the
 steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
 `plugin/fq-prospect` folder holds the Claude skills.
 
+## Setting someone up
+
+`START_HERE.md` (a copy also sits at the top of the Prospects/2026 share as
+`START HERE - FQ Toolkit.md`, so a new person can reach it before they have the
+code) is the script Claude follows to set up a new Mac. Edit the repo copy and
+copy it to the share when it changes.
+
 ## A new Mac, or "check the FQ toolkit is ready"
 
 Run `python3 fq_auditor/readycheck.py "<Prospects folder>"`. It lists any
