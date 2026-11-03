@@ -194,9 +194,14 @@ def open_pdf(path):
     pymupdf.open directly; adding password handling to only the obvious one left
     a 91-page return reading as empty through the parallel path the audit
     actually uses — the same shape of bug as three places each deciding for
-    themselves what counted as a PDF. Returns None when it cannot be unlocked.
+    themselves what counted as a PDF. Returns None when it cannot be unlocked,
+    or when the file is empty or not really a PDF (a 0 KB upload crashed the
+    whole audit; one bad file must read as empty, not stop the run).
     """
-    doc = pymupdf.open(path)
+    try:
+        doc = pymupdf.open(path)
+    except Exception:
+        return None
     if not doc.needs_pass:
         return doc
     for pw in passwords_near(path):
