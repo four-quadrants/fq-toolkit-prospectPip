@@ -62,8 +62,27 @@ def _ocr(page, dpi, cfg=OCR_CFG_DEFAULT):
     if est > PIXEL_BUDGET:
         dpi = max(100, int(dpi * (PIXEL_BUDGET / est) ** 0.5))
     pix = page.get_pixmap(dpi=dpi)
-    img = Image.open(io.BytesIO(pix.tobytes("png")))
+    img = _upright(Image.open(io.BytesIO(pix.tobytes("png"))))
     return pytesseract.image_to_string(img, config=cfg % dpi)
+
+
+def _upright(img):
+    """Turn a page scanned upside down (or sideways) the right way up.
+
+    A client's new-patient report came in with its last pages upside down;
+    OCR read them as noise and the yearly totals ("Total Persons: 279") were
+    lost. Tesseract's orientation check finds these; a page it is unsure
+    about is left as it is.
+    """
+    try:
+        osd = pytesseract.image_to_osd(img)
+    except Exception:                                        # noqa: BLE001
+        return img
+    rot = re.search(r'Rotate:\s*(\d+)', osd)
+    conf = re.search(r'Orientation confidence:\s*([\d.]+)', osd)
+    if not rot or not conf or int(rot.group(1)) == 0 or float(conf.group(1)) < 2:
+        return img
+    return img.rotate(-int(rot.group(1)), expand=True)
 
 
 def _ocr_with_rescue(page, dpi):

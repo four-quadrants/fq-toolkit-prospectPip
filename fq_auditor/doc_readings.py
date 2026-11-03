@@ -42,6 +42,9 @@ THE FILE (written by Claude, read here; years are strings)
       "production": 0, "adjustments": 0, "writeoffs": 0, "tot_prod": 0,
       "pt_income": 0, "ins_income": 0, "total_income": 0}]}},
  "counts": {"source": "<file>", "by_year": {"2025": {"total_patients": 0}}},
+     (a source of "LaunchBay portal comments" checks against what the
+      client typed in the portal; counts.sources may name one per field,
+      or "<field>_<year>" for one year)
  "debts": {"practice": [{"creditor": "", "what": "", "balance": 0,
                          "rate": 0.0, "payment": 0, "description": "",
                          "source": "<file>", "pending": false}],
@@ -60,6 +63,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 FILE = 'doc_readings.json'
+PORTAL = 'LaunchBay portal comments'
 TOL = 1.01          # a dollar, for rounding in printed reports
 
 
@@ -101,6 +105,19 @@ def _text(folder, name):
                         break
                 if len(text.strip()) >= 40:
                     break
+    if not text and name == PORTAL:
+        # What the client typed in LaunchBay counts as a source: patient
+        # counts and days worked often only exist there. Checked the same
+        # way, against the comments as written.
+        for p in (os.path.join(folder, 'launchbay_tasks.json'),
+                  os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+            try:
+                data = json.load(open(p))
+            except (OSError, ValueError):
+                continue
+            text = '\n'.join(c.get('text') or '' for t in data.get('tasks') or ()
+                             for c in t.get('comments') or ())
+            break
     _TEXT[name] = text
     return text
 
@@ -227,7 +244,9 @@ def check(folder):
         reps, ok = r.get('reports') or [], True
         for rep in reps:
             src = rep.get('source') or ''
-            keys = ('production', 'adjustments', 'writeoffs', 'tot_prod',
+            # tot_prod is not always printed (Eaglesoft shows production
+            # and adjustments only); the tie below checks it instead.
+            keys = ('production', 'adjustments', 'writeoffs',
                     'pt_income', 'ins_income', 'total_income')
             if not need(src, 'production %s' % year, *[rep.get(k) for k in keys]):
                 ok = False
@@ -265,7 +284,9 @@ def check(folder):
     c = raw.get('counts') or {}
     for year, vals in (c.get('by_year') or {}).items():
         for field, v in vals.items():
-            src = (c.get('sources') or {}).get(field) or c.get('source') or ''
+            srcs = c.get('sources') or {}
+            src = (srcs.get('%s_%s' % (field, year)) or srcs.get(field)
+                   or c.get('source') or '')
             if need(src, '%s %s' % (field, year), v):
                 counts.setdefault(year, {})[field] = v
     good['counts'] = counts
