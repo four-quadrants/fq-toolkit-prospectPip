@@ -297,8 +297,12 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
                     a.number_format = MONEY
                     a.font = Font(name='Arial', size=12, italic=True)
             if note:
-                n = ws.cell(row, ycol(len(years) - 1) + (3 if ytd_i is not None else 2), note)
+                # The sheet's wide note column (the same one the metric rows
+                # use), so the note wraps across a few lines, not twenty.
+                nc = 2 + len(years) * 2 + (1 if ytd_i is not None else 0)
+                n = ws.cell(row, nc, note)
                 n.font, n.alignment = NOTE, WRAP
+                ws.row_dimensions[row].height = min(150, 17 * (1 + len(note) // 80))
             row += 1
             if balance:
                 ws.cell(row, 1, '%s growth %%' % label.split(',')[0]).font = Font(name='Arial', size=12, italic=True)
@@ -374,6 +378,24 @@ def _cash_sheet(wb, bundle):
         if a.get('note'):
             ws.cell(r, 8, a['note']).font = NOTE
         r += 2
+
+
+# Reminders every client gets on the Summary, after the client's own checks:
+# the things the consult always touches, whether or not the documents raised
+# them.
+BOILERPLATE_CHECKS = [
+    'Confirm on the call the IC form figures the plan leans on: collections, '
+    'overhead, take-home, what they save and what they have saved.',
+    'Entity: is the current structure (sole proprietor, S corp, other LLCs) '
+    'the right one at this income?',
+    'Retirement plans for the owner and staff: what exists, what it costs, '
+    'what more is possible.',
+    'Insurance: disability, life, malpractice, and buy-sell or key-person '
+    'cover.',
+    'Practice value and transition: associate, partner or sale, and the '
+    'timeline.',
+    'Personal: will and estate documents, college savings, emergency fund.',
+]
 
 
 def _summary_sheet(wb, bundle):
@@ -530,10 +552,9 @@ def _summary_sheet(wb, bundle):
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
         ws.row_dimensions[r].height = 17 * (1 + len(a) // 120)
         r += 1
-    checks = S.get('checks') or ()
+    checks = list(S.get('checks') or ()) + [c for c in BOILERPLATE_CHECKS
+                                             if c not in (S.get('checks') or ())]
     if checks:
-        ws.cell(r, 1, 'To check before the consult').font = B
-        r += 1
         for a in checks:
             c = ws.cell(r, 1, 'CHECK: ' + a)
             c.font, c.alignment, c.fill = NOTE, WRAP, F_NEEDED
