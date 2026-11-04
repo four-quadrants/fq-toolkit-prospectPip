@@ -51,6 +51,9 @@ def arrow(values):
     return ' to '.join(got) if got else None
 
 
+BUILDING = re.compile(r'\b(condo|building|real estate|property|office mortgage|commercial mortgage)\b', re.I)
+
+
 def practice_debt(rows, unread=()):
     """Every practice obligation as one line, with what is about to fall off."""
     live = [r for r in rows if r.get('balance')]
@@ -59,6 +62,13 @@ def practice_debt(rows, unread=()):
     total = sum(r['balance'] for r in live)
     payment = sum(r.get('payment') or 0 for r in live)
     bits = ['%s across %d obligations' % (money(total), len(live))]
+    # The building is not the practice: a condo or office mortgage is real
+    # estate (often in its own LLC), so it is shown apart from practice debt.
+    bld = [r for r in live if BUILDING.search(' '.join(
+        str(r.get(k) or '') for k in ('description', 'what', 'creditor')))]
+    if bld and len(bld) < len(live):
+        b = sum(r['balance'] for r in bld)
+        bits.append('practice %s; building %s' % (money(total - b), money(b)))
     if payment:
         bits.append('%s/mo' % money(payment))
 
@@ -398,10 +408,16 @@ def booked_out(form):
     which is why they get their own row instead of trailing the days worked.
     """
     bits = []
+    # The form asks the doctor question in days ("How many days are you
+    # ... currently booked out at 90% capacity?") and the hygiene one in
+    # months; it said "weeks" for the doctor and turned 4 days into 4 weeks.
+    # A worded answer ("Varies widely") is shown as typed.
     if form.get('doctor_booked'):
-        bits.append('doctor %s weeks out' % form['doctor_booked'])
+        v = str(form['doctor_booked']).strip()
+        bits.append('doctor %s%s out' % (v, ' days' if re.fullmatch(r'[\d.]+', v) else ''))
     if form.get('hygiene_booked'):
-        bits.append('hygiene %s months out' % form['hygiene_booked'])
+        v = str(form['hygiene_booked']).strip()
+        bits.append('hygiene %s' % (v + ' months out' if re.fullmatch(r'[\d.]+', v) else '"%s"' % v))
     if form.get('new_patient_wait'):
         bits.append('new patients next open %s' % form['new_patient_wait'])
     return '. '.join(bits) + '.' if bits else None

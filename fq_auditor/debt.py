@@ -144,6 +144,8 @@ def read_schedule(path):
             'rate': get('interest rate'),
             'payment': get('minimum monthly'),
             'maturity': _year_of(next((r[i] for i in col('maturity')), None)),
+            'fixed': next((str(r[i]).strip().rstrip('*').strip() for i in col('fixed or variable')
+                           if r[i] not in (None, '')), None),
             'available_credit': get('available credit'),
             # The template has no side column, so a home mortgage or a car
             # loan listed on it was counted as practice debt (2.08m against

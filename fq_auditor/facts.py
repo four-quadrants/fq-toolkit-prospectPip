@@ -37,6 +37,9 @@ import assets as _assets                                     # noqa: E402
 MONEY = '$#,##0;($#,##0);-'
 PCT = '0.0%'
 NUM = '#,##0'
+# Per patient and per day: the lead advisor reads these to the cent.
+MONEY2 = '$#,##0.00;($#,##0.00);-'
+NUM2 = '#,##0.00'
 TEXT = None
 
 
@@ -195,6 +198,8 @@ def gather(folder, client=None):
     # figure checked against its document (doc_readings.py). It only fills
     # what the readers left blank.
     profile = {}
+    extra_notes = {}
+    count_months = {}
     try:
         import doc_readings as _dr
         got, _problems = _dr.check(folder)
@@ -208,9 +213,16 @@ def gather(folder, client=None):
         for y, v in (got.get('production') or {}).items():
             if not prod.get(y):
                 prod[y] = v
+        # Patients are patients seen (visits) from the reports, not a count
+        # of active patients the client typed up: a reading of patients seen
+        # replaces what the code read. Other counts only fill blanks.
         for y, vals in (got.get('counts') or {}).items():
             for k, v in vals.items():
-                counts.setdefault(y, {}).setdefault(k, v)
+                if k == 'total_patients':
+                    counts.setdefault(y, {})[k] = v
+                else:
+                    counts.setdefault(y, {}).setdefault(k, v)
+        count_months = (got.get('counts_months') or {})
         for side in ('practice', 'personal'):
             if not debts.get(side) and (got.get('debts') or {}).get(side):
                 debts[side] = got['debts'][side]
@@ -363,6 +375,13 @@ def gather(folder, client=None):
                 bits.append('%s/mo' % _fmt(r['payment']))
             if r.get('description'):
                 bits.append(r['description'])
+            # Term detail the lead advisor adds by hand otherwise.
+            if r.get('original'):
+                bits.append('orig %s' % _fmt(r['original']))
+            if r.get('maturity'):
+                bits.append('matures %s' % r['maturity'])
+            if r.get('fixed'):
+                bits.append(str(r['fixed']).lower())
             if r.get('pending'):
                 out.append(Fact(name, 'Pending', TEXT, r.get('source'),
                                 'not owed yet, kept out of the totals',
@@ -540,9 +559,9 @@ def gather(folder, client=None):
         ('hygiene % of production',
          {y: ratio(hyg.get(y), gross.get(y)) for y in years}, PCT),
         ('gross production / patient',
-         {y: ratio(gross.get(y), pats.get(y), pct=False) for y in years}, MONEY),
+         {y: ratio(gross.get(y), pats.get(y), pct=False) for y in years}, MONEY2),
         ('net production / patient',
-         {y: ratio(netprod.get(y), pats.get(y), pct=False) for y in years}, MONEY),
+         {y: ratio(netprod.get(y), pats.get(y), pct=False) for y in years}, MONEY2),
         ('production adjustment %',
          {y: ratio(adjust.get(y), gross.get(y)) for y in years}, PCT),
         ('collection %',
@@ -552,16 +571,16 @@ def gather(folder, client=None):
         ('collection adjustment %',
          {y: ratio(coladj.get(y), grosscol.get(y)) for y in years}, PCT),
         ('patients / doctor day',
-         {y: ratio(pats.get(y), days.get(y), pct=False) for y in years}, NUM),
+         {y: ratio(pats.get(y), days.get(y), pct=False) for y in years}, NUM2),
     ]
     for code, role in docs_list:
         name = (role.get('name') or code).replace('Dr. ', '').split()[-1]
         series.append(('production / day, %s' % name,
                        {y: ratio(providers(y).get(code), days.get(y),
-                                 pct=False) for y in years}, MONEY))
+                                 pct=False) for y in years}, MONEY2))
     series += [
         ('gross production / doctor day',
-         {y: ratio(gross.get(y), days.get(y), pct=False) for y in years}, MONEY),
+         {y: ratio(gross.get(y), days.get(y), pct=False) for y in years}, MONEY2),
         ('revenue (P&L)',
          {y: pnl.get(y, {}).get('income') for y in years}, MONEY),
         ('doctor income (P&L)',
@@ -599,7 +618,22 @@ def gather(folder, client=None):
             Fact('Pain points', None, TEXT, None,
                  needed='Could not be drafted (%s)' % exc)]))
 
+    # Rows read from the documents for the lead advisor's extra lines
+    # (doc_readings.py "extra"): year-end bank balances, distributions,
+    # professional fees.
+    for r in (got or {}).get('extra') or ():
+        fmt = {'money': MONEY, 'pct': PCT, 'num': NUM}.get(r.get('fmt'), MONEY)
+        series.append((r['label'], {y: r['by_year'].get(y) for y in years}, fmt))
+        if r.get('note'):
+            extra_notes[r['label']] = {'note': r['note']}
+
     bundle = Bundle(client, blocks, years, series, folder)
+    # A count that runs longer than the money (new patients to Oct 30 against
+    # a P&L to Sep 30) annualizes on its own months.
+    _cm = {'total_patients': 'patients (procedures)', 'new_patients': 'new patients'}
+    bundle.series_months = {_cm[k]: v for k, v in count_months.items() if k in _cm}
+    bundle.cash_light = (got or {}).get('cash_light') or []
+    bundle.series_notes.update(extra_notes)
     bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0
                              for y in years}
     # The newest year when it is a year to date: how many months the

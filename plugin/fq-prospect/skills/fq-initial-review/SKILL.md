@@ -51,6 +51,30 @@ The notes are only as good as two files Claude writes into `_Audit`:
   `fq_auditor/doc_readings.py`; check it with
   `python3 fq_auditor/doc_readings.py "<client folder>"` and fix what it lists.
 
+What the lead advisor expects in every initial notes (format in
+`fq_auditor/doc_readings.py`):
+
+- **Patients = patients seen (visits)** from the day sheet or production
+  report, never the active patient count. If a count runs past the money
+  figures (to Oct 30 against a P&L to Sep 30), set `counts.ytd_months` and
+  note it on the row.
+- **`extra` rows** for the by-year tab: year-end bank balances, distributions
+  (draws, owner taxes, retirement) and professional fees, from the balance
+  sheets and P&Ls, one source per year.
+- **`cash_light`**: each practice bank account, statement by statement (start,
+  in, out, end, interest, transfers to the client's own accounts). Every
+  statement must balance. This is the light Stage 1 version, not the cash
+  flow analysis.
+- **`_Audit/summary.json`** for the Summary tab: areas to improve (drafted
+  from the flags, for the lead advisor to edit), averages (stated, average,
+  use) and a savings projection (start, age, retirement age, paths: stated
+  savings at 8.5%, +20% at 9%, and a conservative pair).
+- **Notes** flag when the IC form does not add up (chairs) or the call notes
+  disagree (dependents), and carry the call's details onto their rows
+  (spouse, advisors, accounts, tax habits, what they are torn between).
+- **Tax notes:** entity type, refunds rolled forward, late filings, amended
+  returns not sent, quarterly estimates.
+
 The toolkit's own Claude calls (`ask_claude.py`) are not signed in inside this
 workspace, so do not wait on them: read the documents and write these files
 yourself, then build with `FQ_NO_CLAUDE=1`. The same goes for the checklist

@@ -290,6 +290,8 @@ def check(folder):
             if need(src, '%s %s' % (field, year), v):
                 counts.setdefault(year, {})[field] = v
     good['counts'] = counts
+    # months covered by the newest year's counts, when not the P&L's
+    good['counts_months'] = c.get('ytd_months') or {}
 
     # -------------------------------------------------------------- debts
     debts = {}
@@ -325,6 +327,45 @@ def check(folder):
         if isinstance(v, dict) and v.get('value') not in (None, ''):
             prof[k] = v
     good['profile'] = prof
+
+    # ------------------------------------------------- extra yearly rows
+    # Rows the lead advisor adds to the by year sheet: bank balances at year
+    # end, distributions, professional fees. Each figure checked like the rest.
+    extra = []
+    for r in raw.get('extra') or ():
+        src = r.get('source') or ''
+        per = r.get('sources') or {}       # one document per year, when they differ
+        vals = {y: v for y, v in (r.get('by_year') or {}).items()
+                if need(per.get(y) or src, r.get('label') or 'row', v)}
+        if vals:
+            extra.append({'label': r.get('label'), 'by_year': vals,
+                          'fmt': r.get('fmt') or 'money', 'source': src,
+                          'note': r.get('note')})
+    good['extra'] = extra
+
+    # ------------------------------------------------ light cash flow
+    # Per bank account, per statement: opening and closing balance, money in,
+    # money out, and transfers to the client's own accounts. Opening + in -
+    # out must equal closing to the dollar, or the statement is left out.
+    cash = []
+    for a in raw.get('cash_light') or ():
+        rows = []
+        for m in a.get('months') or ():
+            src = m.get('source') or a.get('source') or ''
+            ok = need(src, 'cash %s' % m.get('period'), m.get('start'),
+                      m.get('end'), m.get('deposits'), m.get('withdrawals'),
+                      m.get('interest'))
+            if ok and not _close((m.get('start') or 0) + (m.get('deposits') or 0)
+                                 + (m.get('interest') or 0)
+                                 - (m.get('withdrawals') or 0), m.get('end') or 0):
+                problems.append('%s: %s does not balance' % (src, m.get('period')))
+                ok = False
+            if ok:
+                rows.append(m)
+        if rows:
+            cash.append({'account': a.get('account'), 'months': rows,
+                         'note': a.get('note')})
+    good['cash_light'] = cash
     return good, problems
 
 

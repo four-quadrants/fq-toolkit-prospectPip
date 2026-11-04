@@ -158,7 +158,7 @@ def _overhead_simple(block_facts, by_year):
     return out
 
 
-def _overhead_table(ws, row, by_year):
+def _overhead_table(ws, row, by_year, ytd=None):
     """Overhead year over year with every figure that goes into it.
 
     P&L against P&L and return against return, the way the firm's old sheet
@@ -172,6 +172,14 @@ def _overhead_table(ws, row, by_year):
         # year, then each later year followed by its change column.
         return 2 if i == 0 else 1 + 2 * i
 
+    # The year to date gets an annualized column beside it, as on the
+    # metric table above (the lead advisor fills it in by hand otherwise).
+    ytd_i = None
+    if ytd and ytd.get('year') in years and years.index(ytd['year']) == len(years) - 1:
+        m = by_year[ytd['year']].get('pnl_months') or ytd.get('months')
+        if m and m < 12:
+            ytd_i, ytd_m = years.index(ytd['year']), m
+
     last = ycol(len(years) - 1) + (1 if len(years) > 1 else 0)
     ws.cell(row, 1, 'OVERHEAD').font = SECTION
     for c in range(1, last + 1):
@@ -184,7 +192,10 @@ def _overhead_table(ws, row, by_year):
         c = ws.cell(row, ycol(i), y if not m or m >= 12
                     else '%s (%d mo P&L)' % (y, m))
         c.font = HEAD
-        if i:
+        if i == ytd_i:
+            ws.cell(row, ycol(i) + 1, '%s annualized' % y).font = HEAD
+            ws.cell(row, ycol(i) + 2, 'change').font = HEAD
+        elif i:
             ws.cell(row, ycol(i) + 1, 'change').font = HEAD
     row += 1
 
@@ -204,10 +215,20 @@ def _overhead_table(ws, row, by_year):
                           color=None if formula else '0000FF')
             if v is None:
                 c.fill = F_NEEDED
+            here = get_column_letter(col)
+            if i == ytd_i:
+                a = ws.cell(row, col + 1)
+                if formula:
+                    a.value = formula(get_column_letter(col + 1))
+                elif v is not None:
+                    a.value = '=%s%d/%d*12' % (here, row, ytd_m)
+                a.number_format = fmt
+                a.font = Font(name='Arial', size=10, italic=True, bold=bold)
+                here = get_column_letter(col + 1)
             if i and fmt == '0.0%':
                 prev = get_column_letter(ycol(i - 1))
-                d = ws.cell(row, col + 1, '=IFERROR((%s%d-%s%d)*100,"")'
-                            % (get_column_letter(col), row, prev, row))
+                d = ws.cell(row, col + (2 if i == ytd_i else 1),
+                            '=IFERROR((%s%d-%s%d)*100,"")' % (here, row, prev, row))
                 d.number_format, d.font = '+0.0 "pts";-0.0 "pts";0.0', DERIVED
         row += 1
         return row - 1
@@ -240,6 +261,133 @@ def _overhead_table(ws, row, by_year):
                    'preparer deducted.')
     note.font = NOTE
     return row + 1
+
+
+def _cash_sheet(wb, bundle):
+    """Light cash flow: each bank account, statement by statement.
+
+    Not the cash flow analysis (that is Stage 2). Just what the lead advisor
+    works out by hand at the initial notes: where the balance went each
+    month, what moved between the client's own accounts, and the average.
+    """
+    accts = getattr(bundle, 'cash_light', None) or []
+    if not accts:
+        return
+    ws = wb.create_sheet('cash flow (light)')
+    r = _sheet_head(ws, 'Cash flow, light  —  %s' % bundle.client,
+                    'Per bank account, per statement: balance in, money in, '
+                    'money out, balance out, and transfers to the client\'s '
+                    'own accounts. Every statement balances to the dollar.',
+                    [16, 14, 14, 14, 14, 14, 16, 40])
+    for a in accts:
+        ws.cell(r, 1, a.get('account')).font = SECTION
+        for c in range(1, 9):
+            ws.cell(r, c).fill = F_SECTION
+        r += 1
+        for i, h in enumerate(('period', 'start', 'in', 'out', 'end',
+                               'change', 'to own accts', 'note'), 1):
+            ws.cell(r, i, h).font = HEAD
+            ws.cell(r, i).fill = F_HEAD
+        r += 1
+        first = r
+        for m in a['months']:
+            ws.cell(r, 1, m.get('period')).font = LABEL
+            for j, k in enumerate(('start', 'deposits', 'withdrawals', 'end'), 2):
+                c = ws.cell(r, j, m.get(k))
+                c.number_format, c.font = MONEY, VALUE
+            c = ws.cell(r, 6, '=E%d-B%d' % (r, r))
+            c.number_format, c.font = MONEY, DERIVED
+            c = ws.cell(r, 7, m.get('transfers_out'))
+            c.number_format, c.font = MONEY, VALUE
+            ws.cell(r, 8, m.get('note') or '').font = NOTE
+            r += 1
+        ws.cell(r, 1, 'average a month').font = Font(name='Arial', size=10, bold=True)
+        for col in (6, 7):
+            L = get_column_letter(col)
+            c = ws.cell(r, col, '=IFERROR(AVERAGE(%s%d:%s%d),"")' % (L, first, L, r - 1))
+            c.number_format = MONEY
+            c.font = Font(name='Arial', size=10, bold=True)
+        if a.get('note'):
+            ws.cell(r, 8, a['note']).font = NOTE
+        r += 2
+
+
+def _summary_sheet(wb, bundle):
+    """The lead advisor's summary page, pre-filled for him to edit.
+
+    Areas to improve come from _Audit/summary.json (Claude drafts them from
+    the flags); the savings projection is live formulas on the inputs at the
+    top, so he can change the savings or the rate and watch it move.
+    """
+    import json
+    try:
+        S = json.load(open(os.path.join(bundle.folder, '_Audit', 'summary.json')))
+    except (OSError, ValueError, TypeError):
+        return
+    ws = wb.create_sheet('Summary')
+    r = _sheet_head(ws, 'Summary  —  %s' % bundle.client,
+                    'A draft for the lead advisor: edit the areas, the '
+                    'averages and the savings inputs freely.',
+                    [46, 16, 16, 16, 16])
+    ws.cell(r, 1, 'AREAS TO IMPROVE').font = SECTION
+    for c in range(1, 6):
+        ws.cell(r, c).fill = F_SECTION
+    r += 1
+    for a in S.get('areas') or ():
+        ws.cell(r, 1, a).font = LABEL
+        ws.cell(r, 1).alignment = WRAP
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+        r += 1
+    r += 1
+    ws.cell(r, 1, 'AVERAGES').font = SECTION
+    for c in range(1, 6):
+        ws.cell(r, c).fill = F_SECTION
+    r += 1
+    for i, h in enumerate(('', 'stated', 'average', 'use'), 1):
+        ws.cell(r, i, h).font = HEAD
+        ws.cell(r, i).fill = F_HEAD
+    r += 1
+    for row in S.get('averages') or ():
+        label, stated, avg, use, fmt = (list(row) + [None] * 5)[:5]
+        ws.cell(r, 1, label).font = LABEL
+        for j, v in enumerate((stated, avg, use), 2):
+            c = ws.cell(r, j, v)
+            c.number_format = PCT if fmt == 'pct' else MONEY
+            c.font = VALUE if v is not None else LABEL
+        r += 1
+    P = S.get('projection') or {}
+    paths = P.get('paths') or []
+    if not paths:
+        return
+    r += 1
+    ws.cell(r, 1, 'SAVINGS PROJECTION').font = SECTION
+    for c in range(1, 6):
+        ws.cell(r, c).fill = F_SECTION
+    r += 1
+    ws.cell(r, 1, 'saved a year').font = LABEL
+    ws.cell(r + 1, 1, 'return').font = LABEL
+    for j, p in enumerate(paths, 2):
+        ws.cell(r - 1, j, p.get('label')).font = HEAD
+        c = ws.cell(r, j, p.get('save'))
+        c.number_format, c.font = MONEY, VALUE
+        c = ws.cell(r + 1, j, p.get('rate'))
+        c.number_format, c.font = '0.0%', VALUE
+    sv, rt = r, r + 1
+    r += 2
+    ws.cell(r, 1, 'age').font = HEAD
+    ws.cell(r, 1).fill = F_HEAD
+    r += 1
+    age, end = P.get('age'), P.get('retire_age')
+    start_row = r
+    for a in range(age, (end or age) + 1):
+        ws.cell(r, 1, a).font = LABEL
+        for j in range(2, 2 + len(paths)):
+            L = get_column_letter(j)
+            c = ws.cell(r, j, P.get('start') if r == start_row else
+                        '=%s%d*(1+%s$%d)+%s$%d' % (L, r - 1, L, rt, L, sv))
+            c.number_format = MONEY
+            c.font = VALUE if r == start_row else DERIVED
+        r += 1
 
 
 def write(bundle, out):
@@ -341,7 +489,7 @@ def write(bundle, out):
                     elif is_rate:
                         ac.value = '=%s%d' % (letter, r)
                     else:
-                        ac.value = '=%s%d/%d*12' % (letter, r, ytd['months'])
+                        ac.value = '=%s%d/%d*12' % (letter, r, (getattr(bundle, 'series_months', {}) or {}).get(name) or ytd['months'])
                     ac.number_format = fmt
                     ac.font = Font(name='Arial', size=10, italic=True)
                     letter = get_column_letter(col)
@@ -370,9 +518,12 @@ def write(bundle, out):
             r += 1
 
         if getattr(bundle, 'overhead_by_year', None):
-            _overhead_table(ws2, r + 1, bundle.overhead_by_year)
+            _overhead_table(ws2, r + 1, bundle.overhead_by_year, ytd)
 
     # ---------------------------------------------------------- source map
+    _cash_sheet(wb, bundle)
+    _summary_sheet(wb, bundle)
+
     ws3 = wb.create_sheet('Source Map')
     r = _sheet_head(ws3, 'Source Map  —  %s' % bundle.client,
                     'Generated, not typed. Every figure above appears here '
