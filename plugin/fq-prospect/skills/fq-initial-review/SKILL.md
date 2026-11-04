@@ -60,7 +60,9 @@ What the lead advisor expects in every initial notes (format in
   note it on the row.
 - **`extra` rows** for the by-year tab: year-end bank balances, distributions
   (draws, owner taxes, retirement) and professional fees, from the balance
-  sheets and P&Ls, one source per year.
+  sheets and P&Ls, one source per year. Mark a balance `"balance": true` (never
+  annualized), and give `ytd_months` when a row's newest year runs to a
+  different month than the year-to-date column.
 - **`cash_light`**: each practice bank account, statement by statement (start,
   in, out, end, interest, transfers to the client's own accounts). Every
   statement must balance. This is the light Stage 1 version, not the cash

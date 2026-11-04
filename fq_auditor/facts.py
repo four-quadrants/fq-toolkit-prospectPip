@@ -199,6 +199,7 @@ def gather(folder, client=None):
     # what the readers left blank.
     profile = {}
     extra_notes = {}
+    balance_rows, extra_months = set(), {}
     count_months = {}
     try:
         import doc_readings as _dr
@@ -624,6 +625,10 @@ def gather(folder, client=None):
     for r in (got or {}).get('extra') or ():
         fmt = {'money': MONEY, 'pct': PCT, 'num': NUM}.get(r.get('fmt'), MONEY)
         series.append((r['label'], {y: r['by_year'].get(y) for y in years}, fmt))
+        if r.get('balance'):
+            balance_rows.add(r['label'])
+        if r.get('ytd_months'):
+            extra_months[r['label']] = r['ytd_months']
         if r.get('note'):
             extra_notes[r['label']] = {'note': r['note']}
 
@@ -632,6 +637,8 @@ def gather(folder, client=None):
     # a P&L to Sep 30) annualizes on its own months.
     _cm = {'total_patients': 'patients (procedures)', 'new_patients': 'new patients'}
     bundle.series_months = {_cm[k]: v for k, v in count_months.items() if k in _cm}
+    bundle.series_months.update(extra_months)
+    bundle.balance_rows = balance_rows
     bundle.cash_light = (got or {}).get('cash_light') or []
     bundle.series_notes.update(extra_notes)
     bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0

@@ -340,7 +340,11 @@ def check(folder):
         if vals:
             extra.append({'label': r.get('label'), 'by_year': vals,
                           'fmt': r.get('fmt') or 'money', 'source': src,
-                          'note': r.get('note')})
+                          'note': r.get('note'),
+                          # a balance is a point in time: never annualized
+                          'balance': bool(r.get('balance')),
+                          # months the newest year covers, when not the YTD column's
+                          'ytd_months': r.get('ytd_months')})
     good['extra'] = extra
 
     # ------------------------------------------------ light cash flow
@@ -354,10 +358,11 @@ def check(folder):
             src = m.get('source') or a.get('source') or ''
             ok = need(src, 'cash %s' % m.get('period'), m.get('start'),
                       m.get('end'), m.get('deposits'), m.get('withdrawals'),
-                      m.get('interest'))
+                      m.get('interest'), m.get('checks'))
             if ok and not _close((m.get('start') or 0) + (m.get('deposits') or 0)
                                  + (m.get('interest') or 0)
-                                 - (m.get('withdrawals') or 0), m.get('end') or 0):
+                                 - (m.get('withdrawals') or 0) - (m.get('checks') or 0),
+                                 m.get('end') or 0):
                 problems.append('%s: %s does not balance' % (src, m.get('period')))
                 ok = False
             if ok:

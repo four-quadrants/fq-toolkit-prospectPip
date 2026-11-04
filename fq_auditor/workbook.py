@@ -292,8 +292,10 @@ def _cash_sheet(wb, bundle):
         first = r
         for m in a['months']:
             ws.cell(r, 1, m.get('period')).font = LABEL
-            for j, k in enumerate(('start', 'deposits', 'withdrawals', 'end'), 2):
-                c = ws.cell(r, j, m.get(k))
+            out_ = (m.get('withdrawals') or 0) + (m.get('checks') or 0)
+            for j, v in enumerate((m.get('start'), (m.get('deposits') or 0) + (m.get('interest') or 0),
+                                   out_, m.get('end')), 2):
+                c = ws.cell(r, j, v)
                 c.number_format, c.font = MONEY, VALUE
             c = ws.cell(r, 6, '=E%d-B%d' % (r, r))
             c.number_format, c.font = MONEY, DERIVED
@@ -472,7 +474,8 @@ def write(bundle, out):
             prev_letter = None
             # A total annualizes; a ratio (a %, or anything per patient or
             # per day) is the same rate whatever the period.
-            is_rate = fmt == PCT or '/' in name or '%' in name
+            is_rate = (fmt == PCT or '/' in name or '%' in name
+                       or name in (getattr(bundle, 'balance_rows', None) or ()))
             for i, y in enumerate(bundle.years):
                 v = by_year.get(y)
                 c = ws2.cell(r, col, v)
