@@ -94,6 +94,7 @@ __pycache__/
 # The plugin manifest is code, not client data.
 !plugin/fq-prospect/.claude-plugin/plugin.json
 !.claude-plugin/marketplace.json
+!plugin/fq-prospect/skills/*/references/*.html
 
 # The wording examples the deck drafts from. Every name, number, place and
 # fund in it is masked ("Client", "#", "the private fund"); checked 2 Nov.

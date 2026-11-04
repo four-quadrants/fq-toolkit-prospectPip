@@ -76,13 +76,22 @@ not installed, zip `prospectPip/plugin/fq-prospect` into `fq-prospect.plugin`
 in your outputs folder, present the file, and ask them to install it from the
 card. Confirm it shows in their plugins afterwards.
 
-### 6. LaunchBay (only if they will pull documents)
+### 6. Their "My Prospects" page
+
+Say "show my prospects". With no page yet, Claude creates **My Prospects**
+in this person's own account (the page ships in the plugin) and fills it with
+every client folder in this year's Prospects folder. They remove anyone they
+know is gone (Remove on the page, or "drop Lamberti" to Claude). Then they
+share it with the team from its Share menu, Can edit. It is theirs; nobody
+else's account holds it.
+
+### 7. LaunchBay (only if they will pull documents)
 
 Pulling a client's documents needs the LaunchBay connector in their Claude
 account. If they will do pulls, ask them to connect it (Claude's connectors
 settings) and confirm you can see it. The lead advisor usually does not need it.
 
-### 7. One real test
+### 8. One real test
 
 Ask which prospect they are working on, and build that client's initial notes
 into your outputs folder (not into the client folder):
@@ -95,7 +104,7 @@ Present the workbook so they see it open. It is their real client, so it
 doubles as useful work. If it fails, read the error, fix
 what you can (usually a missing library from step 4), and run it again.
 
-### 8. The tour (five minutes)
+### 9. The tour (five minutes)
 
 - The eight steps, who does each, and what to say for each: the Prospect
   Pipeline Showcase, https://claude.ai/artifact/1DwNs2bqHXXuAeFemNXpWm
@@ -107,7 +116,7 @@ what you can (usually a missing library from step 4), and run it again.
 If a link does not open for them, it has not been shared with them yet; tell
 them to ask whoever owns it.
 
-### 9. Wrap up
+### 10. Wrap up
 
 Finish with the checklist: what is set up, anything still waiting (GitHub
 invite, LaunchBay), and the one sentence to start real work: "Pull [client]

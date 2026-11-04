@@ -1,0 +1,30 @@
+<h2 class="sr-only">Prospect board: each active prospect with its stage and buttons for the next step.</h2>
+<style>
+.pb{display:grid;gap:10px;padding:0.5rem 0}
+.row{background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.name{font-weight:500;font-size:15px;flex:1;min-width:160px}
+.chip{font-size:12px;padding:3px 10px;border-radius:var(--radius)}
+.c1{background:var(--bg-accent);color:var(--text-accent)}.c2{background:var(--bg-warning);color:var(--text-warning)}.c3{background:var(--bg-success);color:var(--text-success)}.c4{background:var(--surface-1);color:var(--text-secondary)}
+.st{font-size:13px;color:var(--text-secondary)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btns button{font-size:13px}
+.new{display:flex;gap:6px;align-items:center}
+.new input{flex:1;min-width:0}
+</style>
+<div class="pb">
+  <!-- one .row per prospect. Chips: c2 = needs attention (New in the portal, Quiet), c1 = Stage 1, c3 = Stage 2 or 3, c4 = waiting -->
+  <div class="row">
+    <div class="top"><span class="name">Dr. First Surname</span><span class="chip c2">New in the portal · Nov 3</span><span class="chip c1">Stage 1 · notes done</span></div>
+    <div class="st">One line: what is done and what is waiting, with any date (debrief, consult).</div>
+    <div class="btns">
+      <button onclick="sendPrompt('Surname sent more in the portal. Pull them again, run the intake and show me what changed and what is still open.')">New info came in ↗</button>
+    </div>
+  </div>
+  <div class="new">
+    <input id="newinfo" type="text" placeholder="Something happened? e.g. Burgin booked his consult for Nov 20">
+    <button onclick="var v=document.getElementById('newinfo').value.trim(); if(!v){document.getElementById('err').textContent='Type what happened first';return;} sendPrompt(v)">Tell Claude ↗</button>
+  </div>
+  <div id="err" style="font-size:13px;color:var(--text-danger)"></div>
+</div>
+<script>document.getElementById('newinfo').addEventListener('input',function(){document.getElementById('err').textContent=''});</script>

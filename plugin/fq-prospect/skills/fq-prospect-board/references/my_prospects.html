@@ -1,0 +1,108 @@
+<title>My Prospects</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column; the board first, then the removed ones with a way back */
+:root{
+  --bg:#F5F7F9; --card:#FFFFFF; --ink:#16324F; --text:#22303D; --muted:#5F6E7C; --line:#DCE3EA;
+  --accent:#E8792B; --accent-soft:#FDEBDD; --s1:#EAF3F9; --s2:#E3F3E9; --s2i:#1E7A46; --warn:#FFF2A8; --warni:#5A4600; --danger:#C2410C;
+  --display:"Barlow Semi Condensed","Barlow",Arial,sans-serif; --body:"Barlow",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1B28; --card:#16273A; --ink:#E6EEF6; --text:#D3DDE7; --muted:#93A4B5; --line:#2A3E54;
+  --accent:#F08C45; --accent-soft:#3A2618; --s1:#16324F; --s2:#163323; --s2i:#5CC48A; --warn:#4A3F0A; --warni:#FFE680; --danger:#F59A6B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1B28; --card:#16273A; --ink:#E6EEF6; --text:#D3DDE7; --muted:#93A4B5; --line:#2A3E54;
+  --accent:#F08C45; --accent-soft:#3A2618; --s1:#16324F; --s2:#163323; --s2i:#5CC48A; --warn:#4A3F0A; --warni:#FFE680; --danger:#F59A6B; color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:16px/1.5 var(--body)}
+.wrap{max-width:760px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:22px}
+h1{font:700 34px/1.1 var(--display);color:var(--ink);margin:0}
+h2{font:700 20px var(--display);color:var(--ink);margin:0}
+.eyebrow{font:600 12px var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);margin:6px 0 0;max-width:60ch}
+.list{display:grid;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.who{flex:1;min-width:180px;display:grid;gap:2px}
+.who b{color:var(--ink);font-weight:600}
+.who span{color:var(--muted);font-size:14px}
+.chip{font:600 12px var(--display);letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:var(--s1);color:var(--ink);white-space:nowrap}
+.chip.s2,.chip.s3{background:var(--s2);color:var(--s2i)} .chip.new{background:var(--warn);color:var(--warni)}
+button{font:600 14px var(--body);border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.armed{border-color:var(--danger);color:var(--danger)}
+.empty{padding:20px 16px;color:var(--muted)}
+.msg{font-size:14px;color:var(--muted);min-height:1.2em}
+.msg.err{color:var(--danger)}
+.how{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+.how b{color:var(--ink)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Four Quadrants · prospect pipeline</div>
+    <h1>My prospects</h1>
+    <p class="lede">Every client folder in this year’s Prospects folder, kept current by Claude. Remove anyone you know is gone; they stay off “show my prospects” until you bring them back.</p>
+  </header>
+
+  <section style="display:grid;gap:10px">
+    <h2>On the board</h2>
+    <div class="list" id="list"><div class="empty" id="loading">Loading the list…</div></div>
+  </section>
+
+  <section style="display:grid;gap:10px">
+    <h2>Removed</h2>
+    <div class="list" id="removed"><div class="empty">Nobody removed.</div></div>
+    <div class="msg" id="msg" role="status"></div>
+  </section>
+
+  <p class="how"><b>Where the list comes from:</b> the client folders in Prospects for this year. A new folder appears the next time Claude checks; a folder moved to “Signed” or “Not moving forward” disappears. Stages are filled in by Claude each time it reads the folders.</p>
+</div>
+
+<script>
+(function(){
+  var listEl=document.getElementById('list'), remEl=document.getElementById('removed'), msg=document.getElementById('msg');
+  var db=null, items=[], armed=null;
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function say(t,err){msg.textContent=t||'';msg.className='msg'+(err?' err':'')}
+  function chipClass(stage){stage=stage||'';return /^Stage 2/.test(stage)?'s2':/^Stage 3/.test(stage)?'s3':''}
+  function render(){
+    var on=items.filter(function(p){return !p.hidden}), off=items.filter(function(p){return p.hidden});
+    listEl.innerHTML=on.length?on.map(function(p){
+      return '<div class="row"><div class="who"><b>'+esc(p.name)+'</b><span>'+esc(p.note||'')+'</span></div>'+
+        (p.flag?'<span class="chip new">'+esc(p.flag)+'</span>':'')+(p.stage?'<span class="chip '+chipClass(p.stage)+'">'+esc(p.stage)+'</span>':'')+
+        '<button type="button" data-rm="'+esc(p.id)+'" class="'+(armed===p.id?'armed':'')+'">'+(armed===p.id?'Click again to remove':'Remove')+'</button></div>';
+    }).join(''):'<div class="empty">No prospects yet. Ask Claude to “show my prospects” and it fills this from the client folders.</div>';
+    remEl.innerHTML=off.length?off.map(function(p){
+      return '<div class="row"><div class="who"><b>'+esc(p.name)+'</b><span>Removed'+(p.removed?' '+esc(p.removed):'')+'</span></div><button type="button" data-back="'+esc(p.id)+'">Bring back</button></div>';
+    }).join(''):'<div class="empty">Nobody removed.</div>';
+  }
+  function setHidden(id,val){
+    if(!db){ say('The list is not available here. Ask Claude instead.',true); return; }
+    db.doc('prospects/'+id).update(val?{hidden:true,removed:new Date().toISOString().slice(0,10)}:{hidden:false})
+      .then(function(){ say(val?'Removed.':'Back on the board.'); })
+      .catch(function(){ say('Could not save. You may only have view access; ask the page owner.',true); armed=null; render(); });
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-back]'); if(b){ setHidden(b.getAttribute('data-back'),false); return; }
+    var r=e.target.closest('[data-rm]'); if(!r) return;
+    var id=r.getAttribute('data-rm');
+    if(armed!==id){ armed=id; render(); return; }
+    armed=null; setHidden(id,true);
+  });
+  var timer=setTimeout(function(){ if(!db) listEl.innerHTML='<div class="empty">The list could not load here. Open this page in Claude while signed in.</div>'; },10000);
+  if(window.claude && window.claude.use){
+    window.claude.use('db').then(function(d){
+      if(!d){ clearTimeout(timer); listEl.innerHTML='<div class="empty">The list could not load here. Open this page in Claude while signed in.</div>'; return; }
+      db=d;
+      db.collection('prospects').orderBy('name').onSnapshot(function(snap){
+        clearTimeout(timer);
+        var docs=(snap&&snap.docs)||snap||[];
+        items=docs.map(function(doc){var v=(typeof doc.data==='function'?doc.data():doc.data)||{}; v.id=doc.id; return v;});
+        render();
+      },function(){ clearTimeout(timer); listEl.innerHTML='<div class="empty">The list could not load. Try reopening the page.</div>'; });
+    });
+  }
+})();
+</script>
