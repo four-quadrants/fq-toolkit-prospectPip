@@ -735,7 +735,7 @@ function fqModel(P){
     var lines=['Hi '+first+',','',
       'Happy '+days[now.getDay()]+'; our team has been going through all of the information that you have provided for the consultation with a fine toothed comb over the past weeks/days.  In doing so, they have developed some questions/items that they wanted to have me follow up on.  I\u2019ve cut/paste their questions below:',''];
     send.forEach(function(q,i){ lines.push((i+1)+'. '+(qt[q.id]!=null?qt[q.id]:q.text)); lines.push(''); });
-    lines.push('I think this is all the clarity we have on my end for now; as you can see, we\u2019ve gone over everything pretty detailed so far, but still may have a few minor clarifications in the near future depending on the answers. Please feel free to piecemeal the information as you get it instead of waiting and sending all at once (you can either use the portal or just email them to me directly, whatever is easiest/quickest).  From a priority standpoint, we\u2019re most concerned about #'+(hi.length?hi.join(', '):'1')+' first and foremost.  Lastly, please email this information by '+days[due.getDay()]+', '+(due.getMonth()+1)+'/'+due.getDate()+', at 5:00pm EST if not sooner so my team can continue their research and stay on schedule for the '+(((plan&&plan.decided)||{}).consult_date||'[CONSULT DATE]')+' consultation.  Additionally, if you think there will be a problem with getting this back to us by then, please let me know ASAP.  Thanks in advance and don\u2019t hesitate to reach out if you have further clarifications.');
+    lines.push('I think this is all the clarity we have on my end for now; as you can see, we\u2019ve gone over everything pretty detailed so far, but still may have a few minor clarifications in the near future depending on the answers. Please feel free to piecemeal the information as you get it instead of waiting and sending all at once (you can either use the portal or just email them to me directly, whatever is easiest/quickest).  From a priority standpoint, we\u2019re most concerned about #'+(hi.length?hi.join(', '):'1')+' first and foremost.  Lastly, please email this information by '+days[due.getDay()]+', '+(due.getMonth()+1)+'/'+due.getDate()+', at 5:00pm EST if not sooner so my team can continue their research and stay on schedule for the '+((((plan&&plan.decided)||{}).consult_date)?(((plan&&plan.decided)||{}).consult_date+' '):'')+'consultation.  Additionally, if you think there will be a problem with getting this back to us by then, please let me know ASAP.  Thanks in advance and don\u2019t hesitate to reach out if you have further clarifications.');
     return lines.join('\n');
   }
   // Which questions the email was written from, so an edited email can say
@@ -875,7 +875,7 @@ function fqModel(P){
     set('tc-qs', qs.length? '· '+qs.length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v41';
+  var BUILD='v42';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
