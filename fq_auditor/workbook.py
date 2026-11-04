@@ -39,13 +39,13 @@ import facts as _facts                                       # noqa: E402
 NAVY = '16324F'
 ORANGE = 'F08418'
 
-HEAD = Font(name='Arial', bold=True, color='FFFFFF', size=10)
-SECTION = Font(name='Arial', bold=True, color=NAVY, size=11)
-LABEL = Font(name='Arial', size=10)
-VALUE = Font(name='Arial', size=10, color='0000FF')       # keyed input
-DERIVED = Font(name='Arial', size=10)                     # formula
-NOTE = Font(name='Arial', size=9, color='6B7683')
-SRC = Font(name='Arial', size=8, color='8A9099')
+HEAD = Font(name='Arial', bold=True, color='FFFFFF', size=12)
+SECTION = Font(name='Arial', bold=True, color=NAVY, size=13)
+LABEL = Font(name='Arial', size=12)
+VALUE = Font(name='Arial', size=12)                       # read from a document (black, per the lead advisor)
+DERIVED = Font(name='Arial', size=12)                     # formula
+NOTE = Font(name='Arial', size=11, color='3F4A55')
+SRC = Font(name='Arial', size=10, color='8A9099')
 
 F_HEAD = PatternFill('solid', fgColor=NAVY)
 F_SECTION = PatternFill('solid', fgColor='E8EEF4')
@@ -64,33 +64,34 @@ F_FLAG = PatternFill('solid', fgColor='FBEAE6')
 def _legend(ws, row=3):
     """What the colours mean, at the top of every sheet that uses them."""
     keys = [
-        ('Blue figure', Font(name='Arial', size=9, color='0000FF', bold=True), None,
-         'read from a document; the source column says which'),
-        ('Black figure', Font(name='Arial', size=9, bold=True), None,
-         'calculated from the figures around it'),
-        ('Yellow', Font(name='Arial', size=9, bold=True, color='5A4600'), F_NEEDED,
+        ('Figures', Font(name='Arial', size=11), None,
+         'every figure names its document in the source column'),
+        ('Yellow', Font(name='Arial', size=11, color='5A4600'), F_NEEDED,
          'not supplied yet; also on Open Items'),
-        ('Red note', Font(name='Arial', size=9, bold=True, color='9A3412'), F_FLAG,
+        ('Red note', Font(name='Arial', size=11, color='9A3412'), F_FLAG,
          'FLAG: two sources disagree; a talking point for the call'),
+        ('Italic', Font(name='Arial', size=11, italic=True), None,
+         'annualized from the year to date'),
     ]
     col = 1
     for name, font, fill, what in keys:
         c = ws.cell(row, col, '%s = %s' % (name, what))
-        c.font = Font(name='Arial', size=9, bold=False, color=font.color)
+        c.font = font
         c.alignment = Alignment(wrap_text=True, vertical='top')
         if fill:
             c.fill = fill
         col += 1
-    ws.row_dimensions[row].height = 26
+    ws.row_dimensions[row].height = 32
 
 
 def _sheet_head(ws, title, subtitle, widths, legend=False):
     ws['A1'] = title
-    ws['A1'].font = Font(name='Arial', bold=True, size=14, color=NAVY)
+    ws['A1'].font = Font(name='Arial', bold=True, size=16, color=NAVY)
     ws['A2'] = subtitle
     ws['A2'].font = NOTE
+    # Larger type (12pt) needs wider columns to keep wrapping readable.
     for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+        ws.column_dimensions[get_column_letter(i)].width = round(w * 1.2)
     if legend:
         _legend(ws)
     return 4
@@ -139,7 +140,7 @@ def _fact_row(ws, row, fact, cols=5):
         # Roughly two columns' worth of characters per line, and Excel will not
         # auto-height a wrapped cell that was written by a library.
         ws.row_dimensions[row].height = min(
-            90, 14 * (1 + longest // 60))
+            150, 17 * (1 + longest // 55))
     for c in range(1, cols + 1):
         ws.cell(row, c).border = BOX
         if fact.value is None:
@@ -186,7 +187,7 @@ def _overhead_simple(block_facts, by_year):
     return out
 
 
-def _overhead_table(ws, row, by_year, ytd=None):
+def _overhead_table(ws, row, by_year, ytd=None, extra=()):
     """Overhead year over year with every figure that goes into it.
 
     P&L against P&L and return against return, the way the firm's old sheet
@@ -229,7 +230,7 @@ def _overhead_table(ws, row, by_year, ytd=None):
 
     def line(label, key=None, formula=None, fmt=MONEY, bold=False):
         nonlocal row
-        ws.cell(row, 1, label).font = Font(name='Arial', size=10, bold=bold)
+        ws.cell(row, 1, label).font = Font(name='Arial', size=12, bold=bold)
         ws.cell(row, 1).border = BOX
         for i, y in enumerate(years):
             col = ycol(i)
@@ -239,7 +240,7 @@ def _overhead_table(ws, row, by_year, ytd=None):
                 v = by_year[y].get(key)
             c = ws.cell(row, col, v)
             c.number_format = fmt
-            c.font = Font(name='Arial', size=10, bold=bold,
+            c.font = Font(name='Arial', size=12, bold=bold,
                           color=None if formula else '0000FF')
             if v is None:
                 c.fill = F_NEEDED
@@ -251,7 +252,7 @@ def _overhead_table(ws, row, by_year, ytd=None):
                 elif v is not None:
                     a.value = '=%s%d/%d*12' % (here, row, ytd_m)
                 a.number_format = fmt
-                a.font = Font(name='Arial', size=10, italic=True, bold=bold)
+                a.font = Font(name='Arial', size=12, italic=True, bold=bold)
                 here = get_column_letter(col + 1)
             if i and fmt == '0.0%':
                 prev = get_column_letter(ycol(i - 1))
@@ -261,7 +262,7 @@ def _overhead_table(ws, row, by_year, ytd=None):
         row += 1
         return row - 1
 
-    ws.cell(row, 1, 'P&L basis').font = Font(name='Arial', bold=True, size=10)
+    ws.cell(row, 1, 'P&L basis').font = Font(name='Arial', bold=True, size=12)
     row += 1
     r_inc = line('income', 'pnl_income')
     r_oth = line('other income', 'pnl_other')
@@ -273,8 +274,41 @@ def _overhead_table(ws, row, by_year, ytd=None):
                 % (c, r_exp, c, r_dr, c, r_da))
     line('overhead %', formula=lambda c: '=IFERROR(%s%d/%s%d,"")'
          % (c, r_oh, c, r_base), fmt='0.0%', bold=True)
+    # Beside the P&L, the way the lead advisor reads it: what went to
+    # professional fees and consulting, what the owner took out, and the
+    # cash left at each period end, with how fast that cash grew.
+    if extra:
+        row += 1
+        ws.cell(row, 1, 'Fees, distributions and cash').font = Font(name='Arial', bold=True, size=12)
+        row += 1
+        for label, vals, balance, months, note in extra:
+            ws.cell(row, 1, label).font = Font(name='Arial', size=12)
+            ws.cell(row, 1).border = BOX
+            for i, y in enumerate(years):
+                col = ycol(i)
+                v = vals.get(y)
+                c = ws.cell(row, col, v)
+                c.number_format, c.font = MONEY, Font(name='Arial', size=12)
+                if v is None:
+                    c.fill = F_NEEDED
+                if i == ytd_i and v is not None:
+                    a = ws.cell(row, col + 1, '=%s%d' % (get_column_letter(col), row) if balance
+                                else '=%s%d/%d*12' % (get_column_letter(col), row, months or ytd_m))
+                    a.number_format = MONEY
+                    a.font = Font(name='Arial', size=12, italic=True)
+            if note:
+                n = ws.cell(row, ycol(len(years) - 1) + (3 if ytd_i is not None else 2), note)
+                n.font, n.alignment = NOTE, WRAP
+            row += 1
+            if balance:
+                ws.cell(row, 1, '%s growth %%' % label.split(',')[0]).font = Font(name='Arial', size=12, italic=True)
+                for i in range(1, len(years)):
+                    col, prev = ycol(i), get_column_letter(ycol(i - 1))
+                    c = ws.cell(row, col, '=IFERROR(%s%d/%s%d-1,"")' % (get_column_letter(col), row - 1, prev, row - 1))
+                    c.number_format, c.font = '+0.0%;-0.0%;-', DERIVED
+                row += 1
     row += 1
-    ws.cell(row, 1, 'Tax basis').font = Font(name='Arial', bold=True, size=10)
+    ws.cell(row, 1, 'Tax basis').font = Font(name='Arial', bold=True, size=12)
     row += 1
     t_base = line('gross income on the return', 'tax_base')
     t_ded = line('total deductions', 'tax_deductions')
@@ -331,12 +365,12 @@ def _cash_sheet(wb, bundle):
             c.number_format, c.font = MONEY, VALUE
             ws.cell(r, 8, m.get('note') or '').font = NOTE
             r += 1
-        ws.cell(r, 1, 'average a month').font = Font(name='Arial', size=10, bold=True)
+        ws.cell(r, 1, 'average a month').font = Font(name='Arial', size=12, bold=True)
         for col in (6, 7):
             L = get_column_letter(col)
             c = ws.cell(r, col, '=IFERROR(AVERAGE(%s%d:%s%d),"")' % (L, first, L, r - 1))
             c.number_format = MONEY
-            c.font = Font(name='Arial', size=10, bold=True)
+            c.font = Font(name='Arial', size=12, bold=True)
         if a.get('note'):
             ws.cell(r, 8, a['note']).font = NOTE
         r += 2
@@ -345,9 +379,9 @@ def _cash_sheet(wb, bundle):
 def _summary_sheet(wb, bundle):
     """The lead advisor's summary page, pre-filled for him to edit.
 
-    Areas to improve come from _Audit/summary.json (Claude drafts them from
-    the flags); the savings projection is live formulas on the inputs at the
-    top, so he can change the savings or the rate and watch it move.
+    In his order: the savings projection, the 3-year average results, the
+    areas to improve, then info due, consult and fees. Inputs come from
+    _Audit/summary.json; every result is a live formula on them.
     """
     import json
     try:
@@ -356,82 +390,169 @@ def _summary_sheet(wb, bundle):
         return
     ws = wb.create_sheet('Summary')
     r = _sheet_head(ws, 'Summary  —  %s' % bundle.client,
-                    'A draft for the lead advisor: edit the areas, the '
-                    'averages and the savings inputs freely.',
-                    [46, 16, 16, 16, 16], legend=True)
-    ws.cell(r, 1, 'AREAS TO IMPROVE').font = SECTION
-    for c in range(1, 6):
-        ws.cell(r, c).fill = F_SECTION
-    r += 1
-    for a in S.get('areas') or ():
-        ws.cell(r, 1, a).font = LABEL
-        ws.cell(r, 1).alignment = WRAP
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+                    'A draft for the lead advisor: every input is editable and '
+                    'the results follow.', [52, 20, 20, 20, 20, 40], legend=True)
+    B = Font(name='Arial', size=12, bold=True)
+    T = Font(name='Arial', size=12)
+
+    def section(text):
+        nonlocal r
+        ws.cell(r, 1, text).font = SECTION
+        for c in range(1, 7):
+            ws.cell(r, c).fill = F_SECTION
         r += 1
-    r += 1
-    ws.cell(r, 1, 'AVERAGES').font = SECTION
-    for c in range(1, 6):
-        ws.cell(r, c).fill = F_SECTION
-    r += 1
-    for i, h in enumerate(('', 'stated', 'average', 'use'), 1):
-        ws.cell(r, i, h).font = HEAD
-        ws.cell(r, i).fill = F_HEAD
-    r += 1
-    for row in S.get('averages') or ():
-        label, stated, avg, use, fmt = (list(row) + [None] * 5)[:5]
-        ws.cell(r, 1, label).font = LABEL
-        for j, v in enumerate((stated, avg, use), 2):
-            c = ws.cell(r, j, v)
-            c.number_format = PCT if fmt == 'pct' else MONEY
-            c.font = VALUE if v is not None else LABEL
-        r += 1
+
+    # ---------------------------------------------------- savings projection
     P = S.get('projection') or {}
     paths = P.get('paths') or []
-    if not paths:
-        return
+    if paths:
+        section('SAVINGS PROJECTION')
+        if any(p.get('planning') for p in paths):
+            n = ws.cell(r, 1, P.get('planning_note') or
+                        'The client reports saving $0 and we do not know what he '
+                        'has saved. Columns marked "planning figure only" are an '
+                        'illustration for the consult, for the lead advisor to '
+                        'fill in; they are not what the client saves.')
+            n.font, n.alignment = NOTE, WRAP
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            ws.row_dimensions[r].height = 34
+            r += 1
+        elif P.get('note'):
+            n = ws.cell(r, 1, P['note'])
+            n.font, n.alignment = NOTE, WRAP
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            ws.row_dimensions[r].height = 34
+            r += 1
+        for j, p in enumerate(paths, 2):
+            h = ws.cell(r, j, (p.get('label') or '') + (
+                '\nPlanning figure only (not what the client saves)' if p.get('planning') else ''))
+            h.font, h.alignment = HEAD, WRAP
+            h.fill = F_HEAD
+        ws.cell(r, 1).fill = F_HEAD
+        ws.row_dimensions[r].height = 46 if any(p.get('planning') for p in paths) else 20
+        r += 1
+        ws.cell(r, 1, 'saved a year').font = T
+        ws.cell(r + 1, 1, 'return').font = T
+        ws.cell(r + 2, 1, 'starting balance').font = T
+        for j, p in enumerate(paths, 2):
+            c = ws.cell(r, j, p.get('save'))
+            c.number_format, c.font = MONEY, T
+            if p.get('planning') and p.get('save') is None:
+                c.fill = F_NEEDED
+            c = ws.cell(r + 1, j, p.get('rate'))
+            c.number_format, c.font = '0.0%', T
+            c = ws.cell(r + 2, j, p.get('start', P.get('start')))
+            c.number_format, c.font = MONEY, T
+        sv, rt, st = r, r + 1, r + 2
+        r += 3
+        ws.cell(r, 1, 'age').font = HEAD
+        for c in range(1, 2 + len(paths)):
+            ws.cell(r, c).fill = F_HEAD
+        r += 1
+        age, end = P.get('age'), P.get('retire_age')
+        first = r
+        for a in range(age, (end or age) + 1):
+            ws.cell(r, 1, a).font = T
+            for j in range(2, 2 + len(paths)):
+                L = get_column_letter(j)
+                c = ws.cell(r, j, '=%s$%d' % (L, st) if r == first else
+                            '=%s%d*(1+%s$%d)+%s$%d' % (L, r - 1, L, rt, L, sv))
+                c.number_format, c.font = MONEY, DERIVED
+            r += 1
+        last = r - 1
+        # Each pair (today's path, then with 4Q): how much more at retirement.
+        for k in range(0, len(paths) - 1, 2):
+            a_, b_ = get_column_letter(2 + k), get_column_letter(3 + k)
+            ws.cell(r, 1, 'at retirement, %s vs %s' % (paths[k + 1].get('label'), paths[k].get('label'))).font = B
+            c = ws.cell(r, 3 + k, '=IFERROR(%s%d/%s%d-1,"")' % (b_, last, a_, last))
+            c.number_format, c.font = '+0.0%;-0.0%;-', B
+            r += 1
+        r += 1
+
+    # ------------------------------------------------ 3-year average results
+    R = S.get('results') or {}
+    oh = getattr(bundle, 'overhead_by_year', None) or {}
+    ly = max(oh) if oh else None
+    L_ = oh.get(ly) or {}
+    base = L_.get('pnl_base')
+    m = L_.get('pnl_months') or 12
+    section('3-YEAR AVERAGE RESULTS (what 4Q clients see on average)')
+    for i, h in enumerate(('', 'today', 'with our results', 'how'), 1):
+        ws.cell(r, i, h).font = HEAD
+        ws.cell(r, i).fill = F_HEAD
+    ws.cell(r, 5).fill = F_HEAD
+    ws.cell(r, 6).fill = F_HEAD
     r += 1
-    ws.cell(r, 1, 'SAVINGS PROJECTION').font = SECTION
-    for c in range(1, 6):
-        ws.cell(r, c).fill = F_SECTION
+    rin = r
+    ws.cell(r, 1, 'overhead reduction (3-yr average)').font = T
+    c = ws.cell(r, 2, R.get('oh_cut', 0.109)); c.number_format = '0.0%'
+    ws.cell(r + 1, 1, 'savings increase (x)').font = T
+    c = ws.cell(r + 1, 2, R.get('savings_mult', 6.67)); c.number_format = '0.00'
+    ws.cell(r + 2, 1, 'practice income, %s annualized' % ly if m < 12 else 'practice income, %s' % ly).font = T
+    c = ws.cell(r + 2, 2, (base / m * 12) if base else None); c.number_format = MONEY
+    if base is None:
+        c.fill = F_NEEDED
+    r += 4
+    # Overhead today is the most recent completed tax return's (the lead
+    # advisor's rule), not the year-to-date P&L.
+    ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')), default=None)
+    oh_now = R.get('overhead_now', oh[ty]['tax_pct'] / 100.0 if ty else None)
+    rows = [
+        ('Overhead', oh_now, '=IFERROR(B{r}*(1-B%d),"")' % rin, '0.0%',
+         'today: the %s tax return; with 4Q: 10.9%% lower' % ty if ty
+         else 'today: no return on file yet; type it in'),
+        ('Income', R.get('income_now'), '=IFERROR(B%d*(1-C{oh}),"")' % (rin + 2), MONEY,
+         'practice income x (1 - overhead with 4Q)'),
+        ('Savings', R.get('savings_now'), '=IFERROR(B{r}*B%d,"")' % (rin + 1), MONEY,
+         'today x the average increase'),
+    ]
+    oh_row = r
+    for label, now, f, fmt, how in rows:
+        ws.cell(r, 1, label).font = B
+        c = ws.cell(r, 2, now); c.number_format, c.font = fmt, T
+        if now is None:
+            c.fill = F_NEEDED
+        c = ws.cell(r, 3, f.replace('{r}', str(r)).replace('{oh}', str(oh_row)))
+        c.number_format, c.font = fmt, B
+        ws.cell(r, 4, how).font = NOTE
+        ws.cell(r, 4).alignment = WRAP
+        r += 1
+    if R.get('use'):
+        ws.cell(r, 1, 'lead advisor: %s' % R['use']).font = NOTE
+        r += 1
     r += 1
-    # A client saving nothing gets no invented figure: the column is a
-    # planning figure the lead advisor types in, and it says so.
-    if any(p.get('planning') for p in paths):
-        n = ws.cell(r, 1, P.get('planning_note') or
-                    'The client reports saving $0. Columns marked "planning '
-                    'figure only" are an illustration for the consult, for the '
-                    'lead advisor to fill in; they are not what the client saves.')
-        n.font, n.alignment = NOTE, WRAP
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
-        ws.row_dimensions[r].height = 30
-        r += 2
-    ws.cell(r, 1, 'saved a year').font = LABEL
-    ws.cell(r + 1, 1, 'return').font = LABEL
-    for j, p in enumerate(paths, 2):
-        h = ws.cell(r - 1, j, (p.get('label') or '') + (
-            '\nPlanning figure only (not what the client saves)' if p.get('planning') else ''))
-        h.font, h.alignment = HEAD, WRAP
-        if p.get('planning') and p.get('save') is None:
-            ws.cell(r, j).fill = F_NEEDED
-        c = ws.cell(r, j, p.get('save'))
-        c.number_format, c.font = MONEY, VALUE
-        c = ws.cell(r + 1, j, p.get('rate'))
-        c.number_format, c.font = '0.0%', VALUE
-    sv, rt = r, r + 1
-    r += 2
-    ws.cell(r, 1, 'age').font = HEAD
-    ws.cell(r, 1).fill = F_HEAD
+
+    # --------------------------------------------------------- areas to improve
+    section('AREAS TO IMPROVE')
+    for a in S.get('areas') or ():
+        c = ws.cell(r, 1, a)
+        c.font, c.alignment = T, WRAP
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        ws.row_dimensions[r].height = 17 * (1 + len(a) // 120)
+        r += 1
+    checks = S.get('checks') or ()
+    if checks:
+        ws.cell(r, 1, 'To check before the consult').font = B
+        r += 1
+        for a in checks:
+            c = ws.cell(r, 1, 'CHECK: ' + a)
+            c.font, c.alignment, c.fill = NOTE, WRAP, F_NEEDED
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            ws.row_dimensions[r].height = 17 * (1 + len(a) // 120)
+            r += 1
     r += 1
-    age, end = P.get('age'), P.get('retire_age')
-    start_row = r
-    for a in range(age, (end or age) + 1):
-        ws.cell(r, 1, a).font = LABEL
-        for j in range(2, 2 + len(paths)):
-            L = get_column_letter(j)
-            c = ws.cell(r, j, P.get('start') if r == start_row else
-                        '=%s%d*(1+%s$%d)+%s$%d' % (L, r - 1, L, rt, L, sv))
-            c.number_format = MONEY
-            c.font = VALUE if r == start_row else DERIVED
+
+    # ------------------------------------------------ info due, consult, fees
+    section('INFO DUE, CONSULT AND FEES')
+    I = S.get('info') or {}
+    for label, key in (('Info due', 'info_due'), ('Consult', 'consult'), ('Our fees', 'fees')):
+        ws.cell(r, 1, label).font = B
+        c = ws.cell(r, 2, I.get(key))
+        c.font = T
+        ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=6)
+        if not I.get(key):
+            c.value = 'Advisor to fill in'
+            c.fill = F_NEEDED
         r += 1
 
 
@@ -477,7 +598,7 @@ def write(bundle, out):
                             if ytd else ''),
                         [34] + [15] * (len(bundle.years) * 2 + extra), legend=True)
         notes_col = 2 + len(bundle.years) * 2 + extra
-        ws2.column_dimensions[get_column_letter(notes_col)].width = 70
+        ws2.column_dimensions[get_column_letter(notes_col)].width = 84
         ws2.cell(r, notes_col, 'note').font = HEAD
         ws2.cell(r, notes_col).fill = F_HEAD
         ws2.cell(r, 1, 'metric').font = HEAD
@@ -508,6 +629,8 @@ def write(bundle, out):
                        'gross receipts (tax return)',
                        'officer compensation (tax return)'} \
             if getattr(bundle, 'overhead_by_year', None) else set()
+        if getattr(bundle, 'overhead_by_year', None):
+            in_oh_table |= {e[0] for e in (getattr(bundle, 'overhead_extra', None) or ())}
         for name, by_year, fmt in bundle.series:
             if name in in_oh_table:
                 continue
@@ -536,7 +659,7 @@ def write(bundle, out):
                     else:
                         ac.value = '=%s%d/%d*12' % (letter, r, (getattr(bundle, 'series_months', {}) or {}).get(name) or ytd['months'])
                     ac.number_format = fmt
-                    ac.font = Font(name='Arial', size=10, italic=True)
+                    ac.font = Font(name='Arial', size=12, italic=True)
                     letter = get_column_letter(col)
                     col += 1
                 if i:
@@ -557,13 +680,15 @@ def write(bundle, out):
                 cell = ws2.cell(r, notes_col, text)
                 cell.font = NOTE
                 cell.alignment = WRAP
+                ws2.row_dimensions[r].height = min(150, 17 * (1 + len(text) // 80))
                 if got.get('flags'):
                     cell.fill = F_FLAG
             ws2.cell(r, 1).border = BOX
             r += 1
 
         if getattr(bundle, 'overhead_by_year', None):
-            _overhead_table(ws2, r + 1, bundle.overhead_by_year, ytd)
+            _overhead_table(ws2, r + 1, bundle.overhead_by_year, ytd,
+                            getattr(bundle, 'overhead_extra', None) or ())
 
     # ---------------------------------------------------------- source map
     _cash_sheet(wb, bundle)

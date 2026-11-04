@@ -67,7 +67,25 @@ What the lead advisor expects in every initial notes (format in
   in, out, end, interest, transfers to the client's own accounts). Every
   statement must balance. This is the light Stage 1 version, not the cash
   flow analysis.
-- **`_Audit/summary.json`** for the Summary tab: areas to improve (drafted
+- **Notes in depth wherever the call or the form said something:** what they
+  said about their CPA, advisors, spouse, accounts, taxes, staff, and what
+  they are torn between, each on its row.
+- **`profile.entity`**: anything about entities beyond the returns (a building
+  LLC, a K-1 from another practice). The Entity structure row at the top
+  adds it to the entity type the returns show. `profile.premises` ("condo")
+  when they own a condo rather than a building.
+- **Debts**: the code shows rate, payment, original amount and year, the
+  full term, fixed or variable, and lists what is MISSING. Fill what the
+  documents give; leave the rest to show as missing.
+- **`_Audit/summary.json`** for the Summary tab (savings projection, 3-year
+  average results, areas to improve with CHECK placeholders, info due /
+  consult / fees). Savings: if they save something, project it (8.5%) against
+  20% more with 4Q (9%), plus a conservative pair; if they save nothing but
+  we know what they have saved, project that balance at 8.5% vs 9% with no
+  new saving; if we know neither, planning-figure columns. Results: overhead
+  falls 10.9% (relative) from the most recent completed tax return's overhead, savings x6.67, income = latest practice income
+  base annualized x (1 - overhead with 4Q). Old notes on this key follow.
+- Older guidance for summary.json: areas to improve (drafted
   from the flags, for the lead advisor to edit), averages (stated, average,
   use) and a savings projection (start, age, retirement age, paths: stated
   savings at 8.5%, +20% at 9%, and a conservative pair). If the client saves

@@ -200,6 +200,7 @@ def gather(folder, client=None):
     profile = {}
     extra_notes = {}
     balance_rows, extra_months = set(), {}
+    overhead_extra = []
     count_months = {}
     try:
         import doc_readings as _dr
@@ -237,6 +238,11 @@ def gather(folder, client=None):
         v = profile.get(key) or {}
         return v.get('value'), v.get('source')
 
+    # What they own: a condo, when the debt or the analyst says so.
+    premises = (pv_('premises')[0] if profile.get('premises') else None) or next(
+        ('condo' for r in (debts.get('practice') or []) + (debts.get('personal') or [])
+         if 'condo' in ' '.join(str(r.get(k) or '') for k in ('description', 'what')).lower()
+         and 'home' not in str(r.get('description') or '').lower()), None)
     years = sorted(set(pnl) | set(prod) | set(counts))[-3:]
     full = [y for y in years if (pnl.get(y, {}).get('months') or 0) >= 12]
     latest = full[-1] if full else (years[-1] if years else None)
@@ -248,7 +254,13 @@ def gather(folder, client=None):
 
     # ------------------------------------------------------------- practice
     practice = [
-        Fact('Office location', _compose.office(form, folder), TEXT,
+        Fact('Entity structure', _compose.entity(tax, pv_('entity')[0]), TEXT,
+             'tax returns' + (' and %s' % pv_('entity')[1] if pv_('entity')[1]
+                              and 'tax return' not in pv_('entity')[1] else '')
+             if not (pv_('entity')[1] and 'tax return' in pv_('entity')[1]) else pv_('entity')[1],
+             'by year', needed='Ask on the call',
+             why='Sole proprietor, S corp or more entities changes the tax plan'),
+        Fact('Office location', _compose.office(form, folder, premises), TEXT,
              'document letterheads and the IC form', 'composed',
              needed='Ask on the call',
              why='Where it is, and on what terms, drives the overhead'),
@@ -376,13 +388,28 @@ def gather(folder, client=None):
                 bits.append('%s/mo' % _fmt(r['payment']))
             if r.get('description'):
                 bits.append(r['description'])
-            # Term detail the lead advisor adds by hand otherwise.
+            # Term detail the lead advisor adds by hand otherwise: original
+            # amount and year, the full term, fixed or variable, and what is
+            # still missing.
             if r.get('original'):
-                bits.append('orig %s' % _fmt(r['original']))
-            if r.get('maturity'):
+                bits.append('orig %s%s' % (_fmt(r['original']),
+                                           ' (%s)' % r['start'] if r.get('start') else ''))
+            if r.get('start') and r.get('maturity'):
+                bits.append('%d-yr term to %s' % (r['maturity'] - r['start'], r['maturity']))
+            elif r.get('maturity'):
                 bits.append('matures %s' % r['maturity'])
             if r.get('fixed'):
                 bits.append(str(r['fixed']).lower())
+            said = (r.get('description') or '').lower()
+            missing = [k for k, have in (
+                ('rate', r.get('rate') or '%' in said),
+                ('payment', r.get('payment')),
+                ('original amount', r.get('original') or 'origin' in said),
+                ('term', r.get('maturity') or ' yr' in said or 'year' in said or 'month' in said),
+                ('fixed/variable', r.get('fixed') or 'fixed' in said or 'variable' in said
+                 or 'arm' in said.split() or 'ibr' in said)) if not have]
+            if missing:
+                bits.append('MISSING: %s' % ', '.join(missing))
             if r.get('pending'):
                 out.append(Fact(name, 'Pending', TEXT, r.get('source'),
                                 'not owed yet, kept out of the totals',
@@ -623,8 +650,11 @@ def gather(folder, client=None):
     # (doc_readings.py "extra"): year-end bank balances, distributions,
     # professional fees.
     for r in (got or {}).get('extra') or ():
-        fmt = {'money': MONEY, 'pct': PCT, 'num': NUM}.get(r.get('fmt'), MONEY)
-        series.append((r['label'], {y: r['by_year'].get(y) for y in years}, fmt))
+
+        # Bank balances, distributions and fees sit with the overhead (the
+        # lead advisor reads them beside the P&L), not in the metric list.
+        overhead_extra.append((r['label'], dict(r['by_year']), bool(r.get('balance')),
+                               r.get('ytd_months'), r.get('note')))
         if r.get('balance'):
             balance_rows.add(r['label'])
         if r.get('ytd_months'):
@@ -639,6 +669,7 @@ def gather(folder, client=None):
     bundle.series_months = {_cm[k]: v for k, v in count_months.items() if k in _cm}
     bundle.series_months.update(extra_months)
     bundle.balance_rows = balance_rows
+    bundle.overhead_extra = overhead_extra
     bundle.cash_light = (got or {}).get('cash_light') or []
     bundle.series_notes.update(extra_notes)
     bundle.months_by_year = {y: (pnl.get(y, {}) or {}).get('months') or 0

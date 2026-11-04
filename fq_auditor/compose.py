@@ -302,7 +302,7 @@ def addresses(folder, head=1500):
     return [(k, v[0]) for k, v in ranked]
 
 
-def office(form, folder):
+def office(form, folder, premises=None):
     """Where the practice is, and on what terms."""
     # Town and state only. The street number is on every document in the
     # folder already, and an initial note is read for where the practice is,
@@ -316,7 +316,9 @@ def office(form, folder):
     bits = []
     if where:
         bits.append(where)
-    bits.append('owns the building' if owns else
+    # "Condo" when the debt or the analyst says so: the lead advisor wants the
+    # word that matches what they own.
+    bits.append(('owns the %s' % (premises or 'building')) if owns else
                 (form.get('building') or 'tenure not stated'))
     sqft = form.get('building_sqft')
     if sqft:
@@ -574,3 +576,29 @@ def entity_name(folder):
     if not seen:
         return None
     return sorted(seen.items(), key=lambda kv: (-kv[1], len(kv[0])))[0][0]
+
+
+def entity(tax, extra=None):
+    """The practice's entity type by year, from the returns on file.
+
+    "Sole proprietor (Schedule C) in 2024 and 2025" or "S corporation
+    (1120-S) from 2025; Schedule C in 2024", so everyone starts on the same
+    page. `extra` is anything else the analyst knows (a building LLC).
+    """
+    kinds = {'schedule c': 'Sole proprietor (Schedule C)', '1120-s': 'S corporation (1120-S)',
+             '1120s': 'S corporation (1120-S)', '1065': 'Partnership (1065)',
+             '1120': 'C corporation (1120)'}
+    by = {}
+    for y in sorted(tax):
+        f = str((tax[y] or {}).get('form') or (tax[y] or {}).get('source') or '').lower()
+        k = next((v for key, v in kinds.items() if key in f), None)
+        if k:
+            by.setdefault(k, []).append(y)
+    if not by and not extra:
+        return None
+    def years(ys):
+        return ys[0] if len(ys) == 1 else '%s and %s' % (', '.join(ys[:-1]), ys[-1])
+    parts = ['%s in %s' % (k, years(ys)) for k, ys in by.items()]
+    if extra:
+        parts.append(extra)
+    return '; '.join(parts) + '.'

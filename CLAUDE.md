@@ -82,6 +82,10 @@ Not built yet; raise these when the work touches them.
   where the lead advisor's edits come straight back without a "BB" copy.
 - **Deck slides still built by hand:** S-corp comparison, current path,
   household allocation.
+- **Tax analyzer in the initial notes:** a few plain lines from the returns,
+  like the lead advisor's "tax analysis" tab on Burgin: entity type and what
+  it costs, refunds or balances due by year (the "surprise"), late or
+  amended filings, whether quarterly estimates moved with income.
 - **Planning figure** for clients who save nothing: ask the lead advisor
   whether he uses one, and make it the rule.
 

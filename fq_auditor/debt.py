@@ -140,6 +140,7 @@ def read_schedule(path):
             'creditor': str(r[0]).strip(),
             'description': str(r[1]).strip() if len(r) > 1 and r[1] else None,
             'original': get('original amount'),
+            'start': _year_of(next((r[i] for i in col('original date')), None)),
             'balance': balance,
             'rate': get('interest rate'),
             'payment': get('minimum monthly'),
