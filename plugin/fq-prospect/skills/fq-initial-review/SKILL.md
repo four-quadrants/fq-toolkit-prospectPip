@@ -42,6 +42,10 @@ The notes are only as good as two files Claude writes into `_Audit`:
 - `notes.json`: the analyst's lines (composition, movement, contradictions
   between the IC form, the call notes and the documents). Format and rules in
   `fq_auditor/notes.py`.
+  Notes on the "by year" rows count too: key them by the row's label
+  ("days worked, all doctors", "new patients", "gross production"...). Any
+  portal comment or call note about a yearly figure goes on its row, with
+  what was said, when, and the years it covers.
 - `doc_readings.json`: figures from documents the code's readers do not know
   (P&Ls, returns, production, counts, debts). Format in
   `fq_auditor/doc_readings.py`; check it with

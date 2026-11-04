@@ -169,6 +169,12 @@ prospect for a financial advisory firm.
 Below is everything we have read from this client's documents. Write the notes
 an analyst would write beside these figures.
 
+When the client said something in the portal or on the call about a figure
+on the year-by-year history (days worked, patient counts, production,
+hygiene, collections), write a note on that history row using its exact
+label, saying what they said, when, and which years it covers. Also note any
+row whose period differs from the others (a count that runs a month later).
+
 CLIENT: %s
 
 %s
