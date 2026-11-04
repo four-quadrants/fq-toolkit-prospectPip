@@ -58,13 +58,41 @@ PCT = '0.0%'
 NUM = '#,##0'
 
 
-def _sheet_head(ws, title, subtitle, widths):
+F_FLAG = PatternFill('solid', fgColor='FBEAE6')
+
+
+def _legend(ws, row=3):
+    """What the colours mean, at the top of every sheet that uses them."""
+    keys = [
+        ('Blue figure', Font(name='Arial', size=9, color='0000FF', bold=True), None,
+         'read from a document; the source column says which'),
+        ('Black figure', Font(name='Arial', size=9, bold=True), None,
+         'calculated from the figures around it'),
+        ('Yellow', Font(name='Arial', size=9, bold=True, color='5A4600'), F_NEEDED,
+         'not supplied yet; also on Open Items'),
+        ('Red note', Font(name='Arial', size=9, bold=True, color='9A3412'), F_FLAG,
+         'FLAG: two sources disagree; a talking point for the call'),
+    ]
+    col = 1
+    for name, font, fill, what in keys:
+        c = ws.cell(row, col, '%s = %s' % (name, what))
+        c.font = Font(name='Arial', size=9, bold=False, color=font.color)
+        c.alignment = Alignment(wrap_text=True, vertical='top')
+        if fill:
+            c.fill = fill
+        col += 1
+    ws.row_dimensions[row].height = 26
+
+
+def _sheet_head(ws, title, subtitle, widths, legend=False):
     ws['A1'] = title
     ws['A1'].font = Font(name='Arial', bold=True, size=14, color=NAVY)
     ws['A2'] = subtitle
     ws['A2'].font = NOTE
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
+    if legend:
+        _legend(ws)
     return 4
 
 
@@ -120,7 +148,7 @@ def _fact_row(ws, row, fact, cols=5):
         ws.cell(row, 3, fact.needed).font = NOTE
         ws.cell(row, 3).alignment = WRAP
     if fact.flags:
-        ws.cell(row, 3).fill = PatternFill('solid', fgColor='FBEAE6')
+        ws.cell(row, 3).fill = F_FLAG
     return row + 1
 
 
@@ -278,7 +306,7 @@ def _cash_sheet(wb, bundle):
                     'Per bank account, per statement: balance in, money in, '
                     'money out, balance out, and transfers to the client\'s '
                     'own accounts. Every statement balances to the dollar.',
-                    [16, 14, 14, 14, 14, 14, 16, 40])
+                    [16, 14, 14, 14, 14, 14, 16, 40], legend=True)
     for a in accts:
         ws.cell(r, 1, a.get('account')).font = SECTION
         for c in range(1, 9):
@@ -330,7 +358,7 @@ def _summary_sheet(wb, bundle):
     r = _sheet_head(ws, 'Summary  —  %s' % bundle.client,
                     'A draft for the lead advisor: edit the areas, the '
                     'averages and the savings inputs freely.',
-                    [46, 16, 16, 16, 16])
+                    [46, 16, 16, 16, 16], legend=True)
     ws.cell(r, 1, 'AREAS TO IMPROVE').font = SECTION
     for c in range(1, 6):
         ws.cell(r, c).fill = F_SECTION
@@ -366,10 +394,25 @@ def _summary_sheet(wb, bundle):
     for c in range(1, 6):
         ws.cell(r, c).fill = F_SECTION
     r += 1
+    # A client saving nothing gets no invented figure: the column is a
+    # planning figure the lead advisor types in, and it says so.
+    if any(p.get('planning') for p in paths):
+        n = ws.cell(r, 1, P.get('planning_note') or
+                    'The client reports saving $0. Columns marked "planning '
+                    'figure only" are an illustration for the consult, for the '
+                    'lead advisor to fill in; they are not what the client saves.')
+        n.font, n.alignment = NOTE, WRAP
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+        ws.row_dimensions[r].height = 30
+        r += 2
     ws.cell(r, 1, 'saved a year').font = LABEL
     ws.cell(r + 1, 1, 'return').font = LABEL
     for j, p in enumerate(paths, 2):
-        ws.cell(r - 1, j, p.get('label')).font = HEAD
+        h = ws.cell(r - 1, j, (p.get('label') or '') + (
+            '\nPlanning figure only (not what the client saves)' if p.get('planning') else ''))
+        h.font, h.alignment = HEAD, WRAP
+        if p.get('planning') and p.get('save') is None:
+            ws.cell(r, j).fill = F_NEEDED
         c = ws.cell(r, j, p.get('save'))
         c.number_format, c.font = MONEY, VALUE
         c = ws.cell(r + 1, j, p.get('rate'))
@@ -400,9 +443,8 @@ def write(bundle, out):
     ws.title = 'initial notes'
     row = _sheet_head(
         ws, 'Initial notes  —  %s' % bundle.client,
-        'Blue is a figure read from a document. Yellow means nobody has '
-        'supplied it yet. Every row names where it came from.',
-        [30, 46, 60, 13, 30])
+        'Every row names where it came from. What the colours mean:',
+        [30, 46, 60, 13, 30], legend=True)
 
     for block in bundle.blocks:
         row = _section(ws, row, block.title, 5)
@@ -433,7 +475,7 @@ def write(bundle, out):
                             'Ratios are carried as they are.'
                             % (ytd_year, ytd['months'], ytd['months'])
                             if ytd else ''),
-                        [34] + [15] * (len(bundle.years) * 2 + extra))
+                        [34] + [15] * (len(bundle.years) * 2 + extra), legend=True)
         notes_col = 2 + len(bundle.years) * 2 + extra
         ws2.column_dimensions[get_column_letter(notes_col)].width = 70
         ws2.cell(r, notes_col, 'note').font = HEAD
@@ -516,7 +558,7 @@ def write(bundle, out):
                 cell.font = NOTE
                 cell.alignment = WRAP
                 if got.get('flags'):
-                    cell.fill = PatternFill('solid', fgColor='FBEAE6')
+                    cell.fill = F_FLAG
             ws2.cell(r, 1).border = BOX
             r += 1
 

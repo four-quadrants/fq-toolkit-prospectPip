@@ -70,7 +70,10 @@ What the lead advisor expects in every initial notes (format in
 - **`_Audit/summary.json`** for the Summary tab: areas to improve (drafted
   from the flags, for the lead advisor to edit), averages (stated, average,
   use) and a savings projection (start, age, retirement age, paths: stated
-  savings at 8.5%, +20% at 9%, and a conservative pair).
+  savings at 8.5%, +20% at 9%, and a conservative pair). If the client saves
+  nothing (or gives no figure), never invent one: use two paths with
+  `"save": null, "planning": true` (8.5% and 9%), which show as "Planning
+  figure only (not what the client saves)" for the lead advisor to fill in.
 - **Notes** flag when the IC form does not add up (chairs) or the call notes
   disagree (dependents), and carry the call's details onto their rows
   (spouse, advisors, accounts, tax habits, what they are torn between).

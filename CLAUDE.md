@@ -71,6 +71,20 @@ assumptions"). Claude does everything that step needs without being told:
    initial notes, Assumptions PDF, deck), compare against it and say which
    figures match and which do not before calling the step done.
 
+## Where this is heading (the evolution list)
+
+Not built yet; raise these when the work touches them.
+
+- **Initial notes as a shared document.** Today they are an .xlsx in the
+  client folder; without Excel it opens as an unsaved Numbers copy and saves
+  to Downloads unless someone picks the folder. Aim: notes that are easy to
+  read, create and edit in one shared place (a Claude page or a cloud doc),
+  where the lead advisor's edits come straight back without a "BB" copy.
+- **Deck slides still built by hand:** S-corp comparison, current path,
+  household allocation.
+- **Planning figure** for clients who save nothing: ask the lead advisor
+  whether he uses one, and make it the rule.
+
 ## Setting someone up
 
 The toolkit runs from the share: `Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip`,
