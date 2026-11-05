@@ -22,6 +22,7 @@ THE RULES THE DRAFTS ARE HELD TO
 import glob
 import json
 import os
+import store as _store  # noqa: E402
 import re
 
 try:
@@ -69,7 +70,7 @@ def _extra(folder):
     out = {}
     for name, key in (('review_decisions.json', 'advisor_decisions'),
                       ('ic_form.json', 'intake_form')):
-        p = os.path.join(folder, '_Audit', name)
+        p = _store.json_path(folder, name)
         try:
             with open(p) as fh:
                 data = json.load(fh)
@@ -297,7 +298,7 @@ def draft(folder, D, holes, log=print):
                 add_dirs=(os.path.join(folder, 'Original_sourcedocs',
                                        '.fq_cache'),) if docs else ())
         except Exception as exc:  # noqa: BLE001 - no Claude, no drafts
-            prev = _load(os.path.join(folder, '_Audit', 'deck_drafts.json'))
+            prev = _load(_store.json_path(folder, 'deck_drafts.json'))
             if prev:
                 log('  Claude not available here; using the drafts from the '
                     'last build (%d boxes)' % len(prev))
@@ -317,7 +318,7 @@ def draft(folder, D, holes, log=print):
             out[k] = text
         else:
             refused.append((k, bad))
-    _save(os.path.join(folder, '_Audit', 'deck_drafts.json'), out)
+    _save(_store.json_path(folder, 'deck_drafts.json'), out)
     log('  Claude drafted %d of %d boxes%s'
         % (len(out), len(holes),
            '; %d set aside for a figure not on file (%s)'
@@ -356,7 +357,7 @@ def income_facts(folder, first=''):
     like the drafts. {} when Claude is not available."""
     docs = [d for d in documents(folder, first)
             if 'investments' not in d[0].lower()]
-    saved = os.path.join(folder, '_Audit', 'income_facts.json')
+    saved = _store.json_path(folder, 'income_facts.json')
     if not docs or ask_claude is None:
         return _load(saved)
     prompt = INCOME_PROMPT.format(
@@ -430,7 +431,7 @@ Use null for return_pct when it cannot be found. Never estimate."""
 def account_returns(folder, labels, first=''):
     """{label: {return_pct, period, measured_with, basis}} from the investment
     statements, read by Claude and cached like the drafts."""
-    saved = os.path.join(folder, '_Audit', 'account_returns.json')
+    saved = _store.json_path(folder, 'account_returns.json')
     # The same statements the account reader uses, so the returns are read
     # from the documents the balances came from.
     import accounts as _acc

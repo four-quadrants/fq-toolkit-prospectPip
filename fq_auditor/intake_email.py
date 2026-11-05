@@ -17,6 +17,7 @@ the reason is printed.
 import argparse
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 
@@ -30,7 +31,7 @@ def _surname(folder):
 
 def _first(folder):
     try:
-        with open(os.path.join(folder, 'launchbay_manifest.json')) as fh:
+        with open(_store.json_path(folder, 'launchbay_manifest.json')) as fh:
             proj = json.load(fh).get('project') or ''
         m = re.search(r'Dr\.?\s+(\w+)', proj)
         if m:
@@ -42,14 +43,14 @@ def _first(folder):
 
 def asks(folder):
     """[(section, text)] from Claude's checklist verdicts, practice first."""
-    path = os.path.join(folder, '_Audit', 'claude_checklist.json')
+    path = _store.json_path(folder, 'claude_checklist.json')
     try:
         with open(path) as fh:
             verdicts = json.load(fh)
     except (OSError, ValueError):
         return []
     try:
-        with open(os.path.join(folder, '_Audit', 'decisions.json')) as fh:
+        with open(_store.json_path(folder, 'decisions.json')) as fh:
             overridden = {k for k, v in (json.load(fh).get('items') or {}).items()
                           if v.get('verdict') == 'satisfied'}
     except (OSError, ValueError):

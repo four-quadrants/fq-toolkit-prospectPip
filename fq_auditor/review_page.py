@@ -31,6 +31,7 @@ Claude app's viewer the store hands back read-only objects and the
 per-question records never took a write (found 29 Oct, after a morning of it).
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -79,7 +80,7 @@ def apply(folder, plan_json):
         m = re.match(r'ret_(acct|4q)_(\d+)$', key)
         if m:
             try:
-                with open(os.path.join(folder, '_Audit', 'review_accounts.json')) as fh:
+                with open(_store.json_path(folder, 'review_accounts.json')) as fh:
                     acct_map = json.load(fh)
             except (OSError, ValueError):
                 acct_map = {}
@@ -215,7 +216,7 @@ def apply(folder, plan_json):
                                         if (v or '').strip()}}
     # Slide wording: what was proposed, as edited, unless dropped.
     try:
-        with open(os.path.join(folder, '_Audit', 'review_slides.json')) as fh:
+        with open(_store.json_path(folder, 'review_slides.json')) as fh:
             proposed = json.load(fh)
     except (OSError, ValueError):
         proposed = None
@@ -227,7 +228,7 @@ def apply(folder, plan_json):
     # His edits to any other box on the deck: kept only where he changed it,
     # so everything he left alone still follows the figures when they move.
     try:
-        with open(os.path.join(folder, '_Audit', 'review_slides_data.json')) as fh:
+        with open(_store.json_path(folder, 'review_slides_data.json')) as fh:
             data_text = json.load(fh)
     except (OSError, ValueError):
         data_text = {}
@@ -236,7 +237,7 @@ def apply(folder, plan_json):
     if edits:
         out.setdefault('slides', {}).update(edits)
         print('   deck boxes he changed: %s' % ', '.join(sorted(edits)))
-    with open(os.path.join(folder, '_Audit', 'review_decisions.json'), 'w') as fh:
+    with open(_store.json_path(folder, 'review_decisions.json'), 'w') as fh:
         json.dump(out, fh, indent=1)
     print('   figures applied: %s' % (', '.join(changed) or 'none'))
     print('   question decisions read: %d' % len(out['qdecisions']))
@@ -279,7 +280,7 @@ def apply(folder, plan_json):
         with open(email, 'rb') as fh:
             body = BytesParser(policy=policy.default).parse(fh).get_content()
         out['email_text'] = body
-        with open(os.path.join(folder, '_Audit', 'review_decisions.json'), 'w') as fh:
+        with open(_store.json_path(folder, 'review_decisions.json'), 'w') as fh:
             json.dump(out, fh, indent=1)
     except Exception as exc:                                 # noqa: BLE001
         print('   follow-up email not written: %s' % exc)
@@ -294,12 +295,12 @@ def decisions(folder):
     """{question key: (decision, wording)} from the last apply, by the
     question's stable key (seed writes the key onto each question)."""
     try:
-        with open(os.path.join(folder, '_Audit', 'review_decisions.json')) as fh:
+        with open(_store.json_path(folder, 'review_decisions.json')) as fh:
             got = json.load(fh)
     except (OSError, ValueError):
         return {}
     try:
-        with open(os.path.join(folder, '_Audit', 'review_questions.json')) as fh:
+        with open(_store.json_path(folder, 'review_questions.json')) as fh:
             ids = json.load(fh)              # {question id: question key}
     except (OSError, ValueError):
         ids = {}
@@ -505,7 +506,7 @@ def seed(folder, outdir, mode='consult'):
                          basis='4Q\u2019s annualized return for %s. The firm\u2019s '
                                'figure; the slide\u2019s "vs 4Q" and "left on the '
                                'table" are worked from it.' % (r.get('period') or 'the same period')))
-    with open(os.path.join(folder, '_Audit', 'review_accounts.json'), 'w') as fh:
+    with open(_store.json_path(folder, 'review_accounts.json'), 'w') as fh:
         json.dump(acct_map, fh, indent=1)
     # The recommendations: the firm's whole list, the ones the documents
     # point to ticked, for the lead advisor to keep, change or add to.
@@ -529,12 +530,12 @@ def seed(folder, outdir, mode='consult'):
         with open(os.path.join(outdir, qid + '.json'), 'w') as fh:
             json.dump({'n': i, 'key': key, 'text': q, 'why': why, 'source': src,
                        'priority': pri, 'decision': dec}, fh)
-    with open(os.path.join(folder, '_Audit', 'review_questions.json'), 'w') as fh:
+    with open(_store.json_path(folder, 'review_questions.json'), 'w') as fh:
         json.dump(ids, fh, indent=1)
     # The questions the analysis review asked, kept so the consult review can
     # say which of them the documents have since answered: a question the
     # toolkit no longer raises, after new documents, is one they settled.
-    asked_path = os.path.join(folder, '_Audit', 'analysis_questions.json')
+    asked_path = _store.json_path(folder, 'analysis_questions.json')
     answered_by_docs = []
     if mode == 'analysis':
         with open(asked_path, 'w') as fh:
@@ -575,7 +576,7 @@ def seed(folder, outdir, mode='consult'):
             print('   deck boxes skipped: %s' % exc)
         slides['items'].sort(key=lambda it: (it['slide'], int(
             (re.findall(r'(\d+)$', it['id']) or ['0'])[0])))
-    with open(os.path.join(folder, '_Audit', 'review_slides_data.json'), 'w') as fh:
+    with open(_store.json_path(folder, 'review_slides_data.json'), 'w') as fh:
         json.dump(data_text, fh, indent=1)
     fig_slides = sorted({f['slide'] for f in figs if f.get('slide')})
     pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides) \
@@ -594,7 +595,7 @@ def seed(folder, outdir, mode='consult'):
         pass
     with open(os.path.join(outdir, 'slides.json'), 'w') as fh:
         json.dump(slides, fh)
-    with open(os.path.join(folder, '_Audit', 'review_slides.json'), 'w') as fh:
+    with open(_store.json_path(folder, 'review_slides.json'), 'w') as fh:
         json.dump({w['id']: w['text'] for w in words}, fh, indent=1)
     plan = {'client': D['names'], 'surname': D['surname'], 'figures': figs,
             'concerns': [{'head': h, 'body': b} for h, b in D['adv'].get('concerns') or []],
@@ -619,7 +620,7 @@ def seed(folder, outdir, mode='consult'):
     # by the question itself.
     try:
         prev = decisions(folder)
-        with open(os.path.join(folder, '_Audit', 'review_decisions.json')) as fh:
+        with open(_store.json_path(folder, 'review_decisions.json')) as fh:
             prev_all = json.load(fh)
     except (OSError, ValueError):
         prev, prev_all = {}, {}
@@ -643,7 +644,7 @@ def seed(folder, outdir, mode='consult'):
     # has been published (review_pages.json); Claude writes it after the
     # first publish otherwise.
     try:
-        with open(os.path.join(folder, '_Audit', 'review_pages.json')) as fh:
+        with open(_store.json_path(folder, 'review_pages.json')) as fh:
             plan['page_url'] = (json.load(fh) or {}).get(mode)
     except (OSError, ValueError):
         plan['page_url'] = None

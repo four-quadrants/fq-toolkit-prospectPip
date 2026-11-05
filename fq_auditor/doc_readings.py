@@ -61,6 +61,7 @@ import argparse
 import hashlib
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import subprocess
 import sys
@@ -114,8 +115,7 @@ def _text(folder, name):
         # What the client typed in LaunchBay counts as a source: patient
         # counts and days worked often only exist there. Checked the same
         # way, against the comments as written.
-        for p in (os.path.join(folder, 'launchbay_tasks.json'),
-                  os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+        for p in (_store.json_path(folder, 'launchbay_tasks.json'),):
             try:
                 data = json.load(open(p))
             except (OSError, ValueError):
@@ -169,7 +169,7 @@ def _close(a, b):
 
 def check(folder):
     """(verified readings, problems). Only verified figures are returned."""
-    path = os.path.join(folder, '_Audit', FILE)
+    path = _store.json_path(folder, FILE)
     try:
         raw = json.load(open(path))
     except (OSError, ValueError):

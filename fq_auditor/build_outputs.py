@@ -200,6 +200,10 @@ RUNNERS = {
 }
 
 
+# The outputs people open; they go in the client folder.
+OPENED = ('workbook', 'cashflow', 'assumptions', 'deck')
+
+
 def main():
     ap = argparse.ArgumentParser(description='Build a client’s outputs')
     ap.add_argument('folder')
@@ -215,8 +219,14 @@ def main():
         return 1
     want = [s for s in STEPS if s in want]
 
-    outdir = a.outdir or os.path.join(a.folder, '_Audit')
+    # What people open (the initial notes, the cash flow, the Assumptions,
+    # the deck) goes in the client's own folder, beside the documents. The
+    # toolkit's internal pages stay in _Audit, and its .json files in
+    # <year>/Claude outputs (store.py).
+    audit = os.path.join(a.folder, '_Audit')
+    outdir = a.outdir or a.folder
     os.makedirs(outdir, exist_ok=True)
+    os.makedirs(audit, exist_ok=True)
 
     print('Building %d output%s for %s'
           % (len(want), '' if len(want) == 1 else 's',
@@ -240,7 +250,8 @@ def main():
         print('%d/%d  %s…' % (n, len(want), TITLES[name]))
         began = time.time()
         try:
-            path = RUNNERS[name](a.folder, a.client, outdir)
+            path = RUNNERS[name](a.folder, a.client,
+                                 outdir if a.outdir or name in OPENED else audit)
         except Exception as e:
             failed.append((name, str(e)))
             print('   could not build it: %s' % e)

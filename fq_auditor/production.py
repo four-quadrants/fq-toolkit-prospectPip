@@ -25,6 +25,7 @@ not that two passes are right — it is that two passes that disagree are visibl
 wrong, which one pass never is.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import glob
@@ -498,7 +499,7 @@ DOCTOR_FLOOR = 120.0          # $/procedure; midway between the two clusters
 
 
 def roles_path(folder):
-    return os.path.join(folder, '_Audit', ROLES_FILE)
+    return _store.json_path(folder, ROLES_FILE)
 
 
 def load_roles(folder):

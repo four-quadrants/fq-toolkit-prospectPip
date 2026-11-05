@@ -33,6 +33,7 @@ so everything downstream uses the reviewed figures, and a rebuilt workbook
 carries them.
 """
 import os
+import store as _store  # noqa: E402
 import sys
 import glob
 import json
@@ -57,7 +58,9 @@ def _audit(folder):
 
 
 def workbook_path(folder):
-    got = sorted(glob.glob(os.path.join(_audit(folder), 'Cash flow - *.numbers')),
+    # The client folder since outputs moved there; _Audit for older clients.
+    got = sorted(glob.glob(os.path.join(glob.escape(folder), 'Cash flow - *.numbers'))
+                 + glob.glob(os.path.join(glob.escape(_audit(folder)), 'Cash flow - *.numbers')),
                  key=os.path.getmtime, reverse=True)
     return got[0] if got else None
 
@@ -87,14 +90,14 @@ def snapshot(folder, path=None):
         return None
     data = {'file': os.path.basename(path), 'mtime': os.path.getmtime(path),
             'cells': read_cells(path)}
-    with open(os.path.join(_audit(folder), SNAPSHOT), 'w') as fh:
+    with open(_store.json_path(_audit(folder), SNAPSHOT), 'w') as fh:
         json.dump(data, fh, indent=1)
     return data
 
 
 def load_decisions(folder):
     try:
-        with open(os.path.join(_audit(folder), DECISIONS)) as fh:
+        with open(_store.json_path(_audit(folder), DECISIONS)) as fh:
             got = json.load(fh)
         return got if isinstance(got, dict) else {}
     except (OSError, ValueError):
@@ -108,7 +111,7 @@ def harvest(folder):
     it. Returns the list of new or changed decisions.
     """
     path = workbook_path(folder)
-    snap_p = os.path.join(_audit(folder), SNAPSHOT)
+    snap_p = _store.json_path(_audit(folder), SNAPSHOT)
     if not path or not os.path.exists(snap_p):
         return []
     try:
@@ -143,7 +146,7 @@ def harvest(folder):
                     if dec.get(key, {}).get('analyst') != b:
                         changed.append(entry)
                     dec[key] = entry
-    with open(os.path.join(_audit(folder), DECISIONS), 'w') as fh:
+    with open(_store.json_path(_audit(folder), DECISIONS), 'w') as fh:
         json.dump(dec, fh, indent=1, sort_keys=True)
     # The workbook as it now stands is the new baseline, so the same change
     # is not read twice and a later one is seen against it.

@@ -19,6 +19,7 @@ What the operator sees is still one window with both tools in it.
 Start it with "Open FQ Toolkit.command", or:  python3 fq_app.py
 """
 import os
+import store as _store  # noqa: E402
 import re
 import io
 import sys
@@ -554,9 +555,7 @@ def guess_inputs(folder):
     # applied seven decisions from another client — the log said "carried your
     # decisions from /Users/.../Downloads/decisions.json" and nothing about that
     # made it obvious they were someone else's. Only this client's folder counts.
-    for c in (os.path.join(folder, '_Audit', 'decisions.json'),
-              os.path.join(folder, 'decisions.json'),
-              os.path.join(os.path.dirname(folder.rstrip('/')), '_Audit', 'decisions.json')):
+    for c in (_store.json_path(folder, 'decisions.json'),):
         if os.path.exists(c):
             out['decisions'] = c
             break
@@ -1964,7 +1963,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._guard(folder):
                 return
             try:
-                with open(os.path.join(folder, '_Audit', 'filing_status.json')) as fh:
+                with open(_store.json_path(folder, 'filing_status.json')) as fh:
                     return self._send(200, fh.read())
             except (OSError, ValueError):
                 return self._send(200, '{"unknown":true}')
@@ -2443,7 +2442,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(400, '{"error":"not a folder"}')
             out = os.path.join(folder, '_Audit')
             os.makedirs(out, exist_ok=True)
-            with open(os.path.join(out, 'decisions.json'), 'w') as fh:
+            with open(_store.json_path(out, 'decisions.json'), 'w') as fh:
                 json.dump(data.get('decisions') or {}, fh, indent=1)
             return self._send(200, '{"saved":true}')
 
@@ -2644,8 +2643,8 @@ def output_status(folder):
         if os.path.isdir(root):
             docs += [os.path.join(root, n) for n in os.listdir(root)
                      if not n.startswith('.')]
-    A = lambda *n: [os.path.join(out_dir, x) for x in n]          # noqa: E731
-    lb = [os.path.join(folder, 'launchbay_tasks.json')]
+    A = lambda *n: [_store.json_path(out_dir, x) for x in n]      # noqa: E731
+    lb = [_store.json_path(folder, 'launchbay_tasks.json')]
     try:
         names = os.listdir(out_dir)
     except OSError:
@@ -2688,8 +2687,8 @@ def output_status(folder):
         else:
             status[key] = {'current': True, 'when': when, 'why': 'up to date'}
     # The lead advisor’s review: proposed but not yet pulled back in.
-    asked = os.path.exists(os.path.join(out_dir, 'review_questions.json'))
-    got = os.path.exists(os.path.join(out_dir, 'review_decisions.json'))
+    asked = os.path.exists(_store.json_path(out_dir, 'review_questions.json'))
+    got = os.path.exists(_store.json_path(out_dir, 'review_decisions.json'))
     status['review'] = {'current': got, 'started': asked,
                         'why': ('decisions pulled in' if got else
                                 'waiting on the lead advisor’s review page' if asked

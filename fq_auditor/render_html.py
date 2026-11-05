@@ -26,6 +26,7 @@ forbids network access outright, because the internal section contains client PI
 """
 
 import os, re, io, json, html, base64, datetime
+import store as _store  # noqa: E402
 
 # ---------------------------------------------------------------- filing plan
 
@@ -2020,7 +2021,7 @@ def load_claude_verdicts(where):
     if not where:
         return {}
     audit_dir = where if os.path.isdir(where) else os.path.dirname(where)
-    path = os.path.join(audit_dir, 'claude_checklist.json')
+    path = _store.json_path(audit_dir, 'claude_checklist.json')
     try:
         with open(path) as fh:
             got = _json.load(fh)

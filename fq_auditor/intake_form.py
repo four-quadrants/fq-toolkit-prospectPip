@@ -27,6 +27,7 @@ the one thing worse than a blank field in front of a prospect is a confident
 wrong one.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -151,7 +152,7 @@ def parse_scan(path):
     client = _client_of(path)
     stamp = {os.path.basename(p): [os.path.getsize(p), int(os.path.getmtime(p))]
              for p in pages}
-    cache = os.path.join(client, '_Audit', 'ic_form.json')
+    cache = _store.json_path(client, 'ic_form.json')
     try:
         with open(cache) as fh:
             got = json.load(fh)

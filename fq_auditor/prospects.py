@@ -27,11 +27,12 @@ import argparse
 import glob
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 from datetime import date
 
-SKIP = re.compile(r'^(\d|_|\.)')
+SKIP = re.compile(r'^(\d|_|\.|%s$)' % re.escape(_store.OUT_DIR))
 
 
 def _has(folder, *patterns):
@@ -70,11 +71,12 @@ def _surname(name):
 
 
 def _pulled(folder):
-    p = os.path.join(folder, 'launchbay_manifest.json')
-    try:
-        return (json.load(open(p)).get('pulled') or None)
-    except (OSError, ValueError):
-        return None
+    for p in _store.find(folder, 'launchbay_manifest.json'):
+        try:
+            return (json.load(open(p)).get('pulled') or None)
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 def status(year_folder, folder_name, tests):
@@ -86,6 +88,9 @@ def status(year_folder, folder_name, tests):
     def any_has(*p):
         return any(_has(f, *p) for f in where)
 
+    def any_json(*names):
+        return any(_store.find(f, n) for f in where for n in names)
+
     s = {
         'name': name,
         'folder': folder_name,
@@ -94,14 +99,14 @@ def status(year_folder, folder_name, tests):
         'ic_form': _has(folder, 'IC form*', '*IC form*'),
         'documents': max(_docs_count(f) for f in where),
         'pulled': next((p for p in (_pulled(f) for f in where) if p), None),
-        'intake': any_has('_Audit/claude_checklist.json', '_Audit/*Internal Audit.md'),
+        'intake': any_json('claude_checklist.json') or any_has('_Audit/*Internal Audit.md'),
         'notes': any_has('Initial notes - *.xlsx', '_Audit/Initial notes*.xlsx'),
         'team_notes': _has(folder, 'intial notes*', 'initial notes-*.numbers'),
         'offer_call': _has(folder, '*onsult offer*'),
         'expanded': _has(folder, 'Expanded list*', 'Expanded List*'),
         'ach': _has(folder, 'ACH Form*', 'ACH form*'),
-        'cashflow': any_has('*Cash flow*.numbers', '_Audit/bank_statements.json'),
-        'assumptions': any_has('_Audit/assumptions*.json', '_Audit/review_page*.json'),
+        'cashflow': any_has('*Cash flow*.numbers') or any_json('bank_statements.json'),
+        'assumptions': any_json('assumptions*.json', 'review_page*.json'),
         'deck': any_has('Consult deck*.pptx', '*Consult deck*.pptx'),
     }
     s['stage'], s['next'] = _stage(s)

@@ -37,16 +37,17 @@ the client folder, because it is working state and not something the client
 sent. Rebuilds read it and never write it.
 """
 import os
+import store as _store  # noqa: E402
 import sys
 import json
 import argparse
 import datetime
 
-STORE = os.path.join('_Audit', 'plan_inputs.json')
+STORE = 'plan_inputs.json'
 
 
 def path_for(folder):
-    return os.path.join(folder, STORE)
+    return _store.json_path(folder, STORE)
 
 
 def load(folder):

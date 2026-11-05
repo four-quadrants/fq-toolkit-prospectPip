@@ -35,6 +35,7 @@ nothing to put on them.
 """
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import copy
@@ -1477,7 +1478,7 @@ def _drafts(folder, D, prs, fills, drop):
     what he approved (and nothing he dropped); before that, Claude's drafts,
     marked in the notes as not yet reviewed."""
     try:
-        with open(os.path.join(folder, '_Audit', 'review_decisions.json')) as fh:
+        with open(_store.json_path(folder, 'review_decisions.json')) as fh:
             rev = json.load(fh)
     except (OSError, ValueError):
         rev = {}

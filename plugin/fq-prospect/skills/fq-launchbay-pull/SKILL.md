@@ -5,6 +5,19 @@ description: "Pull a client's document list and request checklist out of LaunchB
 
 # fq-launchbay-pull
 
+## Where the .json files live
+
+Every .json the toolkit keeps for a client (launchbay_manifest, launchbay_tasks,
+checklist_reviewed, claude_checklist, doc_readings, notes, summary,
+review_pages, review_decisions, bank_statements and the rest) lives in one
+folder beside the clients, never in the client folder:
+`Prospects/<year>/Claude outputs/<name>_<Client>.json`, for example
+`Prospects/2026/Claude outputs/notes_Example, Jane.json`. Get the exact path
+with `python3 fq_auditor/store.py "<client folder>" notes.json` and read and
+write it there. Wherever this skill says `_Audit/<name>.json` or a .json "in
+the client folder", it means that path. The client folder keeps the documents
+and the outputs people open (initial notes, cash flow, deck).
+
 Pull a Four Quadrants prospect's uploads and request checklist out of LaunchBay
 and write them into the client's intake folder as two JSON files, so the FQ
 Intake Auditor — which has no LaunchBay access of its own — can do the rest.

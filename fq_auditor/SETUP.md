@@ -33,46 +33,20 @@ historical; leave it).
 To have it reconnect at login: **System Settings > General > Login Items**, click
 **+**, and add the **Analysis** drive.
 
-### 3. GitHub access
+### 3. The toolkit (nothing to install)
 
-1. Make a GitHub account (github.com) with your work email if you do not have one.
-2. Ask an owner of the **four-quadrants** organization to add you to the
-   `fq-toolkit-prospectPip` repo (Admin if you will change the toolkit).
-   Accept the email invite.
+The toolkit lives on the share, in `Brogan/Prospects/FQ_Toolkit/prospectPip`.
+Everyone uses that one copy; nothing goes on your Desktop.
 
-### 4. The toolkit, on your Desktop
+### 4. GitHub (only if you will change the toolkit)
 
-It goes in **Desktop > FQ_Toolkit > prospectPip**. Open **Terminal** (press
-`Cmd + Space`, type "terminal", press return) and type these, one at a time:
+See Part 3.
 
-```
-xcode-select --install
-```
+### 5. Connect the folder in Claude
 
-A window opens; click **Install** and wait (a few minutes; this gives your Mac
-`git`). If it says they are already installed, carry on. Then:
-
-```
-mkdir -p ~/Desktop/FQ_Toolkit
-cd ~/Desktop/FQ_Toolkit
-git clone https://github.com/four-quadrants/fq-toolkit-prospectPip.git prospectPip
-```
-
-The first time, git asks you to sign in to GitHub in the browser.
-
-**Getting the latest version later** (whenever someone says they changed it):
-
-```
-cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
-```
-
-### 5. Connect the two folders in Claude
-
-In the Claude desktop app, start a new task and connect these two folders
-(Claude asks for them the first time, or add them from the folder button):
-
-- `Desktop/FQ_Toolkit`
-- `Analysis/Brogan/Prospects/2026`
+In the Claude desktop app, start a new task and connect
+`Analysis/Brogan/Prospects` (it holds both the toolkit and the client
+folders).
 
 ### 6. The FQ Prospect plugin, and LaunchBay
 
@@ -83,7 +57,7 @@ connect the **LaunchBay** connector in your Claude account.
 
 ### 7. Check it works
 
-In Claude, with both folders connected, type:
+In Claude, with the Prospects folder connected, type:
 
 ```
 Check the FQ toolkit is ready
@@ -94,8 +68,8 @@ and the code's libraries load) and says what, if anything, is missing.
 
 ## Part 2: one client, start to finish
 
-Every step is asked for in Claude (the desktop app, with the `FQ_Toolkit` and
-Prospects folders connected). Claude runs the toolkit, reads the documents,
+Every step is asked for in Claude (the desktop app, with the Prospects folder
+connected). Claude runs the toolkit, reads the documents,
 checks what it read, and tells you what came out. The work comes in three
 stages; nothing from a later stage is built early.
 
@@ -162,13 +136,13 @@ coding. Set this up once.
 
 1. Get the latest first:
    ```
-   cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
+   cd "/Volumes/Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip" && git pull
    ```
 2. Ask Claude to make the change. Either:
-   - in the **Claude desktop app** (Cowork), with the `FQ_Toolkit` folder and the
-     Prospects folder connected: describe what you want ("the cash flow should
+   - in the **Claude desktop app** (Cowork), with the Prospects folder
+     connected: describe what you want ("the cash flow should
      treat X as Y"; "add this to the deck"); or
-   - in **Terminal**: `cd ~/Desktop/FQ_Toolkit/prospectPip && claude`, then
+   - in **Terminal**: `cd "/Volumes/Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip" && claude`, then
      describe it.
 
    Claude reads `CLAUDE.md` at the top of the repo first: the map of the code
@@ -178,9 +152,12 @@ coding. Set this up once.
    compare with what you expect.
 4. Save it to GitHub (always this order):
    ```
-   cd ~/Desktop/FQ_Toolkit/prospectPip && git add -A && python3 fq_auditor/precommit_check.py && git commit -m "what changed" && git push
+   cd "/Volumes/Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip" && git add -A && python3 fq_auditor/precommit_check.py && git commit -m "what changed" && git push
    ```
-5. Everyone else gets it with `git pull`, then restarts the app.
+5. Everyone shares the one copy on the share, so a saved change is live for
+   the team at once. `git pull` matters only if someone pushed from another
+   copy. Do not change the same step at the same time as someone else: say
+   in the team chat what you are changing.
 
 If two people change the same file, `git pull` may say there is a conflict;
 ask Claude ("git pull says there is a conflict, sort it out") and it will
@@ -320,7 +297,7 @@ GitHub in the browser.
 **Getting the latest version later:**
 
 ```
-cd ~/Desktop/FQ_Toolkit/prospectPip && git pull
+cd "/Volumes/Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip" && git pull
 ```
 
 #### 7. First start

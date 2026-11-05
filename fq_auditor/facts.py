@@ -18,6 +18,7 @@ is absent -- what is needed to get it and why that matters. A figure stripped
 of its source is the thing this whole project exists to stop producing.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import argparse
@@ -145,7 +146,7 @@ def _pct(v):
 def attach_notes(bundle, folder):
     """Fold notes.py's output onto the facts it was written about."""
     import json as _json
-    path = os.path.join(folder, '_Audit', 'notes.json')
+    path = _store.json_path(folder, 'notes.json')
     try:
         with open(path) as fh:
             written = _json.load(fh)

@@ -22,6 +22,7 @@ import glob
 import hashlib
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 
@@ -30,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import inputs as _inputs                                  # noqa: E402
 
 BY = 'read from statements (Claude)'
-SAVED = os.path.join('_Audit', 'accounts.json')
+SAVED = 'accounts.json'
 TIMEOUT = 900
 QUALIFIED = re.compile(r'401|403|457|ira|roth|sep|simple|pension|profit sharing|'
                        r'defined benefit|cash balance', re.I)
@@ -115,7 +116,7 @@ Return JSON only: {{"accounts": [{{...}}]}}"""
 def read(folder, log=print, use_claude=True):
     reps = find_statements(folder)
     key = sorted(r['sha'] for r in reps)
-    saved_path = os.path.join(folder, SAVED)
+    saved_path = _store.json_path(folder, SAVED)
     try:
         with open(saved_path) as fh:
             saved = json.load(fh)

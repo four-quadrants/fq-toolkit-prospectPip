@@ -5,6 +5,19 @@ description: "Show the analyst the Four Quadrants prospects they are working, wh
 
 # Prospect board
 
+## Where the .json files live
+
+Every .json the toolkit keeps for a client (launchbay_manifest, launchbay_tasks,
+checklist_reviewed, claude_checklist, doc_readings, notes, summary,
+review_pages, review_decisions, bank_statements and the rest) lives in one
+folder beside the clients, never in the client folder:
+`Prospects/<year>/Claude outputs/<name>_<Client>.json`, for example
+`Prospects/2026/Claude outputs/notes_Example, Jane.json`. Get the exact path
+with `python3 fq_auditor/store.py "<client folder>" notes.json` and read and
+write it there. Wherever this skill says `_Audit/<name>.json` or a .json "in
+the client folder", it means that path. The client folder keeps the documents
+and the outputs people open (initial notes, cash flow, deck).
+
 The analyst's front door: one panel in the chat with the prospects they are
 working, each one's stage, and buttons that send the next request. They never
 need to remember a phrase.

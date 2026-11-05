@@ -53,8 +53,11 @@ connected: `Prospects/FQ_Toolkit/prospectPip`. Check that
 rules. Nothing goes on their Desktop and they need no Terminal or GitHub to
 run the pipeline.
 
-GitHub is only for someone who will change the toolkit's code. Skip it for
-now; it is covered in `fq_auditor/SETUP.md` Part 3.
+GitHub is only for someone who will change the toolkit's code. If they
+will, walk them through `fq_auditor/SETUP.md` Part 3 (GitHub account, the
+invite, `gh auth login`, their name and email for git) after step 8, and
+check it with `git -C "<toolkit folder>" fetch` (it should run without asking
+for a password).
 
 ### 4. The ready check
 

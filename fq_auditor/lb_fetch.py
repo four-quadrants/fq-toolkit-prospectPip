@@ -27,6 +27,7 @@ the document. Treat the manifest as sensitive as the documents themselves — it
 written inside the client folder for that reason, not somewhere general.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -36,7 +37,7 @@ import urllib.request
 import urllib.error
 
 FETCHED = '.lb_fetched.json'
-MANIFEST = os.path.join('_Audit', 'launchbay_manifest.json')
+MANIFEST = 'launchbay_manifest.json'
 INTAKE = 'Original_sourcedocs'
 
 # Only these are things the client uploaded. See module docstring.
@@ -132,11 +133,11 @@ def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
     # inside it, and an operator choosing by hand may pick either. Given
     # Original_sourcedocs, step up rather than fail with "no manifest" while the
     # manifest sits one level away.
-    if not manifest_path and not os.path.exists(os.path.join(client_folder, MANIFEST)):
+    if not manifest_path and not os.path.exists(_store.json_path(client_folder, MANIFEST)):
         parent = os.path.dirname(client_folder)
-        if os.path.exists(os.path.join(parent, MANIFEST)):
+        if os.path.exists(_store.json_path(parent, MANIFEST)):
             client_folder = parent
-    manifest_path = manifest_path or os.path.join(client_folder, MANIFEST)
+    manifest_path = manifest_path or _store.json_path(client_folder, MANIFEST)
     if not os.path.exists(manifest_path):
         legacy = os.path.join(client_folder, os.path.basename(MANIFEST))
         if os.path.exists(legacy):

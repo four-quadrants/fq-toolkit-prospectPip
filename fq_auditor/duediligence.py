@@ -27,6 +27,7 @@ WHERE THE QUESTIONS COME FROM (see _spec/FOLLOWUPS.md, the lead advisor’s five
   retirement savings        always last, with the figure the plan uses
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -201,7 +202,7 @@ def findings(folder):
 
     # Documents still missing, from Claude's reading of the checklist --------
     try:
-        with open(os.path.join(folder, '_Audit', 'claude_checklist.json')) as fh:
+        with open(_store.json_path(folder, 'claude_checklist.json')) as fh:
             verdicts = json.load(fh)
     except (OSError, ValueError):
         verdicts = {}

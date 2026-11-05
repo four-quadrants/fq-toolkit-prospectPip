@@ -26,6 +26,7 @@ worth writing on. That is also how a person does it: read everything, write
 where there is something to write.
 """
 import os
+import store as _store  # noqa: E402
 import sys
 import json
 import argparse
@@ -36,7 +37,7 @@ import facts as _facts                                       # noqa: E402
 import ask_claude                                            # noqa: E402
 
 CACHE = os.path.join('.fq_cache', 'notes')
-OUT = os.path.join('_Audit', 'notes.json')
+OUT = 'notes.json'
 
 SCHEMA = """{
   "notes": [
@@ -85,7 +86,9 @@ def narrative_documents(folder, limit=12, chars=12000):
         low = key.lower()
         if key.startswith(('.', '_')) or os.path.isdir(path):
             continue
-        if 'initial notes -' in low or low.endswith(('.json', '.csv', '.mp3',
+        # Our own outputs sit here too now: never read them back as notes.
+        if low.startswith(('initial notes -', 'assumptions -', 'cash flow -',
+                           'consult deck -')) or low.endswith(('.json', '.csv', '.mp3',
                                                       '.m4a', '.wav', '.xlsx',
                                                       '.numbers', '.key',
                                                       '.pptx', '.command')):
@@ -303,7 +306,7 @@ def main():
                      'flags': list(row.get('flags') or ())[:2],
                      'questions': list(row.get('questions') or ())[:2]}
 
-    path = os.path.join(a.folder, OUT)
+    path = _store.json_path(a.folder, OUT)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as fh:
         json.dump(out, fh, indent=1)

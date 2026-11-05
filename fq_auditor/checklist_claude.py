@@ -29,6 +29,7 @@ decision always wins. The review page shows Claude's reasoning so there is
 something to disagree with rather than a verdict to take on trust.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -41,8 +42,8 @@ import classify                                              # noqa: E402
 import ask_claude                                            # noqa: E402
 
 CACHE = '.fq_cache'
-VERDICTS = os.path.join('_Audit', 'claude_checklist.json')
-CHECKLIST = os.path.join('_Audit', 'checklist_reviewed.json')
+VERDICTS = 'claude_checklist.json'
+CHECKLIST = 'checklist_reviewed.json'
 
 SCHEMA = """{
   "verdict": "satisfied, partly satisfied, or missing",
@@ -59,7 +60,7 @@ SCHEMA = """{
 
 
 def load_checklist(folder):
-    path = os.path.join(folder, CHECKLIST)
+    path = _store.json_path(folder, CHECKLIST)
     if not os.path.exists(path):
         path = os.path.join(folder, os.path.basename(CHECKLIST))
     with open(path) as fh:
@@ -172,8 +173,7 @@ def portal_comments(folder):
     doctor days, "no line of credit", "no current financial plan". Without
     these, Spaulding scored 52% for a client who had answered all of it.
     """
-    for p in (os.path.join(folder, 'launchbay_tasks.json'),
-              os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+    for p in (_store.json_path(folder, 'launchbay_tasks.json'),):
         try:
             with open(p) as fh:
                 data = json.load(fh)
@@ -403,7 +403,7 @@ def main():
     if not out:
         print('No answers came back, so nothing was written.')
         return
-    path = os.path.join(a.folder, VERDICTS)
+    path = _store.json_path(a.folder, VERDICTS)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as fh:
         json.dump(out, fh, indent=1)

@@ -46,6 +46,18 @@ The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the
 steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
 `plugin/fq-prospect` folder holds the Claude skills.
 
+## Where files go
+
+- **What people open** (initial notes, cash flow, Assumptions, deck): the
+  client's own folder, beside the documents. `build_outputs.py` puts them
+  there unless given `--outdir`.
+- **The toolkit's .json files** (LaunchBay pull, checklist verdicts,
+  Claude's readings, review decisions): `Prospects/<year>/Claude outputs/`,
+  named `<name>_<Client>.json`. Always ask `store.json_path(folder, name)`
+  for the path; it moves an old copy in from the client folder or _Audit the
+  first time. The board skips the Claude outputs folder.
+- **Internal pages** (intake review, internal audit): `_Audit`.
+
 ## A short request means the whole step
 
 The analyst says one line ("build [client]'s initial notes", "build [client]'s

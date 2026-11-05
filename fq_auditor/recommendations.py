@@ -23,6 +23,7 @@ savings schedule the projections use (the deck entry's "gains_table").
 """
 import argparse
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 
@@ -290,7 +291,7 @@ if __name__ == '__main__':
 
 LIBRARY = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        'recommendations_library.md')
-SAVED = os.path.join('_Audit', 'recommendations_claude.json')
+SAVED = 'recommendations_claude.json'
 
 PROMPT = """You are helping a Four Quadrants advisor prepare a consult for a dental
 practice owner. Below is the firm's library of recommendations (what each is,
@@ -362,7 +363,7 @@ def claude_candidates(folder, D=None, log=print):
     reused until the client's facts change. [] when Claude is not available."""
     import json as _json
     import hashlib
-    saved_path = os.path.join(folder, SAVED)
+    saved_path = _store.json_path(folder, SAVED)
     if D is None:
         import deck_template as _dt
         D = _dt.figures(folder, None)
@@ -399,6 +400,6 @@ def claude_candidates(folder, D=None, log=print):
 def _saved_candidates(folder):
     import json as _json
     try:
-        return _json.load(open(os.path.join(folder, SAVED))).get('candidates') or []
+        return _json.load(open(_store.json_path(folder, SAVED))).get('candidates') or []
     except (OSError, ValueError):
         return []

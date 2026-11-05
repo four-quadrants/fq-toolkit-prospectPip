@@ -36,6 +36,7 @@ A launchbay_tasks.json written from a Claude session, shaped:
         "comments": [{"who": "...", "text": "..."}]}]}
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -46,8 +47,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vocab                                    # noqa: E402
 from checklist_parse import build_item          # noqa: E402  (reuses the semantics)
 
-TASKS = os.path.join('_Audit', 'launchbay_tasks.json')
-OUT = os.path.join('_Audit', 'checklist_reviewed.json')
+TASKS = 'launchbay_tasks.json'
+OUT = 'checklist_reviewed.json'
 
 # Which side of the house an item belongs to. The request tasks do not say, so it
 # is read from the wording — "practice bank statements" is not a personal one.
@@ -293,7 +294,7 @@ def main():
     ap.add_argument('--show', action='store_true', help="print every item")
     a = ap.parse_args()
 
-    tasks_path = a.tasks or os.path.join(a.folder, TASKS)
+    tasks_path = a.tasks or _store.json_path(a.folder, TASKS)
     if not os.path.exists(tasks_path):
         legacy = os.path.join(a.folder, os.path.basename(TASKS))
         if os.path.exists(legacy):
@@ -303,7 +304,7 @@ def main():
                  % (TASKS, a.folder))
     items = build(tasks_path)
 
-    out = os.path.join(a.folder, OUT)
+    out = _store.json_path(a.folder, OUT)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as fh:
         json.dump(items, fh, indent=2)

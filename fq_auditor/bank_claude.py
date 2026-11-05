@@ -29,12 +29,13 @@ import glob
 import hashlib
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-SAVED = os.path.join('_Audit', 'bank_statements.json')
+SAVED = 'bank_statements.json'
 VERSION = 1
 TIMEOUT = 600
 WORKERS = 4
@@ -198,7 +199,7 @@ def read_one(folder, rep):
 
 def _load(folder):
     try:
-        with open(os.path.join(folder, SAVED)) as fh:
+        with open(_store.json_path(folder, SAVED)) as fh:
             got = json.load(fh)
         return got if got.get('v') == VERSION else {'v': VERSION, 'files': {}}
     except (OSError, ValueError):
@@ -236,7 +237,7 @@ def ensure(folder, log=print):
             log('    %s: %d statement%s%s' % (rep['name'], len(got), '' if len(got) == 1 else 's',
                                              (', DOES NOT TIE: ' + bad[0]['why']) if bad else ', ties'))
     try:
-        with open(os.path.join(folder, SAVED), 'w') as fh:
+        with open(_store.json_path(folder, SAVED), 'w') as fh:
             json.dump(saved, fh, indent=1)
     except OSError:
         pass

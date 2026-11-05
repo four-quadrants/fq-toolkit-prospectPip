@@ -20,6 +20,7 @@ this checklist item been outstanding since last time — and leaves the judgemen
 to the code that asked.
 """
 import os
+import store as _store  # noqa: E402
 import json
 import datetime
 
@@ -28,7 +29,7 @@ VERSION = 1
 
 
 def path_for(outdir):
-    return os.path.join(outdir, LEDGER_NAME)
+    return _store.json_path(outdir, LEDGER_NAME)
 
 
 def load(outdir):

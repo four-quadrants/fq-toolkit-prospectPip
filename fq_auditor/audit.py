@@ -17,6 +17,7 @@ Two-step use, when you want to correct the parsed checklist first:
     (edit the checklist_reviewed.json it writes, then re-run without --review-only)
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import json
@@ -60,8 +61,7 @@ def find_reviewed_checklist(folder, levels=3):
         # they read as something a person might tidy away. They belong in the
         # working folder; the top level is still checked so a client filed
         # before the move keeps working.
-        for cand in (os.path.join(here, '_Audit', 'checklist_reviewed.json'),
-                     os.path.join(here, 'checklist_reviewed.json')):
+        for cand in (_store.json_path(here, 'checklist_reviewed.json'),):
             if os.path.exists(cand):
                 return cand
         parent = os.path.dirname(here)
@@ -84,8 +84,7 @@ def find_tasks_file(folder, levels=3):
         # they read as something a person might tidy away. They belong in the
         # working folder; the top level is still checked so a client filed
         # before the move keeps working.
-        for cand in (os.path.join(here, '_Audit', 'launchbay_tasks.json'),
-                     os.path.join(here, 'launchbay_tasks.json')):
+        for cand in (_store.json_path(here, 'launchbay_tasks.json'),):
             if os.path.exists(cand):
                 return cand
         parent = os.path.dirname(here)
@@ -495,9 +494,7 @@ def _load_claude_checklist(folder):
     # pattern that pulled Oyler's IC form into Rebol's plan: from a client
     # folder, the levels above are the other clients' parents.
     here = os.path.abspath(folder)
-    for rel in (os.path.join('_Audit', 'claude_checklist.json'),
-                'claude_checklist.json'):
-        path = os.path.join(here, rel)
+    for path in (_store.json_path(here, 'claude_checklist.json'),):
         if os.path.exists(path):
             try:
                 with open(path) as fh:
@@ -1143,7 +1140,7 @@ def main():
         print("!" * 74 + "\n")
 
     if a.review_only:
-        print_checklist_for_review(checklist, os.path.join(outdir, 'checklist_reviewed.json'))
+        print_checklist_for_review(checklist, _store.json_path(outdir, 'checklist_reviewed.json'))
         return
 
     res = audit_folder(a.folder, checklist, cache_dir=a.cache,
@@ -1287,7 +1284,7 @@ def main():
         # it the button looked the same whether everything was filed or
         # nothing was, so there was no way to tell from the screen.
         pending = len(moves) - (len(done) if a.file_them else 0)
-        with open(os.path.join(outdir, 'filing_status.json'), 'w') as fh:
+        with open(_store.json_path(outdir, 'filing_status.json'), 'w') as fh:
             json.dump({'pending': max(0, pending),
                        'filed': len(skipped) + (len(done) if a.file_them else 0),
                        'refused': len(refused) if a.file_them else 0,

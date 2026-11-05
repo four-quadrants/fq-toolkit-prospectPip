@@ -24,6 +24,7 @@ is needed. That is the analyst’s convention from the Kinsler build, kept becau
 works.
 """
 import os
+import store as _store  # noqa: E402
 import sys
 import argparse
 import datetime
@@ -502,7 +503,7 @@ def _summary_sheet(wb, bundle):
     """
     import json
     try:
-        S = json.load(open(os.path.join(bundle.folder, '_Audit', 'summary.json')))
+        S = json.load(open(_store.json_path(bundle.folder, 'summary.json')))
     except (OSError, ValueError, TypeError):
         return
     ws = wb.create_sheet('Summary')
@@ -877,7 +878,7 @@ def main():
     a = ap.parse_args()
 
     bundle = _facts.gather(a.folder, client=a.client)
-    out = a.out or os.path.join(a.folder, '_Audit',
+    out = a.out or os.path.join(a.folder,
                                 'Initial notes - %s.xlsx' % bundle.client)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     write(bundle, out)

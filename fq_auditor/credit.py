@@ -35,12 +35,13 @@ import glob
 import hashlib
 import json
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-SAVED = os.path.join('_Audit', 'credit_report.json')
+SAVED = 'credit_report.json'
 NAME = re.compile(r'credit\s*report|equifax|experian|transunion|annual\s*credit',
                   re.I)
 TIMEOUT = 900
@@ -451,7 +452,7 @@ def read(folder, log=print, use_claude=True):
     """{'debts': [...], 'nothing_owed': [...], 'reports': [...], 'unread':
     [...]}, saved and reused while the reports are unchanged."""
     reps = find_reports(folder)
-    saved_path = os.path.join(folder, SAVED)
+    saved_path = _store.json_path(folder, SAVED)
     try:
         with open(saved_path) as fh:
             saved = json.load(fh)

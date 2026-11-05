@@ -26,6 +26,7 @@ whole folder that says who was producing in which year -- and so the only
 independent check on the provider-code mapping.
 """
 import os
+import store as _store  # noqa: E402
 import re
 import sys
 import glob
@@ -209,8 +210,7 @@ def from_comments(folder):
     standing as a count document they would have uploaded.
     """
     texts = []
-    for p in (os.path.join(folder, 'launchbay_tasks.json'),
-              os.path.join(folder, '_Audit', 'launchbay_tasks.json')):
+    for p in (_store.json_path(folder, 'launchbay_tasks.json'),):
         try:
             with open(p) as fh:
                 data = json.load(fh)
