@@ -52,10 +52,10 @@ steps run through Claude. `fq_auditor/SETUP.md` is the operator guide; the
   client's own folder, beside the documents. `build_outputs.py` puts them
   there unless given `--outdir`.
 - **The toolkit's .json files** (LaunchBay pull, checklist verdicts,
-  Claude's readings, review decisions): `Prospects/<year>/Claude outputs/`,
+  Claude's readings, review decisions): `Prospects/<year>/4.) Claude outputs/<Surname>/`,
   named `<name>_<Client>.json`. Always ask `store.json_path(folder, name)`
   for the path; it moves an old copy in from the client folder or _Audit the
-  first time. The board skips the Claude outputs folder.
+  first time. The board skips that folder (it starts with a number).
 - **Internal pages** (intake review, internal audit): `_Audit`.
 
 ## A short request means the whole step
@@ -100,6 +100,20 @@ Not built yet; raise these when the work touches them.
   amended filings, whether quarterly estimates moved with income.
 - **Planning figure** for clients who save nothing: ask the lead advisor
   whether he uses one, and make it the rule.
+
+From the team's showcase walkthrough (Nov 5), next up:
+
+- **Analysis review: a note or a question.** The lead advisor can write
+  either on any section; marking it a question adds it to the Questions tab,
+  and so to the client email.
+- **Savings years as plan years.** Show savings in year 1, 2, 5, 8, 12
+  (default) instead of 2026, 2027...; the advisor can change the years on
+  the page.
+- **Add or remove deck slides** on the consult review, keeping the theme:
+  remove any slide; add one from the template's layouts (a blank section
+  slide, a bullets slide, a table slide) with his own title and text.
+- **Add a question** of his own on the Questions tab, not only edit the
+  drafted ones.
 
 ## Setting someone up
 

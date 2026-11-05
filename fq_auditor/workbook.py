@@ -37,24 +37,28 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import facts as _facts                                       # noqa: E402
 
-# The look of a table made in Numbers (Helvetica Neue, soft grays), so the
-# sheet does not open in Numbers looking like an Excel import.
+# Helvetica Neue, the bright tones of Numbers' own swatches (the lead
+# advisor's), and navy header bars so each section is easy to find.
 FONT = 'Helvetica Neue'
 INK = '1D1D1F'
-NAVY = INK
+NAVY = '16324F'
 ORANGE = 'F08418'
 
-HEAD = Font(name=FONT, bold=True, color=INK, size=12)
-SECTION = Font(name=FONT, bold=True, color=INK, size=13)
+HEAD = Font(name=FONT, bold=True, color='FFFFFF', size=12)
+SECTION = Font(name=FONT, bold=True, color=NAVY, size=13)
 LABEL = Font(name=FONT, size=12)
+# What the row is about (Entity structure, Office location...): bold on gray
+# so the eye finds the row before the figure.
+ROWNAME = Font(name=FONT, size=12, bold=True)
+F_ROWNAME = PatternFill('solid', fgColor='D5D5D5')      # Numbers light gray
 VALUE = Font(name=FONT, size=12)                       # read from a document (black, per the lead advisor)
 DERIVED = Font(name=FONT, size=12)                     # formula
 NOTE = Font(name=FONT, size=11, color='48484A')
 SRC = Font(name=FONT, size=10, color='8E8E93')
 
-F_HEAD = PatternFill('solid', fgColor='E5E5EA')
-F_SECTION = PatternFill('solid', fgColor='F5F5F7')
-F_NEEDED = PatternFill('solid', fgColor='FFF5CC')
+F_HEAD = PatternFill('solid', fgColor=NAVY)              # navy header bars
+F_SECTION = PatternFill(fill_type=None)                  # section titles: bold caps, no fill
+F_NEEDED = PatternFill('solid', fgColor='FFFC66')        # Numbers lemon
 BOX = Border(bottom=Side(style='thin', color='D1D1D6'))
 WRAP = Alignment(wrap_text=True, vertical='top')
 
@@ -63,7 +67,7 @@ PCT = '0.0%'
 NUM = '#,##0'
 
 
-F_FLAG = PatternFill('solid', fgColor='FDE8E4')
+F_FLAG = PatternFill('solid', fgColor='FF968D')          # Numbers salmon
 
 
 def _legend(ws, row=3):
@@ -71,9 +75,9 @@ def _legend(ws, row=3):
     keys = [
         ('Figures', Font(name=FONT, size=11), None,
          'every figure names its document in the source column'),
-        ('Yellow', Font(name=FONT, size=11, color='5A4600'), F_NEEDED,
+        ('Yellow', Font(name=FONT, size=11, color='000000'), F_NEEDED,
          'not supplied yet; also on Open Items'),
-        ('Red note', Font(name=FONT, size=11, color='9A3412'), F_FLAG,
+        ('Red note', Font(name=FONT, size=11, color='000000'), F_FLAG,
          'FLAG: two sources disagree; a talking point for the call'),
         ('Italic', Font(name=FONT, size=11, italic=True), None,
          'annualized from the year to date'),
@@ -116,7 +120,7 @@ def _fact_row(ws, row, fact, cols=5):
     There, the context lived in a paragraph at the bottom of the sheet and had
     to be matched to its figure by eye.
     """
-    ws.cell(row, 1, fact.label).font = LABEL
+    ws.cell(row, 1, fact.label).font = ROWNAME
     ws.cell(row, 1).alignment = WRAP
     cell = ws.cell(row, 2, fact.value)
     cell.font = VALUE if fact.value is not None else LABEL
@@ -150,6 +154,7 @@ def _fact_row(ws, row, fact, cols=5):
         ws.cell(row, c).border = BOX
         if fact.value is None:
             ws.cell(row, c).fill = F_NEEDED
+    ws.cell(row, 1).fill = F_ROWNAME
     if fact.value is None and fact.needed:
         ws.cell(row, 3, fact.needed).font = NOTE
         ws.cell(row, 3).alignment = WRAP
@@ -235,7 +240,8 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
 
     def line(label, key=None, formula=None, fmt=MONEY, bold=False):
         nonlocal row
-        ws.cell(row, 1, label).font = Font(name=FONT, size=12, bold=bold)
+        ws.cell(row, 1, label).font = ROWNAME
+        ws.cell(row, 1).fill = F_ROWNAME
         ws.cell(row, 1).border = BOX
         for i, y in enumerate(years):
             col = ycol(i)
@@ -289,7 +295,8 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
         row += 1
         for e in rows_:
             label, vals, balance, months, note = e[:5]
-            ws.cell(row, 1, label).font = Font(name=FONT, size=12)
+            ws.cell(row, 1, label).font = ROWNAME
+            ws.cell(row, 1).fill = F_ROWNAME
             ws.cell(row, 1).border = BOX
             for i, y in enumerate(years):
                 col = ycol(i)
@@ -414,6 +421,7 @@ def _cash_sheet(wb, bundle):
     first_tot = r
     for label, f, note in rows_:
         ws.cell(r, 1, label).font = B if label != 'target balance' else LABEL
+        ws.cell(r, 1).fill = F_ROWNAME
         c = ws.cell(r, 2, f)
         c.number_format, c.font = MONEY, B
         if f is None:
@@ -627,6 +635,7 @@ def _summary_sheet(wb, bundle):
     oh_row = r
     for label, now, f, fmt, how in rows:
         ws.cell(r, 1, label).font = B
+        ws.cell(r, 1).fill = F_ROWNAME
         c = ws.cell(r, 2, now); c.number_format, c.font = fmt, T
         if now is None:
             c.fill = F_NEEDED
@@ -673,6 +682,7 @@ def _summary_sheet(wb, bundle):
     I = S.get('info') or {}
     for label, key in (('Info due', 'info_due'), ('Consult', 'consult'), ('Our fees', 'fees')):
         ws.cell(r, 1, label).font = B
+        ws.cell(r, 1).fill = F_ROWNAME
         c = ws.cell(r, 2, I.get(key))
         c.font = T
         ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=6)
@@ -682,8 +692,36 @@ def _summary_sheet(wb, bundle):
         r += 1
 
 
+# The colour swatches Numbers offers (Format > Cell > Fill) come from the
+# file's theme. openpyxl writes Excel 2007's Office theme, whose faded blues,
+# reds and olives are what the lead advisor sees and dislikes. This swaps in
+# the bright colours of a sheet made in Numbers itself (the ones in his own
+# notes), so his fill dropdown offers those instead.
+NUMBERS_THEME = {
+    'dk2': '5E5E5E', 'lt2': 'D5D5D5',
+    'accent1': '00A2FF',   # blue
+    'accent2': '16E7CF',   # aqua
+    'accent3': '61D836',   # green
+    'accent4': 'FAE232',   # yellow
+    'accent5': 'FF644E',   # red
+    'accent6': 'EF5FA7',   # pink
+}
+
+
+def _numbers_theme():
+    import re as _re
+    from openpyxl.writer.theme import theme_xml
+    x = theme_xml.replace('<a:clrScheme name="Office">', '<a:clrScheme name="Numbers">')
+    for slot, hexv in NUMBERS_THEME.items():
+        x = _re.sub(r'(<a:%s>\s*<a:srgbClr val=")[0-9A-F]{6}(")' % slot,
+                    r'\g<1>%s\g<2>' % hexv, x)
+    x = x.replace('typeface="Calibri"', 'typeface="Helvetica Neue"')
+    return x
+
+
 def write(bundle, out):
     wb = Workbook()
+    wb.loaded_theme = _numbers_theme().encode('utf-8')
 
     # ---------------------------------------------------------- initial notes
     ws = wb.active
@@ -760,7 +798,8 @@ def write(bundle, out):
         for name, by_year, fmt in bundle.series:
             if name in in_oh_table:
                 continue
-            ws2.cell(r, 1, name).font = LABEL
+            ws2.cell(r, 1, name).font = ROWNAME
+            ws2.cell(r, 1).fill = F_ROWNAME
             col = 2
             prev_letter = None
             # A total annualizes; a ratio (a %, or anything per patient or

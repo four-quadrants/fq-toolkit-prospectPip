@@ -11,9 +11,10 @@ checklist verdicts, Claude's readings, the review decisions). Nobody opens
 them, and kept in the client folder they bury the documents the team does
 open. So they all live in one folder beside the clients:
 
-    Prospects/2026/Claude outputs/notes_Example, Jane.json
+    Prospects/2026/4.) Claude outputs/Example/notes_Example, Jane.json
 
-Same file name as before, with _<client> added. The client is the folder
+One subfolder per client, named by surname (a test copy gets
+"<Surname> - TEST"). Same file name as before, with _<client> added. The client is the folder
 name without its "due 11:6" date, so a folder later moved into
 "2.) Signed" keeps finding its files.
 
@@ -28,7 +29,7 @@ import re
 import shutil
 import sys
 
-OUT_DIR = 'Claude outputs'
+OUT_DIR = '4.) Claude outputs'
 _YEAR = re.compile(r'^\d{4}$')
 _DUE = re.compile(r'\s+due\s+\d{1,2}[:/]\d{1,2}\s*$', re.I)
 
@@ -60,8 +61,26 @@ def year_folder(folder):
         up = parent
 
 
+def _subfolder(folder):
+    name = client_name(folder)
+    sub = re.split(r'[,\s(]', name.strip())[0] or name
+    if re.search(r'-\s*TEST$', name, re.I):
+        sub += ' - TEST'
+    return sub
+
+
 def out_dir(folder):
-    return os.path.join(year_folder(folder), OUT_DIR)
+    """<year>/4.) Claude outputs/<Surname>. A subfolder the team already made
+    is used whatever its capitals ("SImpson" for "Simpson")."""
+    base = os.path.join(year_folder(folder), OUT_DIR)
+    want = _subfolder(folder)
+    try:
+        for d in os.listdir(base):
+            if d.lower() == want.lower() and os.path.isdir(os.path.join(base, d)):
+                return os.path.join(base, d)
+    except OSError:
+        pass
+    return os.path.join(base, want)
 
 
 def _legacy(folder, name):
