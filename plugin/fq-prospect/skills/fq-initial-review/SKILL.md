@@ -20,9 +20,13 @@ section "A short request means the whole step". The short version:
 
 1. **Find the client folder** under `Prospects/2026` by surname. Work in the
    live folder unless the analyst says test.
-2. **Read the whole folder first**: IC form, call notes (.eml, .pages,
-   scanned PDFs: look at handwriting yourself), the initial docs list, and
-   anything the team already made, such as their own initial notes.
+2. **Read the whole folder first, every file in it**: the IC form, the
+   sales lead's notes and the call transcript or Otter summary (.eml, .pages,
+   .pdf), the initial docs list, and anything the team already made. A
+   scanned or handwritten PDF has no text: render its pages and read them as
+   images (the sales lead writes priorities, payer details, family and
+   background in the margins). `notes.py` passes the text of every file it
+   can read; the handwriting is on you.
 3. **Run what is missing, in order.** No `launchbay_manifest.json`, or older
    than 3 days: run the fq-launchbay-pull skill. Documents not downloaded:
    `python3 fq_auditor/lb_fetch.py "<client folder>"`. Not filed: the
@@ -54,19 +58,27 @@ The notes are only as good as two files Claude writes into `_Audit`:
 What the lead advisor expects in every initial notes (format in
 `fq_auditor/doc_readings.py`):
 
-- **Patients = patients seen (visits)** from the day sheet or production
-  report, never the active patient count. If a count runs past the money
+- **Patients = patient VISITS in the period** ("patients seen" on a day
+  sheet). Never a unique, total or active patient count: if that is all they
+  sent, leave the row blank and note "wrong metric, need patient visits". If a count runs past the money
   figures (to Oct 30 against a P&L to Sep 30), set `counts.ytd_months` and
   note it on the row.
 - **`extra` rows** for the by-year tab: year-end bank balances, distributions
-  (draws, owner taxes, retirement) and professional fees, from the balance
-  sheets and P&Ls, one source per year. Mark a balance `"balance": true` (never
+  (draws, owner taxes, retirement) and "legal, accounting and consulting
+  (P&L)" (every such P&L line, summed: give `parts` per year), from the
+  balance sheets and P&Ls, one source per year. From the returns, with
+  `"basis": "tax"`: distributions (1120-S Schedule K 16d) and any loan to or
+  from the shareholder (Schedule L), noted as a question for the call.
+- **Depreciation includes amortization.** On a Schedule C the amortization
+  (patient records, goodwill) is in other expenses: `da_parts` takes both,
+  matching the preparer's depreciation summary grand total. Mark a balance `"balance": true` (never
   annualized), and give `ytd_months` when a row's newest year runs to a
   different month than the year-to-date column.
 - **`cash_light`**: each practice bank account, statement by statement (start,
   in, out, end, interest, transfers to the client's own accounts). Every
-  statement must balance. This is the light Stage 1 version, not the cash
-  flow analysis.
+  statement must balance. The sheet adds the monthly averages and the
+  all-accounts totals; the target balance is the lead advisor's to type.
+  This is the light Stage 1 version, not the cash flow analysis.
 - **Notes in depth wherever the call or the form said something:** what they
   said about their CPA, advisors, spouse, accounts, taxes, staff, and what
   they are torn between, each on its row.
@@ -85,8 +97,7 @@ What the lead advisor expects in every initial notes (format in
   new saving; if we know neither, planning-figure columns. Results: overhead
   falls 10.9% (relative) from the most recent completed tax return's overhead, savings x6.67, income = latest practice income
   base annualized x (1 - overhead with 4Q). Old notes on this key follow.
-- Older guidance for summary.json: areas to improve (drafted
-  from the flags, for the lead advisor to edit), averages (stated, average,
+- Older guidance for summary.json: averages (stated, average,
   use) and a savings projection (start, age, retirement age, paths: stated
   savings at 8.5%, +20% at 9%, and a conservative pair). If the client saves
   nothing (or gives no figure), never invent one: use two paths with
@@ -95,6 +106,18 @@ What the lead advisor expects in every initial notes (format in
 - **Notes** flag when the IC form does not add up (chairs) or the call notes
   disagree (dependents), and carry the call's details onto their rows
   (spouse, advisors, accounts, tax habits, what they are torn between).
+  The full list the lead advisor wants is in `notes.py` ("What the lead
+  advisor always wants noted"): the IC form's true/false answers both ways
+  (pains admitted AND answers the call contradicts), each spouse's ranked
+  priorities on "Dentist pain, their words", who they are NOT in network
+  with, spouse details on "Marital status", debt growth since the last
+  year-end balance sheet, short terms, a pending mortgage net of the home
+  sold, IBR resetting with income, collections projected against last year,
+  late or possibly unfinal returns.
+- **Areas to improve: leave `areas` out of summary.json.** The sheet writes
+  the three standard lines (overhead against the 60% target, savings, debt)
+  and leaves room; the lead advisor writes the rest. Give
+  `"overhead_target"` only when he has said a different target.
 - **Tax notes:** entity type, refunds rolled forward, late filings, amended
   returns not sent, quarterly estimates.
 

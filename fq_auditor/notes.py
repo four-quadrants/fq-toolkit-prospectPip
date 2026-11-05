@@ -64,26 +64,35 @@ NARRATIVE = ('case summary', 'call notes', 'call summary', 'notes',
              'transcript', 'consult offer', 'otter')
 
 
-def narrative_documents(folder, limit=3, chars=4000):
-    """The analyst-written documents in a client folder, as text."""
-    import glob as _glob
+def narrative_documents(folder, limit=12, chars=12000):
+    """Every file the team put in the client folder itself, as text.
+
+    Not only the ones named "call notes": the sales lead's notes, the call
+    transcript or Otter summary, the IC form (with anything written on it),
+    the consult-offer write-up. Whatever the team saved beside the client's
+    documents is read. The client's own documents (Documents/,
+    Original_sourcedocs/) and our outputs (_Audit/, Initial notes) are not.
+    A scanned or handwritten page has no text here: Claude reads those pages
+    as images in the session (see the fq-initial-review skill).
+    """
     out = []
-    seen = set()
-    for pattern in ('*.docx', '*.pdf', '*.txt', '*.pages'):
-        for path in _glob.glob(os.path.join(folder, '**', pattern),
-                               recursive=True):
-            name = os.path.basename(path).lower()
-            if not any(w in name for w in NARRATIVE):
-                continue
-            if 'initial notes' in name:
-                continue        # that is the output, not an input
-            key = os.path.basename(path)
-            if key in seen:
-                continue
-            seen.add(key)
-            text = _read_any(path)
-            if text and len(text.strip()) > 200:
-                out.append((key, ' '.join(text.split())[:chars]))
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return out
+    for key in names:
+        path = os.path.join(folder, key)
+        low = key.lower()
+        if key.startswith(('.', '_')) or os.path.isdir(path):
+            continue
+        if 'initial notes -' in low or low.endswith(('.json', '.csv', '.mp3',
+                                                      '.m4a', '.wav', '.xlsx',
+                                                      '.numbers', '.key',
+                                                      '.pptx', '.command')):
+            continue
+        text = _read_any(path)
+        if text and len(text.strip()) > 40:
+            out.append((key, ' '.join(text.split())[:chars]))
     return out[:limit]
 
 
@@ -108,6 +117,18 @@ def _read_any(path):
             text = '\n'.join(p.get_text() for p in doc)
             doc.close()
             return text
+        except Exception:
+            return ''
+    if path.lower().endswith('.eml'):
+        try:
+            import email as _email
+            from email import policy as _policy
+            with open(path, 'rb') as fh:
+                msg = _email.message_from_binary_file(fh, policy=_policy.default)
+            body = msg.get_body(preferencelist=('plain', 'html'))
+            text = body.get_content() if body is not None else ''
+            import re as _re
+            return _re.sub(r'<[^>]+>', ' ', text)
         except Exception:
             return ''
     try:
@@ -183,6 +204,28 @@ CLIENT: %s
 Reply with only JSON:
 %s
 
+What the lead advisor always wants noted (when the documents show it):
+- The IC form's true/false statements cut both ways. Note the pains they
+  admit, AND the answers the call or the figures contradict (says he does not
+  spend too much time on the business, says his balances are fine, says he
+  has never switched advisors). Put the sales lead's ranked priorities for
+  each spouse, from the call notes, on "Dentist pain, their words".
+- Anything the sales lead wrote by hand or said on the call that is not a
+  figure: payer details (who they are NOT in network with), background
+  (career before dentistry), family (a new baby, parents living with them),
+  plans (land, a new office, a new home). Put each on the line it belongs to.
+- Spouse details go on "Marital status", not on "Age".
+- Debt: how fast it grew (last year-end balance sheet against now), short
+  repayment terms that squeeze cash flow, pending loans (what a new mortgage
+  adds net of the home being sold), and student loans on income-based
+  repayment that will reset as income rises.
+- Collections projected against last year's actual.
+- Returns filed late, or a copy that may not be the final one (unsigned,
+  draft, no e-file acceptance): ask whether it is final.
+- Patients: the count the firm uses is patient VISITS in the period (day
+  sheets: "patients seen"). A unique-patient or active-patient count is the
+  wrong metric: say so on that row and ask for visits.
+
 How to choose what to write on:
 - The narrative documents above are somebody's account of this client, written
   after talking to them. Use them: they carry why the client is here and what
@@ -190,8 +233,8 @@ How to choose what to write on:
   document, and never let one override a figure read from a financial document.
 - ONLY lines where there is something to say. A figure that speaks for itself
   gets no note. Age, marital status, software, chair counts: no note.
-- An analyst writes roughly ten to fifteen notes on a client like this. If you
-  are writing thirty, you are padding.
+- An analyst writes roughly fifteen to twenty notes on a client like this. If
+  you are writing forty, you are padding.
 - The most valuable note is one document contradicting another. Write those
   first, on the line they belong to, ONCE. Do not repeat the same
   contradiction across six rows.

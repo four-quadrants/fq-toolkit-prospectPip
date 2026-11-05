@@ -157,7 +157,9 @@ def attach_notes(bundle, folder):
             continue
         if got.get('note'):
             fact.note = got['note']
-        fact.flags = list(got.get('flags') or ())[:2]
+        # Flags the code raised itself stay; the written ones add to them.
+        fact.flags = (list(fact.flags or ()) + [x for x in (got.get('flags') or ())
+                                                 if x not in (fact.flags or ())])[:2]
         fact.questions = list(got.get('questions') or ())[:2]
 
     labels = {f.label for f in bundle.all_facts()}
@@ -321,6 +323,15 @@ def gather(folder, client=None):
                     'and rebuild',
              why='Sizes the single easiest revenue lever'),
     ]
+    # Projected collections far from last year's actual is a talking point
+    # (the lead advisor writes "was just $872K in 2025; big difference").
+    _proj = _ic.money(form.get('collections_proj'))
+    _last = _ic.money(form.get('collections_last')) or p.get('income')
+    if _proj and _last and abs(_proj / _last - 1) >= 0.2:
+        for f in practice:
+            if f.label == 'Collections projected':
+                f.flags = ['Projects ${:,.0f} against ${:,.0f} last year ({:+.0%}); '
+                           'what drives the change?'.format(_proj, _last, _proj / _last - 1)]
 
     # ------------------------------------------------------------- overhead
     overhead = [
@@ -561,7 +572,7 @@ def gather(folder, client=None):
         ('gross collections', grosscol, MONEY),
         ('collection adjustments', coladj, MONEY),
         ('net collections', netcol, MONEY),
-        ('patients (procedures)', pats, NUM),
+        ('patient visits', pats, NUM),
         ('new patients', nps, NUM),
         ('days worked, all doctors', days, NUM),
     ]
@@ -654,7 +665,7 @@ def gather(folder, client=None):
         # Bank balances, distributions and fees sit with the overhead (the
         # lead advisor reads them beside the P&L), not in the metric list.
         overhead_extra.append((r['label'], dict(r['by_year']), bool(r.get('balance')),
-                               r.get('ytd_months'), r.get('note')))
+                               r.get('ytd_months'), r.get('note'), r.get('basis') or 'pnl'))
         if r.get('balance'):
             balance_rows.add(r['label'])
         if r.get('ytd_months'):
@@ -665,7 +676,7 @@ def gather(folder, client=None):
     bundle = Bundle(client, blocks, years, series, folder)
     # A count that runs longer than the money (new patients to Oct 30 against
     # a P&L to Sep 30) annualizes on its own months.
-    _cm = {'total_patients': 'patients (procedures)', 'new_patients': 'new patients'}
+    _cm = {'total_patients': 'patient visits', 'new_patients': 'new patients'}
     bundle.series_months = {_cm[k]: v for k, v in count_months.items() if k in _cm}
     bundle.series_months.update(extra_months)
     bundle.balance_rows = balance_rows

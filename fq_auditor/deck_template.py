@@ -218,7 +218,7 @@ def _series_inputs(bundle, folder):
         vals = ser.get(name) or {}
         ys = [y for y in sorted(vals) if vals.get(y) is not None and y < this_year]
         return [vals[y] for y in ys[-2:]] if len(ys) >= 2 else None
-    pats = ser.get('patients (procedures)') or {}
+    pats = ser.get('patient visits') or {}
     full = [y for y in sorted(pats) if pats.get(y) and y < this_year]
     if full:
         out['patients'] = pats[full[-1]]

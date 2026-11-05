@@ -226,6 +226,17 @@ def _schedule_c(text):
         for v in expenses:
             if v >= 1000 and ('%s' % format(int(v), ',')) in region:
                 dep = max(dep, v)
+    # Amortization (patient records, goodwill) sits in 'other expenses', not
+    # on line 13. The preparer's depreciation summary prints a grand total of
+    # depreciation AND amortization: use it when it is a little above line 13.
+    g = re.search(r'GRAND TOTAL[^\n]*DEPR', text, re.I)
+    if g and dep:
+        after = [_num(l) for l in text[g.end():g.end() + 400].split('\n')
+                 if NUMLINE.match(l.strip().rstrip('.'))]
+        for v in after:
+            if v and dep < v <= dep * 1.5:
+                dep = v
+                break
     oh = total - dep
     return {
         'income_base': round(gross, 2),

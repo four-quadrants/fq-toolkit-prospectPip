@@ -58,6 +58,7 @@ FIELDS = [
     ('chairs_hygiene',    r'how many are hygiene'),
     ('chairs_overflow',   r'how many are overflow'),
     ('in_network',        r'insurances in network'),
+    ('in_network_list',   r'list all in-network insurances'),
     ('has_associates',    r'do you have any associates'),
     ('associate_comp',    r'compensation structure for your associate'),
     ('overhead_stated',   r'approximate overhead percentage'),

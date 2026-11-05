@@ -443,8 +443,14 @@ def payer_mix(form):
     if not form.get('in_network'):
         return None
     yes = str(form['in_network']).strip().lower().startswith(('y', 'in'))
-    return ('In network with some carriers.' if yes
-            else 'Out of network, 100% fee for service.')
+    if not yes:
+        return 'Out of network, 100% fee for service.'
+    # Their own list says which carriers, and which ones they are NOT with
+    # (e.g. "all PPOs except Delta; no Medicaid"), which the advisor wants.
+    named = str(form.get('in_network_list') or '').strip()
+    if named:
+        return 'In network: %s' % named
+    return 'In network with some carriers.'
 
 
 FEE_PCT = re.compile(r'([+-]?\d{1,3}\.\d{1,2})\s*%')

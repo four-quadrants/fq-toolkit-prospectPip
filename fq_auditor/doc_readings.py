@@ -36,12 +36,17 @@ THE FILE (written by Claude, read here; years are strings)
  "tax": {"2025": {"source": "<file>", "form": "1120-S", "income_base": 0,
                   "total_deductions": 0, "officer_comp": 0,
                   "depreciation_amort": 0, "da_parts": [0],
+                  (da_parts: depreciation AND amortization. On a Schedule C
+                   amortization sits in other expenses, not line 13: use the
+                   preparer's depreciation summary grand total)
                   "net": 0}},
  "production": {"2025": {"months": 12, "reports": [
      {"source": "<file>", "provider": "<as printed>", "role": "doctor|hygiene",
       "production": 0, "adjustments": 0, "writeoffs": 0, "tot_prod": 0,
       "pt_income": 0, "ins_income": 0, "total_income": 0}]}},
  "counts": {"source": "<file>", "by_year": {"2025": {"total_patients": 0}}},
+     (total_patients is patient VISITS in the period, e.g. a day sheet's
+      "patients seen"; never a unique or active patient count)
      (a source of "LaunchBay portal comments" checks against what the
       client typed in the portal; counts.sources may name one per field,
       or "<field>_<year>" for one year)
@@ -335,8 +340,21 @@ def check(folder):
     for r in raw.get('extra') or ():
         src = r.get('source') or ''
         per = r.get('sources') or {}       # one document per year, when they differ
-        vals = {y: v for y, v in (r.get('by_year') or {}).items()
-                if need(per.get(y) or src, r.get('label') or 'row', v)}
+        # A row that adds several P&L lines (legal + accounting + consulting)
+        # gives its parts per year; each part must appear and they must sum.
+        parts = r.get('parts') or {}
+        vals = {}
+        for y, v in (r.get('by_year') or {}).items():
+            ps = parts.get(y)
+            if ps:
+                if need(per.get(y) or src, r.get('label') or 'row', *ps) \
+                        and _close(sum(ps), v):
+                    vals[y] = v
+                elif not _close(sum(ps), v):
+                    problems.append('%s %s: parts add to %.0f, not %.0f'
+                                    % (r.get('label'), y, sum(ps), v))
+            elif need(per.get(y) or src, r.get('label') or 'row', v):
+                vals[y] = v
         if vals:
             extra.append({'label': r.get('label'), 'by_year': vals,
                           'fmt': r.get('fmt') or 'money', 'source': src,
@@ -344,7 +362,10 @@ def check(folder):
                           # a balance is a point in time: never annualized
                           'balance': bool(r.get('balance')),
                           # months the newest year covers, when not the YTD column's
-                          'ytd_months': r.get('ytd_months')})
+                          'ytd_months': r.get('ytd_months'),
+                          # "tax": read from the returns, printed under the
+                          # tax basis (distributions, loans to shareholders)
+                          'basis': 'tax' if r.get('basis') == 'tax' else 'pnl'})
     good['extra'] = extra
 
     # ------------------------------------------------ light cash flow
