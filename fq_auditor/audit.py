@@ -61,9 +61,11 @@ def find_reviewed_checklist(folder, levels=3):
         # they read as something a person might tidy away. They belong in the
         # working folder; the top level is still checked so a client filed
         # before the move keeps working.
-        for cand in (_store.json_path(here, 'checklist_reviewed.json'),):
-            if os.path.exists(cand):
-                return cand
+        # Look without touching anything (store.find), and only resolve
+        # (and move an old copy in) where it is found: json_path on a level
+        # above the client would make a stray "Claude outputs" folder there.
+        if _store.find(here, 'checklist_reviewed.json'):
+            return _store.json_path(here, 'checklist_reviewed.json')
         parent = os.path.dirname(here)
         if parent == here:
             break
@@ -84,9 +86,11 @@ def find_tasks_file(folder, levels=3):
         # they read as something a person might tidy away. They belong in the
         # working folder; the top level is still checked so a client filed
         # before the move keeps working.
-        for cand in (_store.json_path(here, 'launchbay_tasks.json'),):
-            if os.path.exists(cand):
-                return cand
+        # Look without touching anything (store.find), and only resolve
+        # (and move an old copy in) where it is found: json_path on a level
+        # above the client would make a stray "Claude outputs" folder there.
+        if _store.find(here, 'launchbay_tasks.json'):
+            return _store.json_path(here, 'launchbay_tasks.json')
         parent = os.path.dirname(here)
         if parent == here:
             break

@@ -128,14 +128,20 @@ def download(url, dest, timeout=120):
 
 def fetch(client_folder, manifest_path=None, dry_run=False, quiet=False):
     client_folder = os.path.abspath(os.path.expanduser(client_folder))
+    # Handed Original_sourcedocs (or _Audit), use the client folder above it:
+    # the store resolves the manifest either way, so the step-up below would
+    # no longer happen and the documents would land one level too deep.
+    client_folder = _store.client_folder(client_folder)
     # Be forgiving about which folder we were handed. The manifest lives in the
     # CLIENT folder, but the app's folder picker points at the documents folder
     # inside it, and an operator choosing by hand may pick either. Given
     # Original_sourcedocs, step up rather than fail with "no manifest" while the
     # manifest sits one level away.
-    if not manifest_path and not os.path.exists(_store.json_path(client_folder, MANIFEST)):
+    # store.find looks without creating anything: json_path on the folder
+    # above a client would make a stray "Claude outputs" folder there.
+    if not manifest_path and not _store.find(client_folder, MANIFEST):
         parent = os.path.dirname(client_folder)
-        if os.path.exists(_store.json_path(parent, MANIFEST)):
+        if _store.find(parent, MANIFEST):
             client_folder = parent
     manifest_path = manifest_path or _store.json_path(client_folder, MANIFEST)
     if not os.path.exists(manifest_path):

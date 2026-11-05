@@ -374,7 +374,10 @@ def primary_year(text, doc_type=None):
     for scope in (head, text):
         years = plausible(re.findall(r'\b(20[0-3]\d)\b', scope))
         if years:
-            return max(set(years), key=years.count)
+            # On a tie the earlier year wins, and always the same one: set
+            # order changes between runs, and a 2024 return (prepared in 2025,
+            # both years printed equally often) was dated either way.
+            return max(sorted(set(years)), key=years.count)
     return None
 
 
