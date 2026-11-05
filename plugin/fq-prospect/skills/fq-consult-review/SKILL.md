@@ -26,6 +26,20 @@ and pulled in.
 
 ## Load
 
+Before seeding a NEW consult review, pull the analysis review in once more
+(fq-analysis-review, "pull in") so the answers typed on it since are carried:
+the consult review's Notes & questions tab lists everything asked and noted
+on the analysis review, with its answer, for the lead advisor to mark
+Answered well or Follow up (a follow-up becomes an open question). The
+Recommendations tab's **Add from the library** lists the whole library
+(`fq_auditor/recommendations_library.md`); what he adds there is pulled in
+like any other recommendation. A recommendation he writes himself (Add a
+recommendation) joins the library at pull-in and stays for every client
+after. When someone asks to take one out of the library, delete its `##`
+block from `recommendations_library.md` (and only that), and say which.
+The tab lists the client's suggested ones plus the firm's most common, about
+a dozen; everything else is under Add from the library.
+
 1. Find the toolkit and the client folder. Check `_Audit/review_pages.json` for
    an existing consult page (then this is a refresh).
 2. Seed with `--mode consult`. The seed carries over his decisions from the

@@ -61,10 +61,12 @@ FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client fol
 Never overwrite the lead advisor's work. Re-seed, then:
 - ArtifactData `get` plan/figures (note its version).
 - `update` plan/figures with ONLY the computed fields: `figures`, `findings`,
-  `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`
+  `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`,
+  `carried`, `note_done`, `library`
   (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
-  `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes` alone.
+  `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes`,
+  `assume_kind`, `an_assume_kind`, `qcustom`, `carried_marks` alone.
 - `set` plan/workings, plan/slides and every question doc.
 - Question ids are made from the question itself, so decisions stay attached.
 - Do not republish the page itself unless the page design changed (republishing
@@ -80,13 +82,19 @@ Never overwrite the lead advisor's work. Re-seed, then:
 3. It writes `_Audit/plan_inputs.json` (his figures, recommendations as the
    savings table) and `_Audit/review_decisions.json` (questions, wording,
    answers, notes, slide wording), and the follow-up email `.eml`.
-4. Read what it prints. **NOTES FROM THE LEAD ADVISOR** and **CLIENT ANSWERS**
+4. **Notes are acted on and recorded.** It prints NOTES TO ACT ON, each with
+   an id. Act on each (as below), then record what was done:
+   `python3 review_page.py noted "<client folder>" <id> "what was done"`.
+   That shows on the page's Notes & questions tab at the next refresh (re-seed
+   and update the computed fields). A comment marked as a question is not an
+   instruction: it is already in the email.
+5. Read what it prints. **NOTES FROM THE LEAD ADVISOR** and **CLIENT ANSWERS**
    are instructions from him: act on them before the deck is built (for
    example, a client answer that gives a loan balance goes into the plan inputs
    with `python3 inputs.py`, a note saying "hold the 401(k) until 2028" means
    checking the recommendation was moved to that year). Say plainly what was
    done about each one, and what could not be done.
-5. Tell the analyst the next step in the app.
+6. Tell the analyst the next step in the app.
 
 ## Do not
 

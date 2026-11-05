@@ -101,19 +101,17 @@ Not built yet; raise these when the work touches them.
 - **Planning figure** for clients who save nothing: ask the lead advisor
   whether he uses one, and make it the rule.
 
-From the team's showcase walkthrough (Nov 5), next up:
+From the team's showcase walkthrough (Nov 5), next up (done: a comment can
+be a note or a question to the client; Add a question on the Questions tab;
+a Notes & questions tab carried to the consult review; Add from the library
+on Recommendations. Keep the library tidy: merge near-duplicates):
 
-- **Analysis review: a note or a question.** The lead advisor can write
-  either on any section; marking it a question adds it to the Questions tab,
-  and so to the client email.
 - **Savings years as plan years.** Show savings in year 1, 2, 5, 8, 12
   (default) instead of 2026, 2027...; the advisor can change the years on
   the page.
 - **Add or remove deck slides** on the consult review, keeping the theme:
   remove any slide; add one from the template's layouts (a blank section
   slide, a bullets slide, a table slide) with his own title and text.
-- **Add a question** of his own on the Questions tab, not only edit the
-  drafted ones.
 
 ## Setting someone up
 

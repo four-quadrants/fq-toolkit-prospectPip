@@ -403,3 +403,52 @@ def _saved_candidates(folder):
         return _json.load(open(_store.json_path(folder, SAVED))).get('candidates') or []
     except (OSError, ValueError):
         return []
+
+
+# ---- the whole library, for the review page's "Add from the library" -------
+
+GROUPS = [
+    ('Savings and cash', ('current', 'personal_surplus', 'practice_surplus', 'llc_surplus',
+                          'new_401k', 'profit_share', 'five_k_rule')),
+    ('Tax and entity', ('pay_structure', 's_corp', 'tax_management')),
+    ('Debt', ('stop_acceleration', 'refinance', 'loan_dropoff', 'remove_pmi')),
+    ('Practice production', ('overhead', 'fees', 'adjustment', 'collections', 'new_patients',
+                             'hygiene', 'per_day', 'growth_trend', 'marketing_ends',
+                             'associate_change')),
+    ('Insurance and property', ('life_term', 'cash_values', 'sell_property')),
+]
+
+
+def library_entries():
+    """Every recommendation in the library, grouped, for the picker:
+    [{key, keys, label, group, when, signs, size, seen}]. One ## heading per
+    entry; the keys are the bracketed words in it."""
+    try:
+        text = open(LIBRARY).read()
+    except OSError:
+        return []
+    out = []
+    for block in re.split(r'\n(?=## )', text):
+        if not block.startswith('## '):
+            continue
+        head, _, body = block.partition('\n')
+        keys = re.findall(r'\[([a-z0-9_]+)\]', head)
+        label = re.sub(r'\s*\[[a-z0-9_]+\]', '', head[3:]).strip()
+        label = re.sub(r'\s+and\s*$', '', label)
+        fields = {}
+        cur = None
+        for line in body.split('\n'):
+            m = re.match(r'-\s*(When|Signs|Size|Seen):\s*(.*)', line)
+            if m:
+                cur = m.group(1).lower()
+                fields[cur] = m.group(2).strip()
+            elif cur and line.strip() and not line.startswith('#'):
+                fields[cur] += ' ' + line.strip()
+        group = next((g for g, ks in GROUPS if set(keys) & set(ks)), 'Added on past consults')
+        out.append({'key': keys[0] if keys else re.sub(r'[^a-z0-9]+', '_', label.lower())[:40],
+                    'keys': keys, 'label': label, 'group': group,
+                    'when': fields.get('when', ''), 'signs': fields.get('signs', ''),
+                    'size': fields.get('size', ''), 'seen': fields.get('seen', '')})
+    order = [g for g, _ in GROUPS] + ['Added on past consults']
+    out.sort(key=lambda e: order.index(e['group']))
+    return out

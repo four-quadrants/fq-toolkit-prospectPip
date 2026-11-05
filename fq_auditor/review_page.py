@@ -214,6 +214,27 @@ def apply(folder, plan_json):
            'analyst_assumption_notes': {k: v.strip() for k, v in
                                         (rec.get('an_assume_notes') or {}).items()
                                         if (v or '').strip()}}
+    out['custom_questions'] = custom_questions(rec)
+    # Drafted questions' wording, for the log (the page keeps only edits).
+    try:
+        with open(_store.json_path(folder, 'review_questions.json')) as fh:
+            _ids = json.load(fh)
+    except (OSError, ValueError):
+        _ids = {}
+    _rec = dict(rec, qtext=dict(rec.get('qtext') or {}))
+    for _q, _v in _ids.items():
+        if isinstance(_v, dict) and not _rec['qtext'].get(_q):
+            _rec['qtext'][_q] = _v.get('text') or ''
+    out['log'] = log_items(_rec)
+    if (rec.get('mode') or '') == 'analysis':
+        with open(_store.json_path(folder, 'analysis_log.json'), 'w') as fh:
+            json.dump({'read': out['read'], 'items': out['log']}, fh, indent=1)
+    waiting = [i for i in out['log'] if i['kind'] == 'note' and not i.get('done')]
+    if waiting:
+        print('   NOTES TO ACT ON, by id (after acting on one, record it: '
+              'python3 review_page.py noted "<client folder>" <id> "what was done"):')
+        for i in waiting:
+            print('     [%s] %s, %s: %s' % (i['id'], i['who'], i['about'], i['text']))
     # Slide wording: what was proposed, as edited, unless dropped.
     try:
         with open(_store.json_path(folder, 'review_slides.json')) as fh:
@@ -256,7 +277,8 @@ def apply(folder, plan_json):
             print('     ' + out['analyst_notes'])
         for k, v in sorted(out['analyst_assumption_notes'].items(),
                            key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
-            print('     - Assumptions %s (%s): %s' % (k, titles_an.get(str(k), ''), v))
+            print('     - Assumptions %s (%s)%s: %s' % (k, titles_an.get(str(k), ''),
+                  ' [a question to the client]' if (rec.get('an_assume_kind') or {}).get(k) == 'q' else '', v))
     if out['notes'] or notes or out['assumption_notes']:
         print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
         if out['notes']:
@@ -267,7 +289,8 @@ def apply(folder, plan_json):
                   ((rec.get('assumptions') or {}).get('sections') or ())}
         for k, v in sorted(out['assumption_notes'].items(),
                            key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
-            print('     - Assumptions %s (%s): %s' % (k, titles.get(str(k), ''), v))
+            print('     - Assumptions %s (%s)%s: %s' % (k, titles.get(str(k), ''),
+                  ' [a question to the client]' if (rec.get('assume_kind') or {}).get(k) == 'q' else '', v))
     # The follow-up email, now that he has said which questions go.
     try:
         import duediligence as _dd
@@ -289,6 +312,113 @@ def apply(folder, plan_json):
               % (sum(1 for v in out['slides'].values() if v),
                  sum(1 for v in out['slides'].values() if not v)))
     return changed
+
+
+CUSTOM_PREFIXES = ('aq_', 'lq_', 'c_', 'f_')
+
+
+def custom_questions(rec):
+    """Questions written on the page itself, as the page shows them: a
+    comment on an assumption marked "Question to the client" (the analyst's
+    or the lead advisor's), and any added with "Add a question". Each with
+    its decision and wording; empty ones are left out."""
+    qd, qt = rec.get('qdecisions') or {}, rec.get('qtext') or {}
+    titles = {str(x.get('number')): x.get('title') for x in
+              ((rec.get('assumptions') or {}).get('sections') or ())}
+    out = []
+    for kind, notes, prefix, who in (('an_assume_kind', 'an_assume_notes', 'aq_', 'the analyst'),
+                                     ('assume_kind', 'assume_notes', 'lq_', 'the lead advisor')):
+        for num, k in sorted((rec.get(kind) or {}).items()):
+            text = ((rec.get(notes) or {}).get(num) or '').strip()
+            if k != 'q' or not text:
+                continue
+            qid = prefix + str(num)
+            out.append({'id': qid, 'text': (qt.get(qid) or text).strip(),
+                        'decision': qd.get(qid) or 'Send',
+                        'why': 'From %s\'s comment on the assumptions' % who,
+                        'source': 'Assumptions %s%s' % (num, ': ' + titles[str(num)] if titles.get(str(num)) else '')})
+    for c in rec.get('qcustom') or ():
+        text = (qt.get(c.get('id')) or c.get('text') or '').strip()
+        if text:
+            out.append({'id': c.get('id'), 'text': text,
+                        'decision': qd.get(c.get('id')) or 'Send',
+                        'why': 'Added on the review page', 'source': c.get('by') or 'the review page'})
+    return out
+
+
+def _library():
+    try:
+        import recommendations as _r
+        return _r.library_entries()
+    except Exception as exc:                                 # noqa: BLE001
+        print('   recommendations library skipped: %s' % exc)
+        return []
+
+
+def log_items(rec):
+    """Every note and every question asked on a review page, with where it
+    stands, in the shape the Notes & questions tab shows. Kept at each pull
+    in, so the next page (and the next visit) can see what was asked and
+    whether the answer was good enough."""
+    titles = {str(x.get('number')): x.get('title') for x in
+              ((rec.get('assumptions') or {}).get('sections') or ())}
+    qd, qt, qa = rec.get('qdecisions') or {}, rec.get('qtext') or {}, rec.get('qanswers') or {}
+    done = rec.get('note_done') or {}
+    page = rec.get('mode') or 'consult'
+    items = []
+    for pre, notes, kinds, who in (('an', 'an_assume_notes', 'an_assume_kind', 'Analyst'),
+                                   ('ld', 'assume_notes', 'assume_kind', 'Lead advisor')):
+        for num, text in sorted((rec.get(notes) or {}).items(),
+                                key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
+            if not (text or '').strip():
+                continue
+            about = 'Assumptions %s%s' % (num, ': ' + titles[str(num)] if titles.get(str(num)) else '')
+            if (rec.get(kinds) or {}).get(num) == 'q':
+                qid = ('aq_' if pre == 'an' else 'lq_') + str(num)
+                items.append({'id': qid, 'kind': 'question', 'who': who, 'about': about,
+                              'text': (qt.get(qid) or text).strip(), 'decision': qd.get(qid) or 'Send',
+                              'answer': (qa.get(qid) or '').strip(), 'page': page})
+            else:
+                nid = '%s_a%s' % (pre, num)
+                items.append({'id': nid, 'kind': 'note', 'who': who, 'about': about,
+                              'text': text.strip(), 'done': done.get(nid) or '', 'page': page})
+    for nid, key, who in (('an_g', 'an_notes', 'Analyst'), ('ld_g', 'notes', 'Lead advisor')):
+        text = (rec.get(key) or '').strip()
+        if text:
+            items.append({'id': nid, 'kind': 'note', 'who': who, 'about': 'General notes',
+                          'text': text, 'done': done.get(nid) or '', 'page': page})
+    for c in rec.get('qcustom') or ():
+        qid = c.get('id')
+        text = (qt.get(qid) or c.get('text') or '').strip()
+        if text:
+            items.append({'id': qid, 'kind': 'question', 'who': c.get('by') or 'the review page',
+                          'about': 'Added on the Questions tab', 'text': text,
+                          'decision': qd.get(qid) or 'Send', 'answer': (qa.get(qid) or '').strip(),
+                          'page': page})
+    # The drafted questions that were asked, or answered on the page.
+    for qid, d in sorted(qd.items()):
+        if qid.startswith(CUSTOM_PREFIXES):
+            continue
+        if d == 'Send' or (qa.get(qid) or '').strip():
+            items.append({'id': qid, 'kind': 'question', 'who': 'Drafted by the toolkit',
+                          'about': 'Follow-up questions', 'text': (qt.get(qid) or '').strip(),
+                          'decision': d, 'answer': (qa.get(qid) or '').strip(), 'page': page})
+    return items
+
+
+def noted(folder, nid, text):
+    """Record what was done about a note (Claude, after acting on it), so the
+    Notes & questions tab can show it at the next refresh."""
+    p = _store.json_path(folder, 'review_notes_done.json')
+    try:
+        with open(p) as fh:
+            got = json.load(fh)
+    except (OSError, ValueError):
+        got = {}
+    got[nid] = text.strip()
+    with open(p, 'w') as fh:
+        json.dump(got, fh, indent=1)
+    print('noted %s: %s' % (nid, text.strip()))
 
 
 def decisions(folder):
@@ -318,8 +448,8 @@ def decisions(folder):
     # edit made to the old question 1, the tax returns, arrived after the
     # refresh had made question 1 the mortgage); the words say which it was.
     for qid, t in (got.get('qtext') or {}).items():
-        if not (t or '').strip():
-            continue
+        if not (t or '').strip() or qid.startswith(CUSTOM_PREFIXES):
+            continue        # a question written on the page is its own question
         w = words(t)
         best, score = qid if qid in keys else None, -1.0
         for other, txt in texts.items():
@@ -602,6 +732,7 @@ def seed(folder, outdir, mode='consult'):
             'decided': {}, 'qdecisions': {}, 'qtext': {},
             'sdecisions': {}, 'stext': {}, 'qanswers': {}, 'notes': '',
             'recommendations': recs, 'recs': {}, 'recs_custom': [],
+            'library': _library() if mode == 'consult' else [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,
@@ -631,6 +762,25 @@ def seed(folder, outdir, mode='consult'):
             plan['qdecisions'][qid] = d
         if qid and t:
             plan['qtext'][qid] = t
+    try:
+        with open(_store.json_path(folder, 'review_notes_done.json')) as fh:
+            plan['note_done'] = json.load(fh)
+    except (OSError, ValueError):
+        plan['note_done'] = {}
+    plan['carried'] = []
+    if mode == 'consult':
+        try:
+            with open(_store.json_path(folder, 'analysis_log.json')) as fh:
+                carried = json.load(fh).get('items') or []
+        except (OSError, ValueError):
+            carried = []
+        by_docs = {(x.get('text') or '').strip() for x in answered_by_docs}
+        for it in carried:
+            if it['kind'] == 'note' and plan['note_done'].get(it['id']):
+                it['done'] = plan['note_done'][it['id']]
+            if it['kind'] == 'question' and it.get('text', '').strip() in by_docs:
+                it['by_docs'] = True
+        plan['carried'] = carried
     plan['notes'] = prev_all.get('notes') or ''
     plan['assume_notes'] = prev_all.get('assumption_notes') or {}
     plan['an_notes'] = prev_all.get('analyst_notes') or ''
@@ -900,9 +1050,15 @@ def main():
     a_ = sub.add_parser('apply')
     a_.add_argument('folder')
     a_.add_argument('plan_json')
+    n_ = sub.add_parser('noted', help='record what was done about a note')
+    n_.add_argument('folder')
+    n_.add_argument('id')
+    n_.add_argument('text')
     a = ap.parse_args()
     if a.cmd == 'seed':
         seed(a.folder, a.out, a.mode)
+    elif a.cmd == 'noted':
+        noted(a.folder, a.id, a.text)
     else:
         apply(a.folder, a.plan_json)
 

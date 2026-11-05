@@ -102,7 +102,11 @@ When the page's `stage` is `lead` and he has pressed Done:
 1. Pull in (mechanics: Pulling in).
 2. Report: how many questions he marked Send / Answered / Strike, his notes
    and section comments, and that the email is on the page's Email tab, to
-   copy into Outlook.
+   copy into Outlook. A comment on an assumption can be a **Note** (for the
+   team; act on it) or a **Question to the client** (it is already on the
+   Questions tab and in the email; do not also treat it as an instruction).
+   Questions he added with **Add a question** are in the email too; the pull
+   in lists them as `custom_questions` in review_decisions.json.
 3. Next step for the analyst: the email goes to the client; when answers come
    back, new documents go through intake and an update; typed answers go in
    the boxes under each question on this page; then load the consult review.

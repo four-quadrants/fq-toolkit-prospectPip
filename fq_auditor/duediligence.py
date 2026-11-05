@@ -338,6 +338,15 @@ def write(folder, outdir=None):
             d3, t3 = page[key]
             dec, q = (d3 or dec), (t3 or q)
         rows.append([key, q, why, src, pri, dec])
+    # Questions written on the review page itself (a comment marked as a
+    # question, or one he added), as he left them.
+    try:
+        with open(_store.json_path(folder, 'review_decisions.json')) as fh:
+            for c in json.load(fh).get('custom_questions') or ():
+                rows.append([c['id'], c['text'], c.get('why') or '', c.get('source') or '',
+                             'Normal', c.get('decision') or SEND])
+    except (OSError, ValueError, KeyError):
+        pass
     order = {'High': 0, 'Normal': 1}
     # Documents and accounts first, savings last, as the lead advisor orders them.
     rows.sort(key=lambda r: (r[0] == 'savings', r[0] == 'capacity',

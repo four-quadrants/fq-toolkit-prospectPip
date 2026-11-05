@@ -105,6 +105,28 @@ tr.off td{opacity:.55}
 .m-c{display:none} body:not(.mode-analysis) .m-a{display:none} body:not(.mode-analysis) .m-c{display:inline}
 .tabs .tc{font-weight:400;opacity:.8;font-size:12px}
 section[data-tab].tab-off{display:none}
+.akind[hidden]{display:none}
+.nitem{padding:12px 14px;margin-bottom:10px}
+.nitem .nhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.nitem .ntext{margin:6px 0;white-space:pre-wrap}
+.nitem .nstat{font-size:14px}
+.nitem .nstat.ok{color:var(--ok)} .nitem .nstat.wait{color:var(--accent)}
+.nitem .seg button[aria-pressed="true"][data-cm="ok"]{background:var(--ok)}
+.nitem .seg button[aria-pressed="true"][data-cm="follow"]{background:var(--accent)}
+.nitem.follow{border-left:4px solid var(--accent)} .nitem.okd{border-left:4px solid var(--ok)}
+.chip.qk{background:var(--accent-soft)} .chip.nk{background:var(--off-soft)}
+#libpanel{margin-top:12px;padding:12px 14px}
+#libpanel input{width:100%;font:16px var(--body);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
+#liblist{max-height:460px;overflow:auto}
+.libg{font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.libi{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.libi .lt{flex:1} .libi .lt b{display:block} .libi .basis{font-size:13px}
+.libi button{white-space:nowrap}
+.akind{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.akind .seg{margin-left:0}
+.akind .seg button{font-size:13px;padding:4px 10px}
+.akind .seg button[aria-pressed="true"][data-kind="n"]{background:#6B7683}
+.akind .seg button[aria-pressed="true"][data-kind="q"]{background:var(--accent)}
 .asec{padding:0;overflow:hidden}
 .asec .ahead{display:flex;gap:10px;align-items:baseline;background:var(--ink);color:var(--card);padding:8px 14px;font:600 15px var(--display);letter-spacing:.02em}
 .asec .ahead .n{color:var(--accent);font-weight:700}
@@ -183,6 +205,7 @@ tr.off td{opacity:.55}
     <button type="button" data-tabgo="recs" data-modes="consult" aria-selected="false">4 Recommendations <span class="tc" id="tc-recs"></span></button>
     <button type="button" data-tabgo="proj" data-modes="consult" aria-selected="false">5 Projections</button>
     <button type="button" data-tabgo="slides" data-modes="consult" aria-selected="false">6 Slides <span class="tc" id="tc-slides"></span></button>
+    <button type="button" data-tabgo="notes" data-modes="analysis consult" aria-selected="false"><span class="m-a">5</span><span class="m-c">7</span> Notes &amp; questions <span class="tc" id="tc-notes"></span></button>
   </nav>
 
   <section data-tab="assume">
@@ -225,13 +248,17 @@ tr.off td{opacity:.55}
 
   <section id="recsec" data-tab="recs">
     <h2>Recommendations <small id="reccount"></small></h2>
-    <p class="note">The firm's usual recommendations, from past consults. The ones this client's documents point to are ticked, with the figure and the reason. Untick what does not fit, tick anything else that does and fill in its figures, or add your own. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
+    <p class="note">The recommendations this client's documents point to are ticked, with the figure and the reason, alongside the firm's most common ones. Untick what does not fit, tick anything else that does and fill in its figures. <b>Add from the library</b> brings in any other recommendation the firm has used; <b>Add a recommendation</b> writes a new one, and it joins the library for every client after this one. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
     <div class="wi-results" id="recimpact" style="margin-bottom:14px"></div>
     <div class="card ledger"><table>
       <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
       <tbody id="recs"><tr><td colspan="5" class="empty">The recommendations appear here once the analyst loads them.</td></tr></tbody>
     </table>
-    <div class="row-actions"><button type="button" id="recadd" class="ghost-btn">Add a recommendation</button></div></div>
+    <div class="row-actions"><button type="button" id="recfromlib" class="primary-btn">Add from the library</button> <button type="button" id="recadd" class="ghost-btn">Add a recommendation</button></div></div>
+    <div id="libpanel" class="card" hidden>
+      <input type="search" id="libsearch" placeholder="Search the library: fee, 401(k), refinance, PMI..." aria-label="Search the recommendations library">
+      <div id="liblist"></div>
+    </div>
   </section>
 
   <section id="workings" data-tab="proj">
@@ -279,6 +306,12 @@ tr.off td{opacity:.55}
     <p class="note"><b>First, before the plan.</b> Mark each question; once you are done, the analyst asks Claude to pull in the questions and the email goes to the client. When answers come back (portal, email or new documents), record them here or the team files the documents; the analyst then asks Claude to refresh this page, and the plan, recommendations and slides are worked out again with the answers in, keeping everything you already decided.<br><b>Send</b>: goes in the email to the client. <b>Answered</b>: the team settled it from the file, so it is not asked. <b>Strike</b>: not needed, drop it. <b>Check first</b>: look before deciding. Edit the wording freely.</p>
     <div id="answered" class="card pad" style="display:none;margin-bottom:14px"></div>
     <div class="qs" id="qs"><div class="card empty">The questions appear here once the analyst loads them.</div></div>
+  </section>
+
+  <section data-tab="notes">
+    <h2>Notes &amp; questions <small id="ncount"></small></h2>
+    <p class="note">Everything written on this review, in one place: every note for the team and every question to the client, who wrote it, what it is about, and where it stands. A <b>note</b> is acted on by Claude when the review is pulled in; what was done shows here after the next refresh. A <b>question</b> shows whether it was sent, the client's answer, or that documents settled it. On the consult review, everything from the analysis review is listed first: mark each <b>Answered well</b> or <b>Follow up</b> (a follow-up goes on the Open questions tab).</p>
+    <div id="notesbox"><div class="card empty">Nothing written on this review yet.</div></div>
   </section>
 </div>
 
@@ -454,13 +487,43 @@ function fqModel(P){
     }
   });
 
+  // Questions written on the page: a comment on an assumption marked
+  // "Question to the client", and any added with "Add a question". They sit
+  // with the drafted ones, so they get Send / Answered / Strike and go in
+  // the email like the rest.
+  function extraQs(){
+    if(!plan) return [];
+    var out=[], titles={};
+    ((plan.assumptions&&plan.assumptions.sections)||[]).forEach(function(s){ titles[s.number]=s.title; });
+    [['an_assume_kind','an_assume_notes','aq_','the analyst\u2019s comment'],
+     ['assume_kind','assume_notes','lq_','the lead advisor\u2019s comment']].forEach(function(f){
+      var kind=plan[f[0]]||{}, notes=plan[f[1]]||{};
+      Object.keys(kind).forEach(function(num){
+        var t=(notes[num]||'').trim();
+        if(kind[num]!=='q'||!t) return;
+        out.push({id:f[2]+num, text:t, why:'From '+f[3]+' on the assumptions', source:'Assumptions '+num+(titles[num]?': '+titles[num]:''), priority:'Normal', decision:'Send', custom:true});
+      });
+    });
+    (plan.qcustom||[]).forEach(function(c){
+      out.push({id:c.id, text:c.text||'', why:(c.by&&/follow/.test(c.by))?'Following up on the analysis review':'Added on this page', source:c.by||'the review page', priority:'Normal', decision:'Send', custom:true});
+    });
+    return out;
+  }
+  function allQs(){
+    var list=qs.concat(extraQs()), n=0;
+    list.forEach(function(q){ n=Math.max(n,(+q.n)||0); });
+    list.forEach(function(q){ if(q.custom) q.n=++n; });
+    return list;
+  }
   function renderQs(){
     setTimeout(function(){ showEmail(false); },0);
     var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
+    var qs=allQs();
     qs.forEach(function(q){ if(qd[q.id]) q.decision=qd[q.id]; if(qt[q.id]!=null) q.text=qt[q.id]; });
     var send=qs.filter(function(q){return q.decision==='Send'}).length;
     $('qcount').textContent=qs.length?(send+' of '+qs.length+' going in the email'):'';
-    if(!qs.length) return;
+    var addbtn='<button type="button" id="qadd" class="primary-btn" style="margin-top:12px">+ Add a question</button>';
+    if(!qs.length){ $('qs').innerHTML='<div class="card empty">The questions appear here once the analyst loads them.</div>'+addbtn; return; }
     $('qs').innerHTML=qs.map(function(q){
       var d=q.decision||'Send';
       var b=function(name,cls){return '<button type="button" class="'+cls+'" data-id="'+esc(q.id)+'" data-d="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
@@ -468,13 +531,14 @@ function fqModel(P){
         (q.priority==='High'?'<span class="chip hi">Priority</span>':'')+
         (d==='Check first'?'<span class="chip">Check first</span>':'')+
         '<span class="seg">'+b('Send','send')+b('Answered','answered')+b('Strike','strike')+'</span></div>'+
-        '<textarea id="q-'+esc(q.id)+'" data-id="'+esc(q.id)+'" rows="3" aria-label="Question '+esc(q.n)+'">'+esc(q.text)+'</textarea>'+
+        '<textarea id="q-'+esc(q.id)+'" data-id="'+esc(q.id)+'" rows="3"'+(q.custom?' placeholder="Type the question as the client should read it"':'')+' aria-label="Question '+esc(q.n)+'">'+esc(q.text)+'</textarea>'+
         '<textarea class="qans" data-qa="'+esc(q.id)+'" rows="2" placeholder="The client\'s answer, when it comes back" aria-label="Answer to question '+esc(q.n)+'">'+esc(((plan&&plan.qanswers)||{})[q.id]||'')+'</textarea>'+
-        '<div class="why">Why: '+esc(q.why)+' <span>· '+esc(q.source)+'</span></div></div>';
-    }).join('');
+        '<div class="why">'+(q.custom?'<span class="chip">Added</span> ':'')+'Why: '+esc(q.why)+' <span>· '+esc(q.source)+'</span></div></div>';
+    }).join('')+addbtn;
     $('qs').querySelectorAll('textarea').forEach(function(el){
       el.addEventListener('input',function(){
-        var q=qs.find(function(x){return x.id===el.dataset.id}); q.text=el.value;
+        if(!el.dataset.id) return;
+        var q=allQs().find(function(x){return x.id===el.dataset.id}); if(!q) return; q.text=el.value;
         plan.qtext=plan.qtext||{}; plan.qtext[q.id]=q.text; pending.qt=true;
         debounce('qt',function(){ write('plan/figures',{qtext:plan.qtext},function(){pending.qt=false;},'Question '+q.n+' reworded'); });
       });
@@ -526,14 +590,23 @@ function fqModel(P){
   function renderRecs(){
     if(!plan||!plan.recommendations) return;
     var st=plan.recs||{}, cu=plan.recs_custom||[];
-    var rows=plan.recommendations.map(function(r){ return {r:r, k:r.key, custom:false}; })
+    // The list starts short: what this client's documents point to, what he
+    // has touched, and the firm's most common ones, up to about a dozen.
+    // Everything else is one search away under Add from the library.
+    var COMMON=['current','five_k_rule','overhead','personal_surplus','practice_surplus','pay_structure',
+                'fees','tax_management','refinance','stop_acceleration','new_401k','life_term'];
+    var base=plan.recommendations.filter(function(r){ return r.suggested; });
+    COMMON.forEach(function(k){ if(base.length>=12) return;
+      var r=plan.recommendations.find(function(x){return x.key===k}); if(r && base.indexOf(r)<0) base.push(r); });
+    plan.recommendations.forEach(function(r){ if((r.key in st) && base.indexOf(r)<0) base.push(r); });
+    var rows=base.map(function(r){ return {r:r, k:r.key, custom:false}; })
       .concat(cu.map(function(c,i){ return {r:c, k:'custom_'+i, custom:true}; }));
     var on=0;
     $('recs').innerHTML=rows.map(function(x){
       var r=x.r, s=st[x.k]||{}, inv=r.invested||[];
       var isOn=('on' in s)?s.on:(x.custom||r.suggested); if(isOn) on++;
       var v=function(f,def){ return esc(s[f]!=null?s[f]:def); };
-      var lab=x.custom?'<input type="text" class="rl" data-rk="'+x.k+'" data-f="label" value="'+v('label',r.label||'')+'" placeholder="Your recommendation" aria-label="Recommendation">':
+      var lab=x.custom?'<input type="text" class="rl" data-rk="'+x.k+'" data-f="label" value="'+v('label',r.label||'')+'" placeholder="Your recommendation" aria-label="Recommendation">'+(r.basis?'<div class="basis">'+esc(r.basis)+'</div>':''):
         '<b>'+esc(s.label||r.label)+'</b>'+(r.basis?'<div class="basis">'+esc(r.basis)+'</div>':'')+'';
       // Buttons, not a dropdown: in the Claude app's viewer a dropdown's
       // choice never reached the page (found 29 Oct).
@@ -679,7 +752,10 @@ function fqModel(P){
       var theirs=((plan.an_assume_notes||{})[s.number])||'';
       if(!isAnalyst()&&theirs.trim()) h+='<div class="anfrom"><b>\u270e Analyst\u2019s note</b>'+esc(theirs)+'</div>';
       var an=mine[s.number]||'';
+      var kf=isAnalyst()?'an_assume_kind':'assume_kind', isq=((plan[kf]||{})[s.number]==='q');
       h+='<textarea class="anote'+(an.trim()?' set':'')+'" data-an="'+s.number+'" rows="1" placeholder="'+(isAnalyst()?'Your check: anything wrong, missing or to fix (Claude reads this)':'Your comment on this section (a change, a question, a correction)')+'" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
+      h+='<div class="akind" data-kn="'+s.number+'"'+(an.trim()?'':' hidden')+'><span class="seg"><button type="button" data-kind="n" data-num="'+s.number+'" aria-pressed="'+(!isq)+'">Note</button><button type="button" data-kind="q" data-num="'+s.number+'" aria-pressed="'+isq+'">Question to the client</button></span>'+
+        '<span class="basis">'+(isq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
       h+='</div></div>';
     });
     var S=A.summary||{};
@@ -698,8 +774,151 @@ function fqModel(P){
     var f=isAnalyst()?'an_assume_notes':'assume_notes';
     plan[f]=plan[f]||{}; plan[f][el.dataset.an]=el.value; pending.an=true;
     el.classList.toggle('set',!!el.value.trim());
+    // The Note / Question switch shows once there is a comment to sort.
+    var sw=document.querySelector('.akind[data-kn="'+el.dataset.an+'"]'); if(sw) sw.hidden=!el.value.trim();
+    var kf=isAnalyst()?'an_assume_kind':'assume_kind';
+    if(((plan[kf]||{})[el.dataset.an])==='q') debounce('qre',function(){ renderQs(); });
+    debounce('nt',function(){ renderNotes(); });
     debounce('an',function(){ var patch={}; patch[f]=plan[f]; write('plan/figures',patch,function(){pending.an=false;},'comment on assumption '+el.dataset.an); });
   });
+
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('button[data-kind]'); if(!b||!plan) return;
+    var f=isAnalyst()?'an_assume_kind':'assume_kind', num=b.dataset.num;
+    plan[f]=plan[f]||{}; plan[f][num]=b.dataset.kind; pending.kind=true;
+    var patch={}; patch[f]=plan[f];
+    write('plan/figures',patch,function(){pending.kind=false;},
+          b.dataset.kind==='q'?'comment on assumption '+num+' is now a question':'comment on assumption '+num+' is a note');
+    renderAssume(); renderQs(); renderNotes(); applyMode();
+  });
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='qadd'||!plan) return;
+    var id='c_'+Date.now().toString(36);
+    plan.qcustom=(plan.qcustom||[]).concat([{id:id, by:isAnalyst()?'the analyst':'the lead advisor'}]); pending.qc=true;
+    write('plan/figures',{qcustom:plan.qcustom},function(){pending.qc=false;},'question added');
+    renderQs(); applyMode();
+    var t=document.getElementById('q-'+id); if(t){ t.placeholder='Type the question as the client should read it'; t.focus(); }
+  });
+
+  // ---- notes & questions ---------------------------------------------------
+  function liveItems(){
+    if(!plan) return [];
+    var titles={}; ((plan.assumptions&&plan.assumptions.sections)||[]).forEach(function(s){ titles[s.number]=s.title; });
+    var qd=plan.qdecisions||{}, qt=plan.qtext||{}, qa=plan.qanswers||{}, dn=plan.note_done||{}, out=[];
+    [['an','an_assume_notes','an_assume_kind','Analyst'],['ld','assume_notes','assume_kind','Lead advisor']].forEach(function(f){
+      var notes=plan[f[1]]||{}, kind=plan[f[2]]||{};
+      Object.keys(notes).sort(function(a,b){return (+a)-(+b)}).forEach(function(num){
+        var t=(notes[num]||'').trim(); if(!t) return;
+        var about='Assumptions '+num+(titles[num]?': '+titles[num]:'');
+        if(kind[num]==='q'){ var id=(f[0]==='an'?'aq_':'lq_')+num;
+          out.push({id:id,kind:'question',who:f[3],about:about,text:qt[id]!=null&&qt[id]!==''?qt[id]:t,decision:qd[id]||'Send',answer:qa[id]||''}); }
+        else out.push({id:f[0]+'_a'+num,kind:'note',who:f[3],about:about,text:t,done:dn[f[0]+'_a'+num]||''});
+      });
+    });
+    [['an_g','an_notes','Analyst'],['ld_g','notes','Lead advisor']].forEach(function(f){
+      var t=(plan[f[1]]||'').trim(); if(t) out.push({id:f[0],kind:'note',who:f[2],about:'General notes',text:t,done:dn[f[0]]||''});
+    });
+    allQs().forEach(function(q){
+      if(/^(aq_|lq_)/.test(q.id)) return;
+      var d=qd[q.id]||q.decision||'Send', t=(qt[q.id]!=null?qt[q.id]:q.text)||'';
+      if(!String(t).trim()) return;
+      if(!q.custom && d!=='Send' && !(qa[q.id]||'').trim()) return;
+      out.push({id:q.id,kind:'question',who:q.custom?(q.source||'the review page'):'Drafted by the toolkit',about:q.custom?(/^f_/.test(q.id)?'Follow-up from the analysis review':'Added on the Questions tab'):'Follow-up questions',text:t,decision:d,answer:qa[q.id]||''});
+    });
+    return out;
+  }
+  function nstatus(it){
+    if(it.kind==='note') return it.done?['ok','Done: '+it.done]:['wait','Claude acts on this when the review is pulled in'];
+    if(it.decision==='Strike') return ['', 'Struck: not asked'];
+    if(it.decision==='Answered') return ['ok','Settled from the file, not asked'];
+    if((it.answer||'').trim()) return ['ok','Client\u2019s answer: '+it.answer];
+    if(it.by_docs) return ['ok','Answered by documents received since'];
+    if(it.decision==='Check first') return ['wait','Check first, then decide'];
+    return ['wait','In the email; waiting for the answer'];
+  }
+  function nitem(it,carried){
+    var st=nstatus(it), cm=((plan.carried_marks||{})[it.id])||'';
+    return '<div class="card nitem'+(carried?(cm==='follow'?' follow':cm==='ok'?' okd':''):'')+'">'+
+      '<div class="nhead"><span class="chip '+(it.kind==='question'?'qk':'nk')+'">'+(it.kind==='question'?'Question':'Note')+'</span><b>'+esc(String(it.who||'').charAt(0).toUpperCase()+String(it.who||'').slice(1))+'</b> \u00b7 '+esc(it.about)+'</div>'+
+      '<div class="ntext">'+esc(it.text)+'</div>'+
+      '<div class="nstat '+st[0]+'">'+esc(st[1])+'</div>'+
+      (carried?'<div style="margin-top:8px"><span class="seg" style="margin-left:0"><button type="button" data-cm="ok" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='ok')+'">Answered well</button><button type="button" data-cm="follow" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='follow')+'">Follow up</button></span></div>':'')+
+      '</div>';
+  }
+  function renderNotes(){
+    var el=$('notesbox'); if(!el||!plan) return;
+    var car=(plan.mode==='consult')?(plan.carried||[]):[];
+    // The consult review starts with the analysis review's notes in its own
+    // boxes; list each once, under where it came from.
+    var seen={}; car.forEach(function(it){ seen[(it.text||'').trim()]=1; });
+    var live=liveItems().filter(function(it){ return !seen[(it.text||'').trim()]; });
+    var h='';
+    if(car.length){
+      var open=car.filter(function(it){ return !((plan.carried_marks||{})[it.id]); }).length;
+      h+='<h3>From the analysis review <small>'+open+' of '+car.length+' not yet marked</small></h3>'+car.map(function(it){ return nitem(it,true); }).join('');
+      h+='<h3 style="margin-top:22px">On this review</h3>';
+    }
+    h+=live.length?live.map(function(it){ return nitem(it,false); }).join(''):'<div class="card empty">Nothing written on this review yet.</div>';
+    el.innerHTML=h;
+    var n=live.length+car.length;
+    $('ncount').textContent=n?(n+' item'+(n===1?'':'s')):'';
+    var tc=$('tc-notes'); if(tc) tc.textContent=n?'\u00b7 '+n:'';
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('button[data-cm]'); if(!b||!plan) return;
+    var id=b.dataset.cid, mark=b.dataset.cm, it=(plan.carried||[]).find(function(x){return x.id===id});
+    plan.carried_marks=plan.carried_marks||{};
+    plan.carried_marks[id]=(plan.carried_marks[id]===mark)?'':mark; pending.cm=true;
+    var patch={carried_marks:plan.carried_marks}, fid='f_'+id;
+    var cu=(plan.qcustom||[]).filter(function(c){ return c.id!==fid; });
+    if(plan.carried_marks[id]==='follow' && it){
+      cu.push({id:fid, by:'follow-up from the analysis review', text:'Following up on '+(it.kind==='question'?'our earlier question':'an earlier note')+': '+it.text});
+    }
+    if(cu.length!==(plan.qcustom||[]).length || plan.carried_marks[id]==='follow'){ plan.qcustom=cu; patch.qcustom=cu; pending.qc=true; }
+    write('plan/figures',patch,function(){pending.cm=false;pending.qc=false;},
+          plan.carried_marks[id]==='follow'?'marked for follow-up; it is on the Open questions tab':(plan.carried_marks[id]==='ok'?'marked answered well':'mark cleared'));
+    renderNotes(); renderQs(); applyMode();
+  });
+
+  // ---- recommendations library -------------------------------------------
+  var LIBOPEN=false;
+  function libStatus(e){
+    var st=plan.recs||{};
+    var row=(plan.recommendations||[]).find(function(r){ return (e.keys||[e.key]).indexOf(r.key)>=0; });
+    if(row){ var s=st[row.key]||{}; var on=('on' in s)?s.on:row.suggested; return on?'in':'tick:'+row.key; }
+    var cu=(plan.recs_custom||[]).some(function(c){ return c.lib===e.key; });
+    return cu?'in':'add';
+  }
+  function renderLib(){
+    var p=$('libpanel'); if(!p) return; p.hidden=!LIBOPEN; if(!LIBOPEN||!plan) return;
+    var q=($('libsearch').value||'').toLowerCase().trim(), lib=plan.library||[], h='', g='';
+    var shown={}; Array.prototype.forEach.call(document.querySelectorAll('#recs [data-rk]'),function(x){ shown[x.dataset.rk]=1; });
+    var hits=lib.filter(function(e){
+      if(q) return (e.label+' '+e.when+' '+e.signs+' '+e.size+' '+e.group).toLowerCase().indexOf(q)>=0;
+      // Unsearched, list only what is not already in the table above.
+      return !(e.keys||[e.key]).some(function(k){ return shown[k]; }) && libStatus(e)!=='in';
+    });
+    hits.forEach(function(e){
+      if(e.group!==g){ g=e.group; h+='<div class="libg">'+esc(g)+'</div>'; }
+      var s=libStatus(e);
+      h+='<div class="libi"><div class="lt"><b>'+esc(e.label)+'</b><div class="basis">When: '+esc(e.when)+'</div>'+(e.size?'<div class="basis">Sized: '+esc(e.size)+'</div>':'')+'</div>'+
+        (s==='in'?'<span class="chip">In the plan</span>':'<button type="button" class="ghost-btn" data-lib="'+esc(e.key)+'">Add</button>')+'</div>';
+    });
+    $('liblist').innerHTML=h||'<div class="empty">Nothing in the library matches \u201c'+esc(q)+'\u201d.</div>';
+  }
+  document.addEventListener('click',function(e){
+    if(!e.target||!plan) return;
+    if(e.target.id==='recfromlib'){ LIBOPEN=!LIBOPEN; renderLib(); if(LIBOPEN){ var si=$('libsearch'); if(si) si.focus(); } return; }
+    var b=e.target.closest && e.target.closest('button[data-lib]'); if(!b) return;
+    var en=(plan.library||[]).find(function(x){return x.key===b.dataset.lib}); if(!en) return;
+    var s=libStatus(en);
+    plan.recs=plan.recs||{};
+    if(s.indexOf('tick:')===0){ var k=s.slice(5); plan.recs[k]=Object.assign({},plan.recs[k]||{},{on:true}); }
+    else if(s==='in'){ return; }
+    else plan.recs_custom=(plan.recs_custom||[]).concat([{label:en.label, lib:en.key, year:1, basis:'From the library. When: '+en.when}]);
+    recSave(); renderRecs(); renderLib(); say('<b>Added</b>: '+esc(en.label)+'. Fill in its figures in the list above.');
+  });
+  document.addEventListener('input',function(e){ if(e.target&&e.target.id==='libsearch') renderLib(); });
 
   // ---- what we found (analysis review) ----------------------------------
   function renderFound(){
@@ -727,7 +946,8 @@ function fqModel(P){
   // The firm's follow-up email, from the questions marked Send.
   function buildEmail(){
     var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
-    var send=qs.filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'; });
+    var send=allQs().filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'
+      && String(qt[q.id]!=null?qt[q.id]:q.text).trim(); });
     var first=((plan&&plan.client)||'').replace(/^Dr\.?\s+/,'').split(/\s|&/)[0]||'there';
     var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     var now=new Date(), due=new Date(now.getTime()+7*864e5);
@@ -742,7 +962,7 @@ function fqModel(P){
   // when the questions have moved on since.
   function qsig(){
     var qd=(plan&&plan.qdecisions)||{}, qt=(plan&&plan.qtext)||{};
-    return JSON.stringify(qs.filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'; })
+    return JSON.stringify(allQs().filter(function(q){ return (qd[q.id]||q.decision||'Send')==='Send'; })
       .map(function(q){ return [q.id, qt[q.id]!=null?qt[q.id]:q.text]; }));
   }
   function showEmail(force){
@@ -848,7 +1068,7 @@ function fqModel(P){
     // The analyst's check is the Assumptions and What we found (so the
     // analyst can see what the documents already settle and not ask it
     // again); the lead advisor gets every tab once it is handed over.
-    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume' && b.dataset.tabgo!=='found'); });
+    document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume' && b.dataset.tabgo!=='found' && b.dataset.tabgo!=='notes'); });
     var cur=document.querySelector('[data-tabgo][aria-selected=true]');
     if(!cur||cur.hidden){ var first=document.querySelector('[data-tabgo]:not([hidden])'); if(first) showTab(first.dataset.tabgo); }
     var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+
@@ -872,17 +1092,17 @@ function fqModel(P){
     var set=function(id,txt){ var el=$(id); if(el) el.textContent=txt; };
     set('tc-recs', ($('reccount')||{}).textContent ? '· '+$('reccount').textContent.split(' in ')[0] : '');
     set('tc-slides', SL.length? '· '+SL.length : '');
-    set('tc-qs', qs.length? '· '+qs.length : '');
+    set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v42';
+  var BUILD='v44';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
     var el=e.target && e.target.closest && e.target.closest('button[data-d]');
     if(!el) return;
     try{
-      var q=qs.find(function(x){return x.id===el.dataset.id});
+      var q=allQs().find(function(x){return x.id===el.dataset.id});
       if(!q){ say('<span class="bad">Not saved: question '+esc(el.dataset.id)+' not found on the page.</span>'); return; }
       q.decision=el.dataset.d;
       plan.qdecisions=plan.qdecisions||{}; plan.qdecisions[q.id]=q.decision;
@@ -920,10 +1140,13 @@ function fqModel(P){
       if(plan && pending.an){ incoming.assume_notes=plan.assume_notes; incoming.an_assume_notes=plan.an_assume_notes; }
       if(plan && pending.ann) incoming.an_notes=plan.an_notes;
       if(plan && pending.qa) incoming.qanswers=plan.qanswers;
+      if(plan && pending.kind){ incoming.assume_kind=plan.assume_kind; incoming.an_assume_kind=plan.an_assume_kind; }
+      if(plan && pending.qc) incoming.qcustom=plan.qcustom;
+      if(plan && pending.cm) incoming.carried_marks=plan.carried_marks;
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; incoming.email_qsig=plan.email_qsig; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }
-      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); if(qs.length) renderQs();
+      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); renderQs(); renderNotes(); renderLib();
       showEmail(false);
       ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=(id==='gnote2'&&isAnalyst())?(plan.an_notes||''):(plan.notes||''); });
       var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();
@@ -946,7 +1169,7 @@ function fqModel(P){
           var a=document.activeElement;
           if(a && a.tagName==='TEXTAREA' && (a.dataset.id||a.dataset.qa)) return;
           qs=Object.keys(byId).map(function(k){return byId[k]}).sort(function(x,y){return (x.n||0)-(y.n||0)});
-          renderQs();
+          renderQs(); renderNotes();
         });
       });
     }
