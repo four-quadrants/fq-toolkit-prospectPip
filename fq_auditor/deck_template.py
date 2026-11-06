@@ -46,6 +46,7 @@ import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pptx import Presentation                                # noqa: E402
+from pptx.dml.color import RGBColor  # noqa: E402
 
 import plan as _plan                                         # noqa: E402
 import deck as _deck                                         # noqa: E402
@@ -1565,7 +1566,436 @@ def _layout_concerns(slide, n):
             etree.SubElement(bp, A + 'noAutofit')
 
 
-def render(folder, client, out, template=TEMPLATE):
+# ---- slides the lead advisor removed or added on the consult review --------
+
+# Layouts a new slide can take, each built from a template slide so it keeps
+# the deck's look: (template slide, shapes kept for the layout).
+_POINT_CARDS = [('Shape 5', 'Shape 6', 'Text 7', 'Text 8'),
+                ('Shape 9', 'Shape 10', 'Text 11', 'Text 12'),
+                ('Shape 13', 'Shape 14', 'Text 15', 'Text 16'),
+                ('Shape 17', 'Shape 18', 'Text 19', 'Text 20'),
+                ('Shape 21', None, 'Text 22', 'Text 23'),
+                ('Shape 24', 'Shape 25', 'Text 26', 'Text 27'),
+                ('Shape 28', 'Shape 29', 'Text 30', 'Text 31')]
+_FIG_TILES = [('Shape 4', 'Shape 5', 'Text 6', 'Text 7'),
+              ('Shape 8', 'Shape 9', 'Text 10', 'Text 11'),
+              ('Shape 12', None, 'Text 13', 'Text 14')]
+LAYOUTS = {'points': 13, 'statement': 13, 'figures': 4, 'columns': 4,
+           'compare': 4, 'steps': 6, 'two': 13, 'statement_points': 13, 'accounts': 15}
+# Names and one-line descriptions, for the review page's layout picker.
+LAYOUT_INFO = [
+    ('points', 'Numbered points', 'Two to six points in numbered cards that fill the slide'),
+    ('statement', 'Statement', 'One or two sentences, large, on a dark card'),
+    ('statement_points', 'Statement and three points', 'A headline on the dark card, three numbered points under it'),
+    ('figures', 'Three figures', 'Three big numbers, each with a label and a line of explanation'),
+    ('columns', 'Three columns', 'Three tall cards, each a heading and a few lines'),
+    ('two', 'Today and with 4Q', 'Two tall cards side by side, a few lines each'),
+    ('compare', 'Side-by-side table', 'Up to three rows: what it is, today, with Four Quadrants'),
+    ('steps', 'Steps', 'Up to five steps across a dark band, each a heading and a short line'),
+    ('accounts', 'Detailed table', 'Three rows by five columns (like the account-by-account slide), with a takeaway band'),
+]
+# The account-by-account slide's table: per row (name, sub-line, then the
+# four columns, the last one's sub-line).
+_ACC_ROWS = [('Text 24', 'Text 25', 'Text 27', 'Text 29', 'Text 31', 'Text 34', 'Text 35'),
+             ('Text 38', 'Text 39', 'Text 41', 'Text 43', 'Text 45', 'Text 48', 'Text 49'),
+             ('Text 51', 'Text 52', 'Text 53', 'Text 54', 'Text 55', 'Text 57', None)]
+_ACC_HEADS = ('Text 17', 'Text 18', 'Text 19', 'Text 20', 'Text 21')
+_CMP_ROWS = [('Text 21', 'Text 23', 'Text 26'), ('Text 28', 'Text 30', 'Text 33'),
+             ('Text 34', 'Text 35', 'Text 37')]
+_CMP_SHAPES = ['Shape %d' % i for i in (15, 16, 20, 22, 24, 25, 27, 29, 31, 32, 36, 38, 39)] + \
+    ['Text %d' % i for i in (17, 18, 19, 21, 23, 26, 28, 30, 33, 34, 35, 37, 40, 41)]
+_STEP_COLS = [('Shape 68', 'Text 69', 'Text 70'), ('Shape 71', 'Text 72', 'Text 73'),
+              ('Shape 74', 'Text 75', 'Text 76'), ('Shape 77', 'Text 78', 'Text 79'),
+              ('Shape 80', 'Text 81', 'Text 82')]
+# The content area every layout fills, in points: below the header rule.
+TOP, BOTTOM, LEFT, WIDTH, GAP = 121, 786, 48, 1344, 16
+
+
+def deck_edits(folder):
+    """{'removed': [template slide numbers], 'added': [new slides]} from
+    the consult review, or empty."""
+    try:
+        with open(_store.json_path(folder, 'review_decisions.json')) as fh:
+            got = json.load(fh).get('deck_slides') or {}
+    except (OSError, ValueError):
+        got = {}
+    return {'removed': [int(n) for n in got.get('removed') or ()],
+            'forced': [int(n) for n in got.get('forced') or ()],
+            'added': [a for a in got.get('added') or () if a.get('title') or a.get('items') or a.get('body')]}
+
+
+def _clone(prs, src):
+    """A copy of slide `src` at the end of the deck, shapes, background and
+    pictures included."""
+    new = prs.slides.add_slide(src.slide_layout)
+    for sh in list(new.shapes):
+        sh._element.getparent().remove(sh._element)
+    rid_map = {}
+    for rid, rel in src.part.rels.items():
+        if rel.is_external or 'notesSlide' in rel.reltype or 'slideLayout' in rel.reltype:
+            continue
+        rid_map[rid] = new.part.relate_to(rel._target, rel.reltype)
+    tree = new.shapes._spTree
+    for el in src.shapes._spTree.iterchildren():
+        if el.tag.endswith('}nvGrpSpPr') or el.tag.endswith('}grpSpPr'):
+            continue
+        c = copy.deepcopy(el)
+        for node in c.iter():
+            for k, v in list(node.attrib.items()):
+                if k.endswith('}embed') or k.endswith('}link') or k.endswith('}id'):
+                    if v in rid_map:
+                        node.set(k, rid_map[v])
+        tree.append(c)
+    bg = src._element.cSld.bg
+    if bg is not None:
+        new._element.cSld.insert(0, copy.deepcopy(bg))
+    return new
+
+
+def _shape(slide, name):
+    for sh in slide.shapes:
+        if sh.name == name:
+            return sh
+    return None
+
+
+def _remove(slide, *names):
+    for n in names:
+        sh = _shape(slide, n) if n else None
+        if sh is not None:
+            sh._element.getparent().remove(sh._element)
+
+
+def _font(shape, size=None, bold=None):
+    for para in shape.text_frame.paragraphs:
+        for r in para.runs:
+            if size:
+                r.font.size = size
+            if bold is not None:
+                r.font.bold = bold
+
+
+def _box(shape, left, top, width, height):
+    from pptx.util import Pt
+    shape.left, shape.top, shape.width, shape.height = Pt(left), Pt(top), Pt(width), Pt(height)
+
+
+def _anchor(shape, how='middle'):
+    from pptx.enum.text import MSO_ANCHOR
+    shape.text_frame.word_wrap = True
+    shape.text_frame.vertical_anchor = {'middle': MSO_ANCHOR.MIDDLE, 'top': MSO_ANCHOR.TOP}[how]
+
+
+def _lines(text_or_list):
+    if isinstance(text_or_list, (list, tuple)):
+        return [x.strip() for x in text_or_list if x and str(x).strip()]
+    return [x.strip() for x in str(text_or_list or '').split('\n') if x.strip()]
+
+
+def _dup(slide, shape):
+    """A copy of a shape on the same slide (for a text line a layout needs
+    more of than the template slide has)."""
+    el = copy.deepcopy(shape._element)
+    shape._element.addnext(el)
+    return [sh for sh in slide.shapes if sh._element is el][0]
+
+
+def _point_cards(s, items, top, bottom):
+    """Numbered cards, two to a row, filling top..bottom; an odd last card
+    runs the full width. Uses the barred cards of the cashflow slide."""
+    from pptx.util import Pt
+    groups = [g for g in _POINT_CARDS if g[1]]          # the cards with an accent bar
+    items = items[:len(groups)]
+    n = len(items)
+    rows = (n + 1) // 2 if n > 1 else 1
+    h = (bottom - top - GAP * (rows - 1)) / float(rows)
+    half = (WIDTH - GAP) / 2.0
+    size = Pt(36 if n <= 2 else 30 if n <= 4 else 26)
+    for i, (card, bar, num, txt) in enumerate(groups):
+        if i >= n:
+            _remove(s, card, bar, num, txt)
+            continue
+        r, c = divmod(i, 2)
+        full = (n == 1) or (i == n - 1 and n % 2 == 1)
+        x = LEFT if (full or c == 0) else LEFT + half + GAP
+        w = WIDTH if full else half
+        y = top + r * (h + GAP)
+        _box(_shape(s, card), x, y, w, h)
+        _box(_shape(s, bar), x, y, 5, h)
+        set_text(_shape(s, num), '%02d' % (i + 1))
+        _box(_shape(s, num), x + 24, y, 80, h)
+        _anchor(_shape(s, num))
+        _font(_shape(s, num), Pt(34))
+        set_text(_shape(s, txt), items[i])
+        _box(_shape(s, txt), x + 110, y + 10, w - 134, h - 20)
+        _anchor(_shape(s, txt))
+        _font(_shape(s, txt), size)
+
+
+def _added_slide(prs, a):
+    """Build one added slide from its layout. Returns the new slide. Every
+    layout fills the content area; nothing is left as empty page."""
+    from pptx.util import Pt
+    layout = a.get('layout') if a.get('layout') in LAYOUTS else 'points'
+    s = _clone(prs, prs.slides[LAYOUTS[layout] - 1])
+    eyebrow = (a.get('eyebrow') or '').strip().upper()
+    title = (a.get('title') or '').strip().upper() or 'TITLE'
+    cap = (a.get('note') or '').strip()
+    set_text(_shape(s, 'Text 1'), eyebrow or ' ')
+    set_text(_shape(s, 'Text 2'), title)
+    for nm in ('Text 1', 'Text 2'):
+        _shape(s, nm).width = Pt(900 if cap else 1340)
+    header = {'Shape 0', 'Text 1', 'Text 2'}
+
+    def caption(name):
+        # The small line at the top right, when he gives one.
+        sh = _shape(s, name)
+        if cap and sh is not None:
+            set_text(sh, cap)
+            _box(sh, 1000, 58, 392, 26)
+            return {name}
+        return set()
+
+    if layout in ('figures', 'columns'):
+        keep = header | caption('Text 3')
+        tiles = _FIG_TILES
+        data = (a.get('figures') if layout == 'figures' else a.get('columns')) or []
+        data = [list(d) + ['', '', ''] for d in data if any((x or '').strip() for x in d)][:3]
+        n = max(1, len(data))
+        w = (WIDTH - GAP * (n - 1)) / float(n)
+        for i, (card, bar, big, small) in enumerate(tiles):
+            if i >= len(data):
+                _remove(s, card, bar, big, small)
+                continue
+            keep |= {card, bar, big, small} - {None}
+            x = LEFT + i * (w + GAP)
+            _box(_shape(s, card), x, TOP, w, BOTTOM - TOP)
+            if bar:
+                _box(_shape(s, bar), x, TOP, w, 4)
+            hd, lab = _shape(s, big), _shape(s, small)
+            if layout == 'figures':
+                set_text(hd, data[i][0] or ' ')
+                _box(hd, x + 32, TOP + 60, w - 64, 140)
+                _font(hd, Pt(96))
+                set_text(lab, data[i][1] or ' ')
+                _box(lab, x + 32, TOP + 215, w - 64, 60)
+                _font(lab, Pt(32), True)
+                det = _dup(s, lab)
+                set_text(det, data[i][2] or ' ')
+                _box(det, x + 32, TOP + 300, w - 64, BOTTOM - TOP - 330)
+                _anchor(det, 'top')
+                _font(det, Pt(26), False)
+                keep.add(det.name)
+            else:
+                set_text(hd, (data[i][0] or ' ').upper())
+                _box(hd, x + 32, TOP + 40, w - 64, 60)
+                _font(hd, Pt(32))
+                body = _lines(data[i][1])
+                set_text(lab, '\n'.join(body) or ' ')
+                _box(lab, x + 32, TOP + 130, w - 64, BOTTOM - TOP - 160)
+                _anchor(lab, 'top')
+                _font(lab, Pt(28))
+                for para in lab.text_frame.paragraphs:
+                    para.space_after = Pt(18)
+        _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+        return s
+
+    if layout == 'accounts':
+        drop = {'Text 4', 'Text 5', 'Text 6'} | {'Shape %d' % i for i in (7, 10, 13)} | \
+            {'Text %d' % i for i in (8, 9, 11, 12, 14)}
+        _remove(s, *drop)
+        keep = header | caption('Text 3')
+        if not keep - header:
+            _remove(s, 'Text 3')
+        # The table and its takeaway band, stretched to fill the slide.
+        k = (BOTTOM - TOP) / float(783 - 214)
+        for sh in s.shapes:
+            if sh.name in keep:
+                continue
+            t, h = sh.top / 12700.0, sh.height / 12700.0
+            sh.top, sh.height = Pt(TOP + (t - 214) * k), Pt(max(1, h * k))
+        heads = list(a.get('heads') or []) + [''] * 5
+        for nm, d, h in zip(_ACC_HEADS, ('ACCOUNT', 'VALUE', "WHAT'S INSIDE", 'LIQUIDITY', 'VS. 4Q'), heads):
+            set_text(_shape(s, nm), (h or d).upper())
+        rows = [list(r) + [''] * 7 for r in (a.get('rows') or [])][:3]
+        for i, names in enumerate(_ACC_ROWS):
+            r = rows[i] if i < len(rows) else [''] * 7
+            vals = [r[0], r[1], r[2], r[3], r[4], r[5], r[6]]
+            for nm, v in zip(names, vals):
+                if nm:
+                    set_text(_shape(s, nm), v or ' ')
+        for nm, dx in (('Shape 60', 48), ('Text 61', 48)):
+            sh = _shape(s, nm)
+            sh.left = sh.left + Pt(dx)
+            if nm == 'Text 61':
+                sh.width = sh.width - Pt(dx)
+        _shape(s, 'Text 59').width = _shape(s, 'Text 59').width + Pt(40)
+        set_text(_shape(s, 'Text 59'), (a.get('figure') or '').strip() or ' ')
+        set_text(_shape(s, 'Text 61'), (a.get('body') or '').strip() or ' ')
+        _anchor(_shape(s, 'Text 61'))
+        return s
+
+    if layout == 'compare':
+        keep = header | set(_CMP_SHAPES)
+        _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+        # The results slide's table, stretched to fill the slide.
+        k = (BOTTOM - TOP) / float(779 - 257)
+        for sh in s.shapes:
+            if sh.name in _CMP_SHAPES:
+                t, h = sh.top / 12700.0, sh.height / 12700.0
+                sh.top, sh.height = Pt(TOP + (t - 257) * k), Pt(max(1, h * k))
+        heads = (a.get('heads') or ['', 'TODAY', 'WITH FOUR QUADRANTS'])
+        for nm, h in zip(('Text 17', 'Text 18', 'Text 19'), heads):
+            set_text(_shape(s, nm), (h or ' ').upper())
+        rows = (a.get('rows') or [])[:3]
+        for i, names in enumerate(_CMP_ROWS):
+            r = list(rows[i]) if i < len(rows) else []
+            for nm, v in zip(names, r + ['', '', '']):
+                set_text(_shape(s, nm), v or ' ')
+                _anchor(_shape(s, nm))
+                _font(_shape(s, nm), Pt(40) if nm != names[0] else Pt(30))
+        side = _lines(a.get('body'))
+        if side:
+            set_text(_shape(s, 'Text 40'), side[0].upper())
+            set_text(_shape(s, 'Text 41'), '\n'.join(side[1:]) or ' ')
+            _font(_shape(s, 'Text 41'), Pt(24))
+            _font(_shape(s, 'Text 40'), Pt(26))
+        else:
+            _remove(s, 'Shape 38', 'Shape 39', 'Text 40', 'Text 41')
+            for nm in ('Shape 15', 'Shape 16'):
+                _shape(s, nm).width = Pt(WIDTH)
+        return s
+
+    if layout == 'steps':
+        steps = [list(x) + ['', ''] for x in (a.get('steps') or []) if any((y or '').strip() for y in x)][:5]
+        keep = header | {'Shape 66', 'Text 67'}
+        band, sub = _shape(s, 'Shape 66'), _shape(s, 'Text 67')
+        _box(band, LEFT, TOP, WIDTH, BOTTOM - TOP)
+        subtitle = (a.get('body') or '').strip()
+        set_text(sub, subtitle.upper() or ' ')
+        _box(sub, LEFT + 28, TOP + 30, WIDTH - 56, 40)
+        _font(sub, Pt(28))
+        n = max(1, len(steps))
+        w = (WIDTH - 56 - GAP * (n - 1)) / float(n)
+        for i, (line, hd, bd) in enumerate(_STEP_COLS):
+            if i >= len(steps):
+                _remove(s, line, hd, bd)
+                continue
+            keep |= {line, hd, bd}
+            x = LEFT + 28 + i * (w + GAP)
+            _box(_shape(s, line), x, TOP + 110, w, 4)
+            set_text(_shape(s, hd), (steps[i][0] or ' ').upper())
+            _box(_shape(s, hd), x, TOP + 130, w, 70)
+            _font(_shape(s, hd), Pt(28))
+            set_text(_shape(s, bd), steps[i][1] or ' ')
+            _box(_shape(s, bd), x, TOP + 220, w, BOTTOM - TOP - 250)
+            _anchor(_shape(s, bd), 'top')
+            _font(_shape(s, bd), Pt(28))
+        _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+        return s
+
+    # The cashflow slide's cards: points, two columns, statement.
+    _remove(s, 'Text 4')
+    keep_cap = caption('Text 3')
+    if not keep_cap:
+        _remove(s, 'Text 3')
+    if layout == 'two':
+        cols = [list(c) + ['', ''] for c in (a.get('columns') or [])][:2]
+        while len(cols) < 2:
+            cols.append(['', ''])
+        half = (WIDTH - GAP) / 2.0
+        keep = header | keep_cap
+        for i, (card, bar, num, txt) in enumerate(_POINT_CARDS[:2]):
+            keep |= {card, bar, num, txt}
+            x = LEFT + i * (half + GAP)
+            _box(_shape(s, card), x, TOP, half, BOTTOM - TOP)
+            _box(_shape(s, bar), x, TOP, 5, BOTTOM - TOP)
+            set_text(_shape(s, num), (cols[i][0] or ('TODAY' if i == 0 else 'WITH FOUR QUADRANTS')).upper())
+            _box(_shape(s, num), x + 32, TOP + 30, half - 64, 60)
+            _font(_shape(s, num), Pt(34), True)
+            for r in [r for para in _shape(s, num).text_frame.paragraphs for r in para.runs]:
+                r.font.color.rgb = RGBColor(0x3A, 0x3F, 0x45) if i == 0 else RGBColor(0xE8, 0x73, 0x0C)
+            body = _lines(cols[i][1])
+            set_text(_shape(s, txt), '\n'.join(body) or ' ')
+            _box(_shape(s, txt), x + 32, TOP + 110, half - 64, BOTTOM - TOP - 140)
+            _anchor(_shape(s, txt), 'top')
+            _font(_shape(s, txt), Pt(30))
+            for para in _shape(s, txt).text_frame.paragraphs:
+                para.space_after = Pt(20)
+        _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+        return s
+    if layout in ('statement', 'statement_points'):
+        pts = _lines(a.get('items'))[:3] if layout == 'statement_points' else []
+        band_bottom = BOTTOM if not pts else TOP + 300
+        card, txt = _shape(s, 'Shape 21'), _shape(s, 'Text 23')
+        keep = header | keep_cap | {'Shape 21', 'Text 23'}
+        _box(card, LEFT, TOP, WIDTH, band_bottom - TOP)
+        _box(txt, LEFT + 48, TOP + 20, WIDTH - 96, band_bottom - TOP - 40)
+        set_text(txt, '\n'.join(_lines(a.get('body'))) or ' ')
+        _anchor(txt)
+        _font(txt, Pt(52 if not pts else 40))
+        for para in txt.text_frame.paragraphs:
+            para.space_after = Pt(16)
+        if pts:
+            groups = [g for g in _POINT_CARDS if g[1]][:3]
+            w = (WIDTH - GAP * 2) / 3.0
+            y, h = band_bottom + GAP, BOTTOM - band_bottom - GAP
+            for i, (c, b, num, t) in enumerate(groups):
+                if i >= len(pts):
+                    continue
+                keep |= {c, b, num, t}
+                x = LEFT + i * (w + GAP)
+                _box(_shape(s, c), x, y, w, h)
+                _box(_shape(s, b), x, y, 5, h)
+                set_text(_shape(s, num), '%02d' % (i + 1))
+                _box(_shape(s, num), x + 28, y + 24, 90, 56)
+                _font(_shape(s, num), Pt(34))
+                set_text(_shape(s, t), pts[i])
+                _box(_shape(s, t), x + 28, y + 90, w - 56, h - 110)
+                _anchor(_shape(s, t), 'top')
+                _font(_shape(s, t), Pt(28))
+        _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+        return s
+    _point_cards(s, _lines(a.get('items')), TOP, BOTTOM)
+    keep = header | keep_cap | {x for g in _POINT_CARDS if g[1] for x in g}
+    _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in keep])
+    return s
+
+
+def apply_deck_edits(prs, edits, auto_drop):
+    """Add the new slides where he put them and remove the slides he took
+    out (and the ones left out for this client). Template numbering is used
+    throughout, so it runs on the template-sized deck, last."""
+    lst = prs.slides._sldIdLst
+    orig = list(lst)                     # template slides, in order
+    added = {}
+    for a in edits.get('added') or ():
+        s = _added_slide(prs, a)
+        try:
+            s.notes_slide.notes_text_frame.text = 'Added on the consult review.'
+        except Exception:                                    # noqa: BLE001
+            pass
+        added.setdefault(int(a.get('after') or len(orig)), []).append(lst[-1])
+    gone = (set(auto_drop) - set(edits.get('forced') or ())) | set(edits.get('removed') or ())
+    order = []
+    for n, el in enumerate(orig, 1):
+        if n not in gone:
+            order.append(el)
+        order.extend(added.get(n, []))
+    for n in sorted(added):
+        if n > len(orig) or n < 1:
+            order.extend(added[n])
+    for el in list(lst):
+        lst.remove(el)
+    for n, el in enumerate(orig, 1):
+        if n in gone:
+            prs.part.drop_rel(el.rId)
+    for el in order:
+        lst.append(el)
+    return sorted(gone)
+
+
+def render(folder, client, out, template=TEMPLATE, edits=True):
     D = figures(folder, client)
     fills = slide_fills(D)
     prs = Presentation(template)
@@ -1635,8 +2065,12 @@ def render(folder, client, out, template=TEMPLATE):
         _layout_concerns(prs.slides[2], len(adv.get('concerns') or []))
     except Exception as exc:                                 # noqa: BLE001
         print('   concerns layout left as the template: %s' % exc)
-    for n in sorted(drop, reverse=True):
-        _drop(prs, n - 1)
+    ed = deck_edits(folder) if edits else {}
+    if ed.get('removed') or ed.get('added') or ed.get('forced'):
+        drop = apply_deck_edits(prs, ed, drop)
+    else:
+        for n in sorted(drop, reverse=True):
+            _drop(prs, n - 1)
     prs.save(out)
     return out, len(prs.slides._sldIdLst), prompts, drop
 

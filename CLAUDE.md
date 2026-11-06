@@ -105,7 +105,8 @@ From the team's showcase walkthrough (Nov 5), next up (done: a comment can
 be a note or a question to the client; Add a question on the Questions tab;
 a Notes & questions tab carried to the consult review; Add from the library
 on Recommendations, the library kept tidy (merge near-duplicates); savings by
-plan year 1, 2, 5, 8, 12 on the Plan tab, years editable):
+plan year 1, 2, 5, 8, 12 on the Plan tab, years editable; slides removed or
+added on the consult review's Slides tab):
 
 - **Contingency: anyone can hand this on.** If the analyst or a lead
   advisor leaves, the next person must be able to learn it quickly: a short
@@ -114,11 +115,12 @@ plan year 1, 2, 5, 8, 12 on the Plan tab, years editable):
   the setup script.
 - **Set up the lead advisor (Brogan) to change things himself.** His Claude
   connects the Prospects folder like everyone else's; he can ask for changes
-  in plain words ("change this slide and keep the current look"). Set up his
-  Mac with START_HERE, GitHub included.
-- **Add or remove deck slides** on the consult review, keeping the theme:
-  remove any slide; add one from the template's layouts (a blank section
-  slide, a bullets slide, a table slide) with his own title and text.
+  in plain words ("change this slide and keep the current look"). His setup
+  must be far lighter than the analyst's (which needed disk space freed,
+  Homebrew and a Terminal GitHub login): the Claude app, the Prospects
+  folder and the plugin only. No GitHub, no Terminal: his changes are made
+  on the share, and whoever commits next (Austin or the analyst) saves them
+  with the usual commit line.
 
 ## Setting someone up
 

@@ -215,6 +215,17 @@ def apply(folder, plan_json):
                                         (rec.get('an_assume_notes') or {}).items()
                                         if (v or '').strip()}}
     out['custom_questions'] = custom_questions(rec)
+    # Slides he took out of the deck or added, for deck_template.render.
+    off = rec.get('slide_off') or {}
+    out['deck_slides'] = {
+        'removed': sorted(int(k) for k, v in off.items() if v),
+        'forced': sorted(int(k) for k, v in (rec.get('slide_force') or {}).items() if v),
+        'added': [a for a in (rec.get('slide_add') or [])
+                  if (a.get('title') or '').strip() or a.get('items') or (a.get('body') or '').strip()]}
+    if out['deck_slides']['removed'] or out['deck_slides']['added'] or out['deck_slides']['forced']:
+        print('   deck: %d slide(s) removed, %d added, %d left-out slide(s) included anyway'
+              % (len(out['deck_slides']['removed']), len(out['deck_slides']['added']),
+                 len(out['deck_slides']['forced'])))
     # Drafted questions' wording, for the log (the page keeps only edits).
     try:
         with open(_store.json_path(folder, 'review_questions.json')) as fh:
@@ -344,6 +355,24 @@ def custom_questions(rec):
                         'decision': qd.get(c.get('id')) or 'Send',
                         'why': 'Added on the review page', 'source': c.get('by') or 'the review page'})
     return out
+
+
+def _slide_list():
+    """Every slide of the deck template, numbered, with its two header lines,
+    for the Slides tab's outline (remove a slide, add one after it)."""
+    try:
+        from pptx import Presentation
+        import deck_template as dt
+        out = []
+        for n, sl in enumerate(Presentation(dt.TEMPLATE).slides, 1):
+            tx = [sh.text_frame.text.strip().split('\n')[0] for sh in sl.shapes
+                  if sh.has_text_frame and sh.text_frame.text.strip()
+                  and not sh.text_frame.text.strip().startswith('[')]
+            out.append({'n': n, 'title': ' \u00b7 '.join(tx[:2])[:90]})
+        return out
+    except Exception as exc:                                 # noqa: BLE001
+        print('   slide list skipped: %s' % exc)
+        return []
 
 
 def _library():
@@ -749,6 +778,8 @@ def seed(folder, outdir, mode='consult'):
             'recommendations': recs, 'recs': {}, 'recs_custom': [],
             'library': _library() if mode == 'consult' else [],
             'schedule': [[int(y), v] for y, v in (p.get('schedule') or [])] if mode == 'consult' else [],
+            'slide_list': _slide_list() if mode == 'consult' else [],
+            'slides_auto_dropped': sorted(dt.dropped(D)) if mode == 'consult' else [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,
@@ -900,7 +931,7 @@ def deck_boxes(folder, D):
     import deck_template as dt
     scratch = tempfile.mkdtemp()
     path = os.path.join(scratch, 'boxes.pptx')
-    dt.render(folder, None, path)
+    dt.render(folder, None, path, edits=False)
     built = Presentation(path)
     tmpl = Presentation(dt.TEMPLATE)
     drop = sorted(dt.dropped(D))
@@ -986,7 +1017,7 @@ def slide_pictures(folder, items, outdir, also=()):
     scratch = tempfile.mkdtemp()
     deck_path = os.path.join(scratch, 'review.pptx')
     try:
-        dt.render(folder, None, deck_path)
+        dt.render(folder, None, deck_path, edits=False)
     except Exception as exc:                                 # noqa: BLE001
         print('   slide pictures skipped: %s' % exc)
         return {}

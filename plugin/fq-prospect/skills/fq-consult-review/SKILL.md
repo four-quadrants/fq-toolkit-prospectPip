@@ -40,6 +40,15 @@ block from `recommendations_library.md` (and only that), and say which.
 The tab lists the client's suggested ones plus the firm's most common, about
 a dozen; everything else is under Add from the library.
 
+The Slides tab opens with the deck's outline: he can take any slide out, or
+add his own after any slide, picking from pictures of nine layouts (from
+Numbered points and Statement to a Detailed table like the account-by-account
+slide), each filling the slide in the deck's own look. A slide left out for
+the client (nothing to show) can be included anyway; its boxes are then left
+for him to fill. If the deck template or a layout changes, run
+`python3 fq_auditor/slide_layouts.py` to redraw the layout pictures on the page. The pull in reports "deck: N slide(s)
+removed, N added"; the next deck build applies them.
+
 1. Find the toolkit and the client folder. Check `_Audit/review_pages.json` for
    an existing consult page (then this is a refresh).
 2. Seed with `--mode consult`. The seed carries over his decisions from the
