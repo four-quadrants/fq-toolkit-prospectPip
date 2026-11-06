@@ -62,11 +62,11 @@ Never overwrite the lead advisor's work. Re-seed, then:
 - ArtifactData `get` plan/figures (note its version).
 - `update` plan/figures with ONLY the computed fields: `figures`, `findings`,
   `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`,
-  `carried`, `note_done`, `library`
+  `carried`, `note_done`, `library`, `schedule`
   (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
   `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes`,
-  `assume_kind`, `an_assume_kind`, `qcustom`, `carried_marks` alone.
+  `assume_kind`, `an_assume_kind`, `qcustom`, `carried_marks`, `save_years` alone.
 - `set` plan/workings, plan/slides and every question doc.
 - Question ids are made from the question itself, so decisions stay attached.
 - Do not republish the page itself unless the page design changed (republishing

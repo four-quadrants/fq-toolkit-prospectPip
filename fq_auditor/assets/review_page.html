@@ -344,13 +344,18 @@ tr.off td{opacity:.55}
     if(ld) ld.textContent=an?(isAnalyst()?'The assumptions and what the documents show, for the analyst to check before the lead advisor sees them. Comment on anything wrong or missing; everything saves as you go.':'The assumptions, what the documents show, the follow-up questions and the email to the client. Comment on any section, mark each question, and the email writes itself. Everything saves as you go.')
       :'The plan, the recommendations, the projections and every slide of the deck, for the lead advisor to shape. Leave a box blank to accept the proposal. Everything saves as you go.';
     var lastG=null;
-    var rows=(plan.figures||[]).filter(function(f){return !f.slide}).map(function(f,i){
+    var rows=planFigures().map(function(f,i){
+      if(f.marker) return '<!--SAVEYEARS-->';
       var mine=(plan.decided||{})[f.key];
       var g=(f.group&&f.group!==lastG)?'<tr class="grp"><td colspan="3">'+esc(f.group)+'<div class="basis">Every rate and rule the plan runs on. Type your own to change it; the deck and the worksheet follow.</div></td></tr>':''; lastG=f.group||lastG;
       return g+'<tr><td><b>'+esc(f.label)+'</b><div class="basis">'+esc(f.basis||'')+'</div></td>'+
         '<td class="num">'+esc(f.proposed)+'</td>'+
         '<td class="yours"><input type="text" id="fig-'+esc(f.key)+'" data-key="'+esc(f.key)+'" class="'+(mine?'set':'')+'" value="'+esc(mine||'')+'" placeholder="accept" aria-label="Your figure for '+esc(f.label)+'"></td></tr>';
     }).join('');
+    var yrs=(plan.save_years||[1,2,5,8,12]).join(', ');
+    var yrsRow=(plan.mode==='consult'&&(plan.schedule||[]).length)?'<tr class="grp"><td colspan="3">Savings by plan year <span class="basis" style="display:inline">(year 1 is '+planY0()+')</span>'+
+      '<div class="basis">Years shown: <input type="text" id="saveyears" value="'+esc(yrs)+'" style="width:160px;display:inline-block" aria-label="Plan years shown"> type the plan years you want, separated by commas.</div></td></tr>':'';
+    rows=rows.replace('<!--SAVEYEARS-->',yrsRow);
     $('figs').innerHTML=rows||'<tr><td colspan="3" class="empty">No figures yet.</td></tr>';
 
     var con=plan.concerns||[];
@@ -368,6 +373,31 @@ tr.off td{opacity:.55}
     });
   }
 
+  // Savings rows by PLAN year (1, 2, 5, 8, 12 unless he changes them). The
+  // value is the step of the savings schedule in force that year; his figure
+  // is stored by calendar year, which is what the plan runs on.
+  function planY0(){ var s=(plan&&plan.schedule)||[]; return s.length?Math.min.apply(null,s.map(function(r){return +r[0]})):new Date().getFullYear()+1; }
+  function planFigures(){
+    var all=(plan.figures||[]).filter(function(f){return !f.slide});
+    var sch=(plan.schedule||[]).slice().sort(function(a,b){return a[0]-b[0]});
+    if(plan.mode!=='consult'||!sch.length) return all;
+    var y0=planY0(), basis='', at=-1, out=[];
+    all.forEach(function(f){ if(/^save_\d{4}$/.test(f.key)){ if(at<0) at=out.length; basis=f.basis||basis; } else out.push(f); });
+    if(at<0) at=out.length;
+    var yrs=(plan.save_years||[1,2,5,8,12]);
+    var rows=yrs.map(function(n){ var y=y0+n-1, v=null; sch.forEach(function(r){ if(+r[0]<=y) v=r[1]; });
+      return {key:'save_'+y, label:'Savings in year '+n+' ('+y+')', proposed:$m(v), basis:basis}; });
+    return out.slice(0,at).concat([{key:'__years', marker:true}]).concat(rows).concat(out.slice(at));
+  }
+  document.addEventListener('change',function(e){
+    if(!e.target||e.target.id!=='saveyears'||!plan) return;
+    var ys=String(e.target.value).split(/[^0-9]+/).map(Number).filter(function(x){return x>=1&&x<=60});
+    ys=ys.filter(function(x,i){return ys.indexOf(x)===i}).sort(function(a,b){return a-b});
+    if(!ys.length) ys=[1,2,5,8,12];
+    plan.save_years=ys; pending.sy=true;
+    write('plan/figures',{save_years:ys},function(){pending.sy=false;},'savings years shown: '+ys.join(', '));
+    renderPlan();
+  });
   function $m(v){ return v==null?'':'$'+Math.round(v).toLocaleString('en-US'); }
   function pct(v){ return (v*100).toFixed(1).replace(/\.0$/,'')+'%'; }
   function renderWorkings(w){
@@ -435,7 +465,7 @@ function fqModel(P){
       '<tr class="ret"><td>Proposed to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
     var a2=document.activeElement, typing=a2&&a2.classList&&a2.classList.contains('wcell');
     if(!typing) $('wi-later').innerHTML='<table><thead><tr><th>4Q savings schedule (what the plan uses)</th><th class="r">From</th><th class="r">Saved a year</th></tr></thead><tbody>'+
-      WI.sched.map(function(r,k){return '<tr><td>Step '+(k+1)+'</td><td class="r">'+r[0]+'</td><td class="r"><input type="text" class="wcell" id="sch-'+k+'" data-l="'+k+'" value="'+$m(r[1])+'" aria-label="Savings from '+r[0]+'"></td></tr>'}).join('')+'</tbody></table>';
+      WI.sched.map(function(r,k){return '<tr><td>Step '+(k+1)+'</td><td class="r">Year '+(r[0]-WI.sched[0][0]+1)+' ('+r[0]+')</td><td class="r"><input type="text" class="wcell" id="sch-'+k+'" data-l="'+k+'" value="'+$m(r[1])+'" aria-label="Savings from '+r[0]+'"></td></tr>'}).join('')+'</tbody></table>';
     // overhead
     var ohGain=Math.max(0,(M.overhead-WI.oh))*M.net_collections;
     $('wi-oh-note').textContent='Overhead is '+pct(M.overhead)+' today. At '+pct(WI.oh)+' that is '+$m(ohGain)+' a year to the owner; each point lower is '+$m(0.01*M.net_collections)+'.';
@@ -1154,6 +1184,7 @@ function fqModel(P){
       if(plan && pending.kind){ incoming.assume_kind=plan.assume_kind; incoming.an_assume_kind=plan.an_assume_kind; }
       if(plan && pending.qc) incoming.qcustom=plan.qcustom;
       if(plan && pending.cm) incoming.carried_marks=plan.carried_marks;
+      if(plan && pending.sy) incoming.save_years=plan.save_years;
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; incoming.email_qsig=plan.email_qsig; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#recs'))){ plan=incoming; return; }

@@ -355,6 +355,9 @@ def _library():
         return []
 
 
+SAVE_YEARS = (1, 2, 5, 8, 12)
+
+
 def log_items(rec):
     """Every note and every question asked on a review page, with where it
     stands, in the shape the Notes & questions tab shows. Kept at each pull
@@ -556,8 +559,20 @@ def seed(folder, outdir, mode='consult'):
              proposed=money(p['current_savings']),
              basis='Contributions found on the statements and the IC form.'),
     ]
-    for y, v in (p.get('schedule') or [])[:5]:
-        figs.append(dict(key='save_%d' % y, label='Savings in %d' % y, proposed=money(v),
+    # Savings by PLAN year (year 1 is the first year of the plan), at the
+    # years the lead advisor reads them: 1, 2, 5, 8 and 12 unless he changes
+    # them on the page. The value is the step in force that year. The key
+    # stays the calendar year, which is what the plan inputs run on.
+    sch = sorted((int(y), v) for y, v in (p.get('schedule') or []))
+    y0 = sch[0][0] if sch else datetime.date.today().year + 1
+
+    def step_at(y):
+        live = [v for yy, v in sch if yy <= y]
+        return live[-1] if live else None
+    for n in SAVE_YEARS:
+        y = y0 + n - 1
+        figs.append(dict(key='save_%d' % y, label='Savings in year %d (%d)' % (n, y),
+                         proposed=money(step_at(y)), plan_year=n,
                          basis='Current savings plus the practice and personal levers, on the firm’s ramp.'))
     figs += [
         dict(key='ideal_bank_balance', label='Ideal practice bank balance',
@@ -733,6 +748,7 @@ def seed(folder, outdir, mode='consult'):
             'sdecisions': {}, 'stext': {}, 'qanswers': {}, 'notes': '',
             'recommendations': recs, 'recs': {}, 'recs_custom': [],
             'library': _library() if mode == 'consult' else [],
+            'schedule': [[int(y), v] for y, v in (p.get('schedule') or [])] if mode == 'consult' else [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,

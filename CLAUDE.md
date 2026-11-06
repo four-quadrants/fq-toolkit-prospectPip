@@ -104,14 +104,9 @@ Not built yet; raise these when the work touches them.
 From the team's showcase walkthrough (Nov 5), next up (done: a comment can
 be a note or a question to the client; Add a question on the Questions tab;
 a Notes & questions tab carried to the consult review; Add from the library
-on Recommendations. Keep the library tidy: merge near-duplicates):
+on Recommendations, the library kept tidy (merge near-duplicates); savings by
+plan year 1, 2, 5, 8, 12 on the Plan tab, years editable):
 
-- **NEXT (Nov 6 morning): build up the recommendations library** from the
-  last several consults the firm delivered (their consult decks, the "Where
-  the money comes from" slide, and any consult notes): every recommendation
-  made, merged into `recommendations_library.md` in its four-line form (When,
-  Signs, Size, Seen), no client names, near-duplicates merged. Then make the
-  library picker's group headings much easier to see.
 - **Contingency: anyone can hand this on.** If the analyst or a lead
   advisor leaves, the next person must be able to learn it quickly: a short
   hand-off guide (what each step is, what to say to Claude, where things
@@ -121,9 +116,6 @@ on Recommendations. Keep the library tidy: merge near-duplicates):
   connects the Prospects folder like everyone else's; he can ask for changes
   in plain words ("change this slide and keep the current look"). Set up his
   Mac with START_HERE, GitHub included.
-- **Savings years as plan years.** Show savings in year 1, 2, 5, 8, 12
-  (default) instead of 2026, 2027...; the advisor can change the years on
-  the page.
 - **Add or remove deck slides** on the consult review, keeping the theme:
   remove any slide; add one from the template's layouts (a blank section
   slide, a bullets slide, a table slide) with his own title and text.
