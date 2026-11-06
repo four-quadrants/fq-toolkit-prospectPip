@@ -306,13 +306,16 @@ def money(v):
     """'3,900,000' or '22500.00' as a number, or None."""
     if not v:
         return None
-    m = re.search(r'-?[\d,]+(?:\.\d+)?', str(v).replace('$', ''))
+    m = re.search(r'(-?[\d,]+(?:\.\d+)?)\s*([kKmM](?:il+(?:ion)?)?)?\b', str(v).replace('$', ''))
     if not m:
         return None
     try:
-        return float(m.group(0).replace(',', ''))
+        x = float(m.group(1).replace(',', ''))
     except ValueError:
         return None
+    # "950k", "2-3 mil", "1.2M": the form is typed by the client.
+    unit = (m.group(2) or '').lower()
+    return x * 1000 if unit.startswith('k') else x * 1e6 if unit.startswith('m') else x
 
 
 def main():

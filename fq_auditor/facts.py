@@ -229,7 +229,10 @@ def gather(folder, client=None):
                     counts.setdefault(y, {}).setdefault(k, v)
         count_months = (got.get('counts_months') or {})
         for side in ('practice', 'personal'):
-            if not debts.get(side) and (got.get('debts') or {}).get(side):
+            # Claude's checked reading wins when there is one: it has put each
+            # debt on the right side (a home mortgage typed on the practice
+            # schedule) and read terms a template cannot (a quarterly payment).
+            if (got.get('debts') or {}).get(side):
                 debts[side] = got['debts'][side]
         profile = got.get('profile') or {}
         for k in ('marital_status', 'dependents', 'ownership', 'pms', 'age'):
@@ -406,8 +409,12 @@ def gather(folder, client=None):
             if r.get('original'):
                 bits.append('orig %s%s' % (_fmt(r['original']),
                                            ' (%s)' % r['start'] if r.get('start') else ''))
-            if r.get('start') and r.get('maturity'):
-                bits.append('%d-yr term to %s' % (r['maturity'] - r['start'], r['maturity']))
+            try:
+                span = int(str(r.get('maturity'))[:4]) - int(str(r.get('start'))[:4])
+            except (TypeError, ValueError):
+                span = None
+            if span:
+                bits.append('%d-yr term to %s' % (span, r['maturity']))
             elif r.get('maturity'):
                 bits.append('matures %s' % r['maturity'])
             if r.get('fixed'):

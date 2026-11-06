@@ -1,5 +1,7 @@
 # START HERE: set up the FQ Toolkit on a new Mac
 
+> **New to the pipeline?** Read `HAND-OFF GUIDE - FQ Prospect Pipeline.md`, next to this file in the Prospects folder: the stages, who does what, where things live, how changes work, and what to do when something goes wrong.
+
 **For Claude.** A teammate has connected the Prospects folder
 (`Analysis/Brogan/Prospects`) and said
 something like "read START HERE and set me up". Walk them through the setup

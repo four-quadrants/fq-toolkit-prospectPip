@@ -108,21 +108,22 @@ on Recommendations, the library kept tidy (merge near-duplicates); savings by
 plan year 1, 2, 5, 8, 12 on the Plan tab, years editable; slides removed or
 added on the consult review's Slides tab):
 
-- **Contingency: anyone can hand this on.** If the analyst or a lead
-  advisor leaves, the next person must be able to learn it quickly: a short
-  hand-off guide (what each step is, what to say to Claude, where things
-  live, who to ask), kept current as the pipeline changes, and START_HERE as
-  the setup script.
+
 - **Set up the lead advisor (Brogan) to change things himself.** His Claude
   connects the Prospects folder like everyone else's; he can ask for changes
   in plain words ("change this slide and keep the current look"). His setup
   must be far lighter than the analyst's (which needed disk space freed,
   Homebrew and a Terminal GitHub login): the Claude app, the Prospects
   folder and the plugin only. No GitHub, no Terminal: his changes are made
-  on the share, and whoever commits next (Austin or the analyst) saves them
+  on the share, and whoever commits next (the toolkit owner) saves them
   with the usual commit line.
 
 ## Setting someone up
+
+The hand-off guide for people (stages, roles, where things live, kitchen vs
+recipe card, setup, rules, troubleshooting) is a Claude doc:
+https://claude.ai/artifact/6spYJJsCvZ6ad3tLGrAuS8 . Keep it current when a
+step, a page or the setup changes.
 
 The toolkit runs from the share: `Analysis/Brogan/Prospects/FQ_Toolkit/prospectPip`,
 so connecting the Prospects folder gives a chat both the code and the
