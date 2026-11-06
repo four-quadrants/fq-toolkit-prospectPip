@@ -106,6 +106,21 @@ be a note or a question to the client; Add a question on the Questions tab;
 a Notes & questions tab carried to the consult review; Add from the library
 on Recommendations. Keep the library tidy: merge near-duplicates):
 
+- **NEXT (Nov 6 morning): build up the recommendations library** from the
+  last several consults the firm delivered (their consult decks, the "Where
+  the money comes from" slide, and any consult notes): every recommendation
+  made, merged into `recommendations_library.md` in its four-line form (When,
+  Signs, Size, Seen), no client names, near-duplicates merged. Then make the
+  library picker's group headings much easier to see.
+- **Contingency: anyone can hand this on.** If the analyst or a lead
+  advisor leaves, the next person must be able to learn it quickly: a short
+  hand-off guide (what each step is, what to say to Claude, where things
+  live, who to ask), kept current as the pipeline changes, and START_HERE as
+  the setup script.
+- **Set up the lead advisor (Brogan) to change things himself.** His Claude
+  connects the Prospects folder like everyone else's; he can ask for changes
+  in plain words ("change this slide and keep the current look"). Set up his
+  Mac with START_HERE, GitHub included.
 - **Savings years as plan years.** Show savings in year 1, 2, 5, 8, 12
   (default) instead of 2026, 2027...; the advisor can change the years on
   the page.

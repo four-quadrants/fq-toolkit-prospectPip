@@ -118,7 +118,10 @@ section[data-tab].tab-off{display:none}
 #libpanel{margin-top:12px;padding:12px 14px}
 #libpanel input{width:100%;font:16px var(--body);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
 #liblist{max-height:460px;overflow:auto}
-.libg{font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.libg{position:sticky;top:0;z-index:1;font:700 14px var(--display);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:#16324F;padding:7px 10px;border-radius:6px;margin:14px 0 4px}
+.libg small{font:600 12px var(--body);letter-spacing:0;text-transform:none;opacity:.8;margin-left:6px}
+.libnav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.libnav button{font:600 13px var(--body);padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:#16324F;cursor:pointer}
 .libi{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
 .libi .lt{flex:1} .libi .lt b{display:block} .libi .basis{font-size:13px}
 .libi button{white-space:nowrap}
@@ -898,8 +901,11 @@ function fqModel(P){
       // Unsearched, list only what is not already in the table above.
       return !(e.keys||[e.key]).some(function(k){ return shown[k]; }) && libStatus(e)!=='in';
     });
+    var per={}; hits.forEach(function(e){ per[e.group]=(per[e.group]||0)+1; });
+    // Jump buttons, one per group, so a long library stays easy to move around.
+    h+='<div class="libnav">'+Object.keys(per).map(function(k){ return '<button type="button" data-libgo="'+esc(k)+'">'+esc(k)+' ('+per[k]+')</button>'; }).join('')+'</div>';
     hits.forEach(function(e){
-      if(e.group!==g){ g=e.group; h+='<div class="libg">'+esc(g)+'</div>'; }
+      if(e.group!==g){ g=e.group; h+='<div class="libg" data-libg="'+esc(g)+'">'+esc(g)+'<small>'+per[g]+'</small></div>'; }
       var s=libStatus(e);
       h+='<div class="libi"><div class="lt"><b>'+esc(e.label)+'</b><div class="basis">When: '+esc(e.when)+'</div>'+(e.size?'<div class="basis">Sized: '+esc(e.size)+'</div>':'')+'</div>'+
         (s==='in'?'<span class="chip">In the plan</span>':'<button type="button" class="ghost-btn" data-lib="'+esc(e.key)+'">Add</button>')+'</div>';
@@ -919,6 +925,11 @@ function fqModel(P){
     recSave(); renderRecs(); renderLib(); say('<b>Added</b>: '+esc(en.label)+'. Fill in its figures in the list above.');
   });
   document.addEventListener('input',function(e){ if(e.target&&e.target.id==='libsearch') renderLib(); });
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('button[data-libgo]'); if(!b) return;
+    var t=document.querySelector('.libg[data-libg="'+b.dataset.libgo.replace(/"/g,'\\"')+'"]'), box=$('liblist');
+    if(t&&box) box.scrollTop=t.offsetTop-box.offsetTop-4;
+  });
 
   // ---- what we found (analysis review) ----------------------------------
   function renderFound(){

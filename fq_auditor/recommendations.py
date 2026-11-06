@@ -408,13 +408,22 @@ def _saved_candidates(folder):
 # ---- the whole library, for the review page's "Add from the library" -------
 
 GROUPS = [
-    ('Savings and cash', ('current', 'personal_surplus', 'practice_surplus', 'llc_surplus',
-                          'new_401k', 'profit_share', 'five_k_rule')),
-    ('Tax and entity', ('pay_structure', 's_corp', 'tax_management')),
+    ('Cash flow process', ('ideal_bank_balance', 'line_of_credit', 'spending_freeze',
+                           'five_k_rule', 'no_new_debt', 'consumer_debt')),
+    ('Savings and retirement', ('current', 'personal_surplus', 'practice_surplus', 'llc_surplus',
+                                'new_401k', 'profit_share', 'spouse_payroll', 'hsa',
+                                'tax_diversification', 'sep_ira', 'ira_interim',
+                                'stop_profit_share', 'roth_to_traditional', 'college_529')),
+    ('Investments', ('move_investments', 'consolidate_accounts', 'replace_illiquid')),
+    ('Tax and entity', ('pay_structure', 's_corp', 'tax_management', 'rent_strategy',
+                        'monthly_accounting', 'amend_returns', 'quarterly_estimates',
+                        'missed_deductions', 'ptet', 'shareholder_loan', 'entity_structure',
+                        'worker_classification', 'route_outside_income', 'rsu_tax_planning')),
     ('Debt', ('stop_acceleration', 'refinance', 'loan_dropoff', 'remove_pmi')),
     ('Practice production', ('overhead', 'fees', 'adjustment', 'collections', 'new_patients',
                              'hygiene', 'per_day', 'growth_trend', 'marketing_ends',
                              'associate_change')),
+    ('Practice model and transition', ('practice_model', 'transition_plan')),
     ('Insurance and property', ('life_term', 'cash_values', 'sell_property')),
 ]
 
