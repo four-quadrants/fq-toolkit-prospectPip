@@ -159,6 +159,12 @@ coding. Set this up once.
    copy. Do not change the same step at the same time as someone else: say
    in the team chat what you are changing.
 
+6. **If the commit prints a box saying the plugin changed**, upload
+   `Prospects/FQ_Toolkit/fq-prospect.zip` to the organization plugin in
+   Claude. That is the only time an upload is needed: code changes are live
+   on the share as soon as they are saved, and the commit says "Plugin
+   unchanged: no upload needed".
+
 If two people change the same file, `git pull` may say there is a conflict;
 ask Claude ("git pull says there is a conflict, sort it out") and it will
 merge the two.

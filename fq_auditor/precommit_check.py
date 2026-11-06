@@ -135,7 +135,57 @@ def suspicious(text):
     return hits
 
 
+PLUGIN_DIR = 'plugin/fq-prospect'
+
+
+def plugin_reminder():
+    """When a commit changes the plugin, rebuild its zip and say plainly that
+    it must be uploaded to the org. Code changes alone need no upload: the
+    toolkit runs from the share, so they are live as soon as they are saved.
+    Never blocks the commit."""
+    import json
+    import zipfile
+    try:
+        names = subprocess.run(['git', 'diff', '--cached', '--name-only'],
+                               capture_output=True, text=True).stdout.split()
+    except OSError:
+        return
+    if not any(n.startswith(PLUGIN_DIR + '/') for n in names):
+        print('Plugin unchanged: no upload needed (code changes are live on the share).')
+        return
+    meta = os.path.join(PLUGIN_DIR, '.claude-plugin', 'plugin.json')
+    try:
+        now = json.load(open(meta)).get('version')
+    except (OSError, ValueError):
+        now = None
+    try:
+        before = json.loads(subprocess.run(['git', 'show', 'HEAD:' + meta],
+                                           capture_output=True, text=True).stdout or '{}').get('version')
+    except ValueError:
+        before = None
+    out = os.path.join('..', 'fq-prospect.zip')
+    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+        for top in ('.claude-plugin', 'README.md', 'skills'):
+            base = os.path.join(PLUGIN_DIR, top)
+            paths = [base] if os.path.isfile(base) else [
+                os.path.join(d, f) for d, _ds, fs in os.walk(base) for f in fs]
+            for path in paths:
+                if os.path.basename(path).startswith(('.DS_Store', '.smbdelete')):
+                    continue
+                z.write(path, os.path.relpath(path, PLUGIN_DIR))
+    bar = '=' * 64
+    print(bar)
+    print('THIS COMMIT CHANGES THE PLUGIN (version %s).' % now)
+    print('After committing, upload Prospects/FQ_Toolkit/fq-prospect.zip')
+    print('to the organization plugin in Claude, so everyone gets it.')
+    if before and now == before:
+        print('Note: the version is still %s, the same as before. Ask Claude to' % now)
+        print('bump it, or the upload may not replace the old one.')
+    print(bar)
+
+
 def main():
+    plugin_reminder()
     rows = staged_additions()
     problems = []
     for path, lineno, text in rows:

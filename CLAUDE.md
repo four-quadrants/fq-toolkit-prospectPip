@@ -208,3 +208,21 @@ git add -A && python3 fq_auditor/precommit_check.py && git commit -m "..." && gi
 
 Do not run git write commands from a sandbox that mounts the repo (it can
 leave a lock file); give the analyst the command instead.
+
+## Code change or plugin change
+
+Two kinds of change, two ways they reach people:
+
+- **Toolkit code** (`fq_auditor/`, the review page, the deck): runs from the
+  share, so it is live for everyone the moment it is saved. The commit only
+  records it in GitHub. No upload.
+- **The plugin** (`plugin/fq-prospect/`: the skills, their references): each
+  person's Claude reads its own installed copy, so a change reaches people
+  only when the zip is uploaded to the organization plugin.
+
+So when a change touches `plugin/fq-prospect/`: bump the version in
+`.claude-plugin/plugin.json`, and tell the person in plain words to upload
+`Prospects/FQ_Toolkit/fq-prospect.zip` after committing. When it does not,
+say "no plugin upload needed". The commit check does the same on its own: it
+rebuilds the zip and prints a box saying to upload it whenever a commit
+includes plugin changes, and "Plugin unchanged: no upload needed" otherwise.
