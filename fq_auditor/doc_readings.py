@@ -41,6 +41,10 @@ THE FILE (written by Claude, read here; years are strings)
                    preparer's depreciation summary grand total)
                   "net": 0}},
  "production": {"2025": {"months": 12, "reports": [
+     (gross production = the practice-wide day sheet total; provider
+      reports with "split_only": true give the doctor/hygiene split only.
+      For the same dates the two should agree; when they do not, say why
+      in the note, e.g. a provider report run on a different day)
      {"source": "<file>", "provider": "<as printed>", "role": "doctor|hygiene",
       "production": 0, "adjustments": 0, "writeoffs": 0, "tot_prod": 0,
       "pt_income": 0, "ins_income": 0, "total_income": 0}]}},
@@ -263,8 +267,13 @@ def check(folder):
         if not ok or not reps:
             continue
 
+        # Gross production and collections come from the practice-wide
+        # report (the day sheet). Provider reports marked split_only give the
+        # doctor/hygiene split and are not added again into the totals.
+        whole = [x for x in reps if not x.get('split_only')] or reps
+
         def s(k):
-            return round(sum(x[k] for x in reps), 2)
+            return round(sum(x[k] for x in whole), 2)
         hyg = round(sum(x['production'] for x in reps
                         if x.get('role') == 'hygiene'), 2)
         prod[year] = {

@@ -223,6 +223,16 @@ What the lead advisor always wants noted (when the documents show it):
   adds net of the home being sold), and student loans on income-based
   repayment that will reset as income rises.
 - Collections projected against last year's actual.
+- Every return on file, whatever its file name ("Action needed... please
+  sign" is often a return): read it, and add its year as an earlier column.
+- Filing timeliness: the preparer's cover-letter date, Form 4868 / 7004 or an
+  unsigned client copy show a return filed on extension or late. Say when it
+  happens year after year.
+- A rental property: ask for the lease and the rent figures (Schedule E).
+- Fees quoted on the initial call (the call notes): put the range on the
+  Summary's "Our fees" line (summary.json info.fees), marked as quoted.
+- Gross production is the practice-wide day sheet total; provider reports
+  give the doctor/hygiene split. If they differ for the same dates, say why.
 - Returns filed late, or a copy that may not be the final one (unsigned,
   draft, no e-file acceptance): ask whether it is final.
 - Patients: the count the firm uses is patient VISITS in the period (day

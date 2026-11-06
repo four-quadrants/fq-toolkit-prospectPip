@@ -82,6 +82,17 @@ What the lead advisor expects in every initial notes (format in
   balance sheets and P&Ls, one source per year. From the returns, with
   `"basis": "tax"`: distributions (1120-S Schedule K 16d) and any loan to or
   from the shareholder (Schedule L), noted as a question for the call.
+- **Every return on file**, whatever the file is called ("Action needed...
+  please sign" is often last year's return): read it into `tax` and add its
+  year as an earlier column. Note filing timeliness from the preparer's
+  cover-letter date and any Form 4868 / 7004.
+- **Gross production = the practice-wide day sheet total.** Provider reports
+  give the doctor/hygiene split: add them with `"split_only": true`. For the
+  same dates the two should agree; when they do not, say why on the row (a
+  report run on a different day, deleted services).
+- **Rental property:** ask for the lease and rent figures. **Fees quoted on
+  the initial call:** put the range in summary.json `info.fees`, marked
+  "quoted on the initial call".
 - **Depreciation includes amortization.** On a Schedule C the amortization
   (patient records, goodwill) is in other expenses: `da_parts` takes both,
   matching the preparer's depreciation summary grand total. Mark a balance `"balance": true` (never

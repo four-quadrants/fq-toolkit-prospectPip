@@ -118,6 +118,17 @@ added on the consult review's Slides tab):
   on the share, and whoever commits next (the toolkit owner) saves them
   with the usual commit line.
 
+- **Mine the lead advisor's "practice improvements" tabs.** Most of his
+  past initial notes (the Numbers files in client folders, Signed and older
+  years) carry a "practice improvements" tab: ideal adjust % (16%),
+  collection ratio (99.5%), target overhead (50 to 60%), ideal hygiene share
+  (about 41%, "8 days/wk"), new patient %, gross production per patient, fee
+  gap, and what each is worth to the owner. Read them across clients to
+  check and widen the levers (`levers.py`) and the recommendations library:
+  the targets he uses, how he sizes each, and any efficiency metric the
+  toolkit does not compute yet. Watch for tabs copied from another client
+  (one on Echetubu's sheet carries an older client's figures).
+
 ## Setting someone up
 
 The hand-off guide for people (stages, roles, where things live, kitchen vs

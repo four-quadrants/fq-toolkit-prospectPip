@@ -250,6 +250,11 @@ def gather(folder, client=None):
          if 'condo' in ' '.join(str(r.get(k) or '') for k in ('description', 'what')).lower()
          and 'home' not in str(r.get('description') or '').lower()), None)
     years = sorted(set(pnl) | set(prod) | set(counts))[-3:]
+    # A return for the year before those (often sent as "Action needed...
+    # please sign") adds one earlier column, as the lead advisor lays it out.
+    earlier = [y for y in sorted(tax) if years and y < years[0]]
+    if earlier:
+        years = [earlier[-1]] + years
     full = [y for y in years if (pnl.get(y, {}).get('months') or 0) >= 12]
     latest = full[-1] if full else (years[-1] if years else None)
     p = pnl.get(latest, {})
@@ -708,7 +713,7 @@ def gather(folder, client=None):
     # year in its own column. The two bases differ by design (what the
     # bookkeeper books versus what the preparer deducts), so a trend is only
     # meaningful within one basis.
-    oh_years = sorted(set(pnl) | set(tax))[-3:]
+    oh_years = [y for y in sorted(set(pnl) | set(tax)) if y in years] or sorted(set(pnl) | set(tax))[-3:]
     bundle.overhead_by_year = {
         y: {'pnl_income': (pnl.get(y) or {}).get('income'),
             'pnl_other': (pnl.get(y) or {}).get('other_income'),

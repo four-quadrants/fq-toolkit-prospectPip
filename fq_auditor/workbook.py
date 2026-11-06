@@ -238,13 +238,17 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
             ws.cell(row, ycol(i) + 1, 'change').font = HEAD
     row += 1
 
-    def line(label, key=None, formula=None, fmt=MONEY, bold=False):
+    def line(label, key=None, formula=None, fmt=MONEY, bold=False, basis=None):
         nonlocal row
         ws.cell(row, 1, label).font = ROWNAME
         ws.cell(row, 1).fill = F_ROWNAME
         ws.cell(row, 1).border = BOX
         for i, y in enumerate(years):
             col = ycol(i)
+            # A year with no P&L on file (an earlier return only) stays
+            # blank on the P&L lines: not missing, just not asked for.
+            if basis == 'pnl' and by_year[y].get('pnl_income') is None:
+                continue
             if formula:
                 v = formula(get_column_letter(col))
             else:
@@ -264,7 +268,7 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
                 a.number_format = fmt
                 a.font = Font(name=FONT, size=12, italic=True, bold=bold)
                 here = get_column_letter(col + 1)
-            if i and fmt == '0.0%':
+            if i and fmt == '0.0%' and not (basis == 'pnl' and by_year[years[i - 1]].get('pnl_income') is None):
                 prev = get_column_letter(ycol(i - 1))
                 d = ws.cell(row, col + (2 if i == ytd_i else 1),
                             '=IFERROR((%s%d-%s%d)*100,"")' % (here, row, prev, row))
@@ -274,16 +278,16 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
 
     ws.cell(row, 1, 'P&L basis').font = Font(name=FONT, bold=True, size=12)
     row += 1
-    r_inc = line('income', 'pnl_income')
-    r_oth = line('other income', 'pnl_other')
-    r_base = line('income base', formula=lambda c: '=%s%d+%s%d' % (c, r_inc, c, r_oth))
-    r_exp = line('total expenses', 'pnl_expenses')
-    r_dr = line('less doctor wages', 'pnl_dr')
-    r_da = line('less depreciation and amortisation', 'pnl_da')
+    r_inc = line('income', 'pnl_income', basis='pnl')
+    r_oth = line('other income', 'pnl_other', basis='pnl')
+    r_base = line('income base', formula=lambda c: '=%s%d+%s%d' % (c, r_inc, c, r_oth), basis='pnl')
+    r_exp = line('total expenses', 'pnl_expenses', basis='pnl')
+    r_dr = line('less doctor wages', 'pnl_dr', basis='pnl')
+    r_da = line('less depreciation and amortisation', 'pnl_da', basis='pnl')
     r_oh = line('overhead', formula=lambda c: '=%s%d-%s%d-%s%d'
-                % (c, r_exp, c, r_dr, c, r_da))
+                % (c, r_exp, c, r_dr, c, r_da), basis='pnl')
     line('overhead %', formula=lambda c: '=IFERROR(%s%d/%s%d,"")'
-         % (c, r_oh, c, r_base), fmt='0.0%', bold=True)
+         % (c, r_oh, c, r_base), fmt='0.0%', bold=True, basis='pnl')
     def extras(title, rows_):
         """Lines the lead advisor reads beside a basis: fees, what the owner
         took out, the cash at each period end and how fast it grew."""
@@ -795,6 +799,12 @@ def write(bundle, out):
             if getattr(bundle, 'overhead_by_year', None) else set()
         if getattr(bundle, 'overhead_by_year', None):
             in_oh_table |= {e[0] for e in (getattr(bundle, 'overhead_extra', None) or ())}
+        # Years that were asked for (a P&L or production on file). An earlier
+        # year that is there only because a return was on file is not
+        # "missing" its production: no yellow there.
+        core = {y for name, by, _f in bundle.series
+                if name in ('gross production', 'revenue (P&L)', 'gross collections')
+                for y, v in by.items() if v is not None} or set(bundle.years)
         for name, by_year, fmt in bundle.series:
             if name in in_oh_table:
                 continue
@@ -811,7 +821,7 @@ def write(bundle, out):
                 c = ws2.cell(r, col, v)
                 c.font = VALUE if v is not None else LABEL
                 c.number_format = fmt
-                if v is None:
+                if v is None and y in core:
                     c.fill = F_NEEDED
                 letter = get_column_letter(col)
                 col += 1
