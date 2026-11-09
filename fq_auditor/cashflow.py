@@ -70,7 +70,27 @@ RENTAL_WORDS = re.compile(r'rental|\bcondo\b|propert|airbnb|vrbo|\bstr\b|beach\s
 CUSTODIAL_WORDS = re.compile(r'\(cust\)|custodian|custodial|\butma\b|\bugma\b', re.I)
 
 
-def _personal_group(rows):
+def _told(folder, key):
+    """Accounts the analyst has placed by hand: plan_inputs 'rental_accounts'
+    or 'children_accounts', last four digits, comma separated ("7645").
+    A rental with nothing in its name (an account called after the street)
+    cannot be found by words."""
+    try:
+        import inputs as _inputs
+        for k, group in (('rental_accounts', 'Rental properties'),
+                         ('children_accounts', 'Children\u2019s accounts')):
+            v = _inputs.value(folder, k)
+            # "7645" typed on the command line is stored as the number 7645.0
+            told = str(int(v)) if isinstance(v, float) else str(v or '')
+            tails = {re.sub(r'\D', '', x)[-4:] for x in told.split(',') if x.strip()}
+            if re.sub(r'\D', '', str(key))[-4:] in tails:
+                return group
+    except Exception:                                        # noqa: BLE001
+        pass
+    return None
+
+
+def _personal_group(rows, folder=None, key=None):
     """Which personal sheet an account belongs on, from its title and holder.
 
     A rental's account and a child's custodial account are the household's
@@ -79,6 +99,9 @@ def _personal_group(rows):
     with a net per property; children's accounts their own, where a large
     withdrawal stands out.
     """
+    told = _told(folder, key) if folder else None
+    if told:
+        return told
     text = ' '.join(str(r.get(k) or '') for r in rows
                     for k in ('holder', 'file', 'title'))
     if CUSTODIAL_WORDS.search(text):
@@ -95,7 +118,7 @@ def _groups(folder):
     """{(side, key): sheet} for the personal accounts, cached per folder."""
     if folder not in _GROUPS:
         found = _st.gather(folder)
-        _GROUPS[folder] = {k: _personal_group(v) for k, v in found.items()
+        _GROUPS[folder] = {k: _personal_group(v, folder, k[1]) for k, v in found.items()
                            if k[0] == 'Personal'}
     return _GROUPS[folder]
 
@@ -196,7 +219,7 @@ def build(folder):
         }
         name = _entity_of(side, key)
         if name == 'Personal':
-            name = _personal_group(rows)
+            name = _personal_group(rows, folder, key)
             _GROUPS.setdefault(folder, {})[(side, key)] = name
         ent = entities.setdefault(name, {'name': name, 'accounts': [],
                                          'liabilities': [],

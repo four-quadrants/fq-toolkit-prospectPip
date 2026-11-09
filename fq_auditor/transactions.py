@@ -954,6 +954,18 @@ def find_one_offs(rows, periods, multiple=2.0):
         amount = round(row.get('amount') or 0, 2)
         seen[amount] = seen.get(amount, 0) + 1
 
+    # And how many months each PAYEE is paid in. A card autopay changes
+    # amount every month ($14,660, $13,809, $16,059 on one household's
+    # checking) so the amount test misses it, and it was proposed as three
+    # one-offs worth $11,000 a month of the family's real spending.
+    def payee(row):
+        words = re.findall(r'[a-z]{3,}', (row.get('description') or '').lower())
+        return ' '.join(words[:3])
+    months = {}
+    for row in rows:
+        if row.get('date'):
+            months.setdefault(payee(row), set()).add(row['date'].strftime('%Y%m'))
+
     out = []
     for row in rows:
         if row.get('direction') != 'debit' or row.get('kind'):
@@ -962,6 +974,9 @@ def find_one_offs(rows, periods, multiple=2.0):
         if amount < middle * multiple:
             continue
         if seen.get(round(amount, 2), 0) > 2:
+            continue
+        if CARD_PAYMENT.search(row.get('description') or '') or \
+                len(months.get(payee(row), ())) >= 3:
             continue
         row['one_off'] = round(amount / middle, 1)
         out.append(row)

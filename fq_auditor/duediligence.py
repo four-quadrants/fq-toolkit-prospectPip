@@ -150,10 +150,18 @@ def findings(folder):
 
     # Other income on an LLC or building account -----------------------------
     for (side, key), rows in g.items():
-        if side != 'Business' or key.isdigit():
+        # A practice account is keyed by its number ("x1980"); only an
+        # account filed under a company's name (a building LLC) is asked
+        # about. Patient checks and card settlements on the operating account
+        # read as seven "income beyond the practice" questions on one client.
+        if side != 'Business' or re.match(r'x?\d{3,}$', key):
             continue
         by = collections.defaultdict(list)
         for r in rows:
+            if re.search(r'remote\s*deposit|merchant\s*svcs|bankcard|cherry|'
+                         r'care\s*credit|synchrony|proceed\s*fin|^deposit\b',
+                         (r.get('description') or ''), re.I):
+                continue
             if r.get('direction') == 'credit' and r.get('kind') is None:
                 by[round(r.get('amount') or 0, 2)].append(r)
         for amt, hits in by.items():
@@ -253,6 +261,71 @@ def findings(folder):
                     'payment.',
                     'The debt sheet is a snapshot; financing taken since is in '
                     'no document on file.', 'debt sheet', 'Normal', SEND))
+
+    # Questions the initial notes already raised -----------------------------
+    # The analyst's notes carry a question on the row it belongs to (the
+    # accrued 401(k), money out of a child's account, a loan with no payer).
+    # They are the questions the team would otherwise rediscover; they start
+    # here, marked for the lead advisor to keep or drop.
+    try:
+        import json as _jn
+        import store as _sto
+        with open(_sto.json_path(folder, 'notes.json')) as fh:
+            written = _jn.load(fh)
+        for row, got in (written or {}).items():
+            for q in (got or {}).get('questions') or ():
+                q = ' '.join(str(q).split())
+                if len(q) < 12:
+                    continue
+                key = 'notes|' + re.sub(r'\W+', '-', q.lower())[:60]
+                out.append((key, q, 'From the initial notes, row "%s".' % row,
+                            'initial notes', 'Normal', SEND))
+    except (OSError, ValueError):
+        pass
+
+    # Standard checks the documents point to ------------------------------------
+    # Asked on a past consult and worth asking whenever the facts are there.
+    try:
+        import json as _jn
+        import store as _sto
+        with open(_sto.json_path(folder, 'doc_readings.json')) as fh:
+            rd = _jn.load(fh)
+    except (OSError, ValueError):
+        rd = {}
+    blob = _jn.dumps(rd).lower() if rd else ''
+    if (rd.get('debts') or {}).get('building') or 'building' in blob and 'owns' in blob:
+        out.append(('std|building_value',
+                    'What do you think your practice building is worth today? We '
+                    'are trying to get an estimate for projection purposes; a '
+                    'recent appraisal or broker opinion is ideal.',
+                    'They own the building; the plan sells it at retirement.',
+                    'standard', 'Normal', SEND))
+    if 'heloc' in blob:
+        out.append(('std|heloc_property',
+                    'You provided information for a home equity line of credit; '
+                    'which property is it attached to, and is anything drawn on it?',
+                    'A HELOC is on file; the plan needs to know what secures it.',
+                    'standard', 'Normal', SEND))
+    try:
+        txt = ' '.join((r.get('description') or '') for rows in g.values() for r in rows).lower()
+    except Exception:                                        # noqa: BLE001
+        txt = ''
+    if re.search(r'coinbase|robinhood|kraken|gemini|crypto\.com', txt):
+        out.append(('std|crypto',
+                    'We noticed transfers to a crypto or brokerage account (for '
+                    'example Coinbase). Do you still have that account? If so, '
+                    'can we get the most recent statement?',
+                    'Seen on the bank statements; no statement on file.',
+                    'standard', 'Normal', SEND))
+    ins = re.search(r'(guardian|massmutual|northwestern|protective|'
+                    r'lincoln|prudential|aflac)[a-z ]{0,20}', txt)
+    if ins:
+        out.append(('std|insurance|' + ins.group(1),
+                    'We noted a recurring payment to %s; is this life or '
+                    'disability insurance? If so, can you send a recent statement?'
+                    % ins.group(1).title(),
+                    'Recurring premium on the bank statements; no policy on file.',
+                    'standard', 'Normal', SEND))
 
     # Capacity, always ------------------------------------------------------
     names = []

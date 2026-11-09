@@ -40,7 +40,8 @@ FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client fol
   per question, and `slides/*.jpg` (consult) into the scratch dir.
 - If it prints that Claude readings are missing (no `bank_statements.json`,
   `accounts.json` or `income_facts.json` in `_Audit`), tell the analyst to
-  build Initial notes, Cash flow and Assumptions in the app first.
+  build Initial notes, Cash flow and Assumptions first (ask Claude for each
+  step; the app is only a fallback).
 
 ## Publishing a NEW page
 
@@ -95,7 +96,8 @@ Never overwrite the lead advisor's work. Re-seed, then:
    with `python3 inputs.py`, a note saying "hold the 401(k) until 2028" means
    checking the recommendation was moved to that year). Say plainly what was
    done about each one, and what could not be done.
-6. Tell the analyst the next step in the app.
+6. Tell the analyst the next step (on a consult review: build the deck,
+   see the consult review skill).
 
 ## Do not
 

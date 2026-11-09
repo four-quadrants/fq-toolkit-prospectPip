@@ -375,6 +375,16 @@ def _figures(folder, client):
     D['slide_parts'] = [parts[i] for i in sorted(top)]
     D['age'] = N(f.get('Age')) or N(adv.get('age'))
     D['retire_age'] = N(adv.get('retire_age')) or _deck.retire_age_of(f.get('Retirement age goal'))
+    if not D['retire_age']:
+        # "ASAP" on the form: the age agreed on the call, as the analyst wrote
+        # it in the summary's projection.
+        try:
+            import json as _json
+            import store as _store
+            with open(_store.json_path(folder, 'summary.json')) as fh:
+                D['retire_age'] = N((_json.load(fh).get('projection') or {}).get('retire_age'))
+        except (OSError, ValueError):
+            pass
     D['current_savings'] = N(adv.get('current_savings'))
     D['income'] = N(adv.get('target_income'))
     D['schedule'] = [tuple(x) for x in (adv.get('savings_schedule') or [])]
@@ -389,6 +399,17 @@ def _figures(folder, client):
         D['practice_debts'] = _debt.gather(folder).get('practice') or []
     except Exception:                                        # noqa: BLE001
         D['practice_debts'] = []
+    # The checked readings win, as they do on the initial notes: a debt
+    # schedule the template reader cannot parse left one deck saying "0
+    # loans" against eight on the notes.
+    try:
+        import doc_readings as _dr
+        got = (_dr.check(folder)[0].get('debts') or {}).get('practice')
+        if got:
+            D['practice_debts'] = [dict(r, description=r.get('what') or r.get('description'))
+                                   for r in got]
+    except Exception:                                        # noqa: BLE001
+        pass
     D['debt_service'] = N(f.get('Practice debt service'))
 
     # ---- what the plan works out instead of asking for -------------------

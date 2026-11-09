@@ -201,6 +201,23 @@ def build(bundle, folder):
     if isinstance(age, str):
         m = re.search(r'\b(\d{2})\b', age)
         age = float(m.group(1)) if m else None
+    said = 'IC form'
+    if not retire_at:
+        # "ASAP" on the form: the age agreed on a call wins, from the
+        # summary's projection (what the analyst wrote from the call notes)
+        # or the advisor's input.
+        try:
+            import json as _json
+            import inputs as _inp
+            got = _inp.value(folder, 'retire_age')
+            if not got:
+                import store as _store
+                with open(_store.json_path(folder, "summary.json")) as fh:
+                    got = (_json.load(fh).get('projection') or {}).get('retire_age')
+            if got:
+                retire_at, said = float(got), 'the call notes'
+        except Exception:                                    # noqa: BLE001
+            pass
     if age and retire_at:
         year_of = this_year + int(retire_at - age)
         # The corpus wording, unchanged in all 44 plans: given name, the year,
@@ -212,8 +229,8 @@ def build(bundle, folder):
             'expectancy used for this plan is age %d (%s).'
             % (bundle.forename or 'the client', year_of, retire_at,
                FIRM['life_expectancy'], end),
-            source='IC form: age %d, retirement age goal %d.'
-                   % (age, retire_at)))
+            source='%s: age %d, retirement age goal %d.'
+                   % (said, age, retire_at)))
     else:
         out.append(Section(2, needed='the client’s target retirement age',
                            why='every projection in the plan runs to it'))
@@ -315,7 +332,9 @@ def build(bundle, folder):
         def _who(a):
             # "Practice checking: x8478 (Fifth Third)". Whose account and what
             # kind come first, because that is what the reader sorts by.
-            side = 'Personal' if a.get('entity') == 'Personal' else 'Practice'
+            side = {'Personal': 'Personal',
+                    'Rental properties': 'Rental',
+                    'Children\u2019s accounts': 'Child\u2019s'}.get(a.get('entity'), 'Practice')
             kind = (a.get('kind') or 'account').lower()
             return '%s %s: %s' % (side, kind, a['name'])
         for a in cash['accounts']:
@@ -446,7 +465,10 @@ def build(bundle, folder):
                 and not f.label.startswith(('Practice total', 'Personal total',
                                             'Practice debt service',
                                             'Personal debt service',
-                                            'Practice debt', 'Personal debt'))]
+                                            'Practice debt', 'Personal debt',
+                                            'Building (LLC) total',
+                                            'Building (LLC) debt service',
+                                            'Practice + building'))]
         extra = []
         if number == 8 and cash:
             # Loans the bank statements show being paid but no schedule or
@@ -527,7 +549,13 @@ def build(bundle, folder):
     wages = _series(bundle, 'doctor income (P&L)', basis_year)
     rev = _series(bundle, 'revenue (P&L)', basis_year)
     exp = _series(bundle, 'expenses (P&L)', basis_year)
-    net = (rev - exp) if (rev and exp) else None
+    da = _series(bundle, 'depreciation / amortisation', basis_year) or 0
+    # Net profit is the P&L's bottom line, AFTER the owner's W-2 and
+    # depreciation, as every one of the lead advisor's plans states it (W-2
+    # plus net profit = what the owner earns). "expenses (P&L)" is overhead,
+    # which leaves both out: taking it alone counted the W-2 twice and put
+    # one owner's earnings $418,000 too high.
+    net = (rev - exp - (wages or 0) - da) if (rev and exp) else None
     if wages or net:
         # Four numbers and two growth rates, which as a sentence forces the
         # reader to hold the W-2 in their head while the net profit arrives.
@@ -542,8 +570,8 @@ def build(bundle, folder):
         if net:
             rows.append({'label': 'Net profit',
                          'amount': _money(net),
-                         'detail': 'Revenue of %s less expenses of %s. '
-                                   'Distributions grown at 5.0%% until '
+                         'detail': 'Revenue of %s less overhead of %s, the W-2 and '
+                                   'depreciation. Distributions grown at 5.0%% until '
                                    'retirement.' % (_money(rev), _money(exp))})
         if wages and net:
             rows.append({'label': 'Total earnings',

@@ -568,7 +568,8 @@ def seed(folder, outdir, mode='consult'):
              proposed=D['adv'].get('consult_date_text') or 'not set',
              basis='From the plan entry.'),
         dict(key='retire_age', label='Retirement age',
-             proposed='%d (in %d)' % (p['retire_age'], p['retire_year']),
+             proposed=('%d (in %d)' % (p['retire_age'], p['retire_year'])
+                       if p.get('retire_age') and p.get('retire_year') else 'not set'),
              basis='IC form: retirement age goal.'),
         dict(key='target_income', label='Target retirement income, a year',
              proposed=money(p['income']), basis='Today’s dollars.'),

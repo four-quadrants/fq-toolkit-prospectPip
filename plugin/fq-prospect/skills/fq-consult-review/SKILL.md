@@ -66,4 +66,18 @@ removed, N added"; the next deck build applies them.
    the savings table; his figures and assumptions go into the plan inputs.
 2. Act on every note and client answer printed, before anything else, and say
    what was done about each.
-3. Next step for the analyst: in the app, **Build the deck**.
+3. Build the deck, in the same run: from fq_auditor,
+   `FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 build_outputs.py "<client folder>" --what deck`.
+   It fills the firm's consult template from the plan and his slide
+   decisions (taken out, added, layouts) and saves `Consult deck -
+   <Surname>.pptx` in the client folder; it opens in Keynote. Say how many
+   places are still marked [ADVISOR] for him to write, and that the deck
+   can be rebuilt any time after he changes the page.
+
+## "Build the deck" from the page
+
+The consult review's Slides tab has a **Build the deck** button. It copies
+one line, "Pull in and build <Surname>'s consult deck", for the lead advisor
+or analyst to paste here. That line means: Pull in (above), act on the notes
+and answers, then build the deck. The page itself cannot reach the client
+folder; Claude does.

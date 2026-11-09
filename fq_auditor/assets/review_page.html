@@ -817,7 +817,18 @@ function fqModel(P){
     var chip=function(k,label){ return '<button type="button" class="sf sf-'+k+'" data-sf="'+k+'" aria-pressed="'+(!!SF[k])+'">'+label+' · '+(cnt[k]||0)+'</button>'; };
     $('sfilter').innerHTML='Show: '+chip('needed','Needed')+chip('check','To check')+chip('sure','Sure')+
       '<span class="note"> Start with Needed and To check; Sure boxes are figures from the checked documents or decisions already made.</span>';
-    $('scount').textContent='';
+    // Build the deck: the page cannot reach the client folder, so the button
+    // hands over the one line Claude needs (pull in, then build), copied.
+    var line='Pull in and build '+(plan.surname||'this client')+'\u2019s consult deck';
+    $('scount').innerHTML=(plan.mode==='consult')?
+      '<div class="note" style="margin:8px 0"><button type="button" id="builddeck">Build the deck</button> '+
+      '<span id="buildmsg">When the slides are decided: click, then paste the line into Claude. It saves your choices and builds the deck into the client folder.</span></div>':'';
+    var bd=$('builddeck');
+    if(bd) bd.onclick=function(){
+      var done=function(){ $('buildmsg').innerHTML='Copied. Paste into Claude: <b>'+line+'</b>'; };
+      try{ navigator.clipboard.writeText(line).then(done,function(){ $('buildmsg').innerHTML='Paste this into Claude: <b>'+line+'</b>'; }); }
+      catch(e){ $('buildmsg').innerHTML='Paste this into Claude: <b>'+line+'</b>'; }
+    };
     $('slides').innerHTML=order.map(function(n){
       var all=SL.filter(function(x){return x.slide===n}), fs=figs.filter(function(f){return f.slide===n});
       var its=all.filter(function(x){ return SF[x.status||'check']; });
@@ -1247,7 +1258,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v45';
+  var BUILD='v46';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

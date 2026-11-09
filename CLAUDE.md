@@ -176,6 +176,25 @@ the Claude app, the Analysis share and the cloned toolkit (SETUP.md Part 1).
   Claude login, set `FQ_NO_CLAUDE=1`: saved readings in `_Audit` are used.
 - **No em dashes** in anything the team or clients read.
 
+## Household spending (the cash flow's headline figure)
+
+The team's figure wins: when the lead advisor's Assumptions or the planning
+team's expense sheet states household spending, use theirs and show the
+toolkit's beside it. Where nothing is stated, the rule, taken from how the
+team has done it on past clients:
+
+- Household = the personal accounts the family lives from. Rental accounts
+  and children's custodial accounts are their own sheets, not household.
+- Money out, less transfers between the client's own accounts (Oyler's
+  practice).
+- Card payments are spending, smoothed month to month (Tanksley,
+  Spaulding). A payee paid in three or more months is never a one-off.
+- One-offs (a single, non-recurring outflow) are proposed, never removed
+  silently.
+- Fixed payments, reported apart: mortgages, consumer loans (Mariner,
+  Synchrony, Affirm, student loans), insurance premiums, savings
+  contributions. A rental's mortgage belongs to the rental.
+
 ## Emails to the client
 
 Claude never sends or drafts email in anyone's mailbox. The intake follow-up,
