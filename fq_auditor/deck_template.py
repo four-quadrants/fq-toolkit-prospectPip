@@ -436,6 +436,24 @@ def _figures(folder, client):
           'target_overhead': N(adv.get('target_overhead'))}
     lx.update(_deck._production_inputs(folder))
     lx.update(_series_inputs(b, folder))
+    # When the production reader found nothing (a practice whose reports were
+    # read by Claude, not a Dentrix export), the by-year figures on the notes
+    # still hold collections, production and adjustments for the last full
+    # year. They fill only what is missing, so the levers can compute.
+    ser = {name: vals for name, vals, _f in b.series}
+    this_year = str(datetime.date.today().year)
+
+    def last_full(name):
+        vals = ser.get(name) or {}
+        ys = [y for y in sorted(vals) if vals.get(y) is not None and y < this_year]
+        return vals[ys[-1]] if ys else None
+    for key, name, fn in (('collection_pct', 'collection %', None),
+                          ('net_production', 'net production', None),
+                          ('gross_production', 'gross production', None),
+                          ('adjust_pct', 'production adjustment %', abs)):
+        v = last_full(name)
+        if lx.get(key) is None and v is not None:
+            lx[key] = fn(v) if fn else v
     lx.update(adv.get('levers') or {})
     D['lever_inputs'] = lx
     D['levers'] = _lev.compute(lx)
@@ -812,8 +830,26 @@ def slide_fills(D):
                          'meetings, the \u201cAugusta Rule\u201d and more.',
               'Text 28': 'A lack of proactive tax advice and planning, so taxes are '
                          'reacted to after the fact instead of managed.'}
-    for name, text in zip(('Text 8', 'Text 10', 'Text 12'), flags):
+    # The accountant's review (carried onto the consult review as tax_flags,
+    # tax_deductions and tax_pattern) comes first: those are the findings the
+    # tax side presents. The computed flags fill any slot left.
+    adv7 = D['adv']
+    mine = [str(x) for x in (adv7.get('tax_flags') or []) if str(x).strip()]
+    for name, text in zip(('Text 8', 'Text 10', 'Text 12', 'Text 14', 'Text 16'),
+                          (mine + [f for f in flags if f not in mine])[:5]):
         out[7][name] = text
+    for name, text in zip(('Text 21', 'Text 23', 'Text 25'),
+                          [str(x) for x in (adv7.get('tax_deductions') or []) if str(x).strip()]):
+        out[7][name] = text
+    if adv7.get('tax_pattern'):
+        out[7]['Text 30'] = str(adv7['tax_pattern'])
+    # Fees, as quoted (the deck entry on the consult review).
+    fees = {'Text 25': adv7.get('fee_planning_y1'), 'Text 26': adv7.get('fee_planning_note'),
+            'Text 29': adv7.get('fee_planning_y2'), 'Text 36': adv7.get('fee_tax_y1'),
+            'Text 37': adv7.get('fee_tax_note'), 'Text 40': adv7.get('fee_tax_y2')}
+    fees = {k: str(v) for k, v in fees.items() if v}
+    if fees:
+        out.setdefault(19, {}).update(fees)
 
     # 4 results applied to the practice
     th, oh, sv = D['take_home'], D['overhead'], D['current_savings']
@@ -916,8 +952,9 @@ def slide_fills(D):
             vals = [r[0], r[1], r[2], M(r[3]), M(r[4])]
         else:
             # Never blank: Keynote deletes an empty text box on save, and the
-            # advisor then has no cell to type a sixth lever into.
-            vals = [ask('lever'), '[TBD]', '[TBD]', '[TBD]', '[TBD]']
+            # advisor then has no cell to type another lever into. A dash keeps
+            # the box without reading as something still to do.
+            vals = ['\u2013'] * 5
         for n, v in zip(names, vals):
             out[9][n] = v
     rev = sum(r[3] for r in rows)
@@ -994,7 +1031,9 @@ def slide_fills(D):
         'Text 3': b_txt,
         'Text 8': 'Establish an ideal practice bank balance of %s.' % b_txt,
         'Text 20': 'Four Quadrants consolidates and refinances practice debt, '
-                   'and obtains a fresh line of credit of %s+.' % b_txt,
+                   'and obtains a fresh line of credit of %s+.' % (
+                       _k(N(D['adv'].get('loc_amount'))).replace('.0k', 'k')
+                       if D['adv'].get('loc_amount') else b_txt),
         'Text 31': 'Once accounts reach %s, devise income, debt and savings '
                    'strategies to maximize the financial plan.' % b_txt,
     }
@@ -1012,22 +1051,25 @@ def slide_fills(D):
     if inc:
         def neg(v):
             return '(%s)' % M(v)
-        k1 = lambda v: '$%.1fk' % (v / 1000.0)            # noqa: E731
+        k1 = lambda v: '$%.1fk' % (abs(v) / 1000.0)       # noqa: E731
+        sg = lambda v: '+' if v >= 0 else '\u2212'         # noqa: E731
         out[11].update({
-            'Text 3': '+%s/mo business cashflow' % k1(inc['gain']),
+            'Text 3': '%s%s/mo business cashflow' % (sg(inc['gain']), k1(inc['gain'])),
             'Text 4': 'with a new 401(k) in %d' % inc['plan_year'],
-            'Text 6': 'Decrease %s\u2019s W-2 (\u2212%s/yr ) and take lower, '
-                      'consistent distributions ( \u2212%s/yr ) to have fewer '
+            'Text 6': 'Decrease %s\u2019s W-2 (\u2212%s/yr ) and take %s, '
+                      'consistent distributions ( %s%s/yr ) to have fewer '
                       'tax surprises and smoother cashflow.'
                       % (D['first'], _k(inc['w2_cut'] * 12),
-                         _k(inc['dist_cut'] * 12)),
+                         'lower' if inc['dist_cut'] >= 0 else 'higher',
+                         '\u2212' if inc['dist_cut'] >= 0 else '+',
+                         _k(abs(inc['dist_cut']) * 12)),
             'Text 10': 'Increase the 401(k) to max with the same match, saving '
                        '%s/yr more. All changes lower taxes over %s/yr.'
                        % (k1(inc['more_saved']), k1(inc['tax_saved'])),
             'Text 12': 'Begin paying distributions to cover custom quarterly '
                        'tax estimates (example on the next slide).',
             'Text 15': 'Personal cashflow stays identical while business '
-                       'cashflow grows by +%s/mo.' % k1(inc['gain']),
+                       'cashflow grows by %s%s/mo.' % (sg(inc['gain']), k1(inc['gain'])),
             'Text 23': neg(inc['def']), 'Text 24': 'Taxes (%d%%)' % round(100 * inc['pct']),
             'Text 25': neg(inc['tax']), 'Text 28': M(inc['net']),
             'Text 31': '%s/mo' % M(inc['dist']),
@@ -1408,7 +1450,16 @@ def income_structure(D):
     p_def = max(dfr, N(adv.get('income_deferral_proposed')) or cap) / 12.0 \
         if not adv.get('income_deferral_proposed') else \
         N(adv['income_deferral_proposed']) / 12.0
-    rate = N(adv.get('income_tax_rate_proposed')) or PROPOSED_TAX_RATE
+    # The proposed tax rate: the advisor's, else the rate this household
+    # actually pays now (its return) when that is lower, else the firm's 40%. A flat 40% on a
+    # household whose rental losses bring it to 18% made the new structure
+    # look like it cost $5,500 a month.
+    # The lower of the two: total tax over W-2 runs far above 40% when the
+    # return also carries distributions (Oyler, 72%), and there the firm's
+    # 40% stands.
+    cur = tax / (w2 - dfr) if (w2 - dfr) > 0 else None
+    rate = N(adv.get('income_tax_rate_proposed')) or (
+        min(cur, PROPOSED_TAX_RATE) if cur else PROPOSED_TAX_RATE)
     rate = rate / 100.0 if rate > 1 else rate
     p_tax = (p_w2 - p_def) * rate
     p_net = p_w2 - p_def - p_tax
@@ -1496,6 +1547,13 @@ def dropped(D):
     if not income_structure(D) and not (D.get('income_facts') or {}).get('w2') \
             and not (D.get('facts') or {}).get('Doctor wages'):
         drop.append(11)
+    # Account by account needs the investment statements (holdings and a
+    # return per account). With only balances on file the slide would be
+    # sixteen blanks; it comes back by itself once statements are read, or
+    # the lead advisor can force it on the consult review.
+    if not any((v or {}).get('return_pct') is not None
+               for v in (D.get('returns') or {}).values()):
+        drop.append(15)
     return drop
 
 
@@ -1518,8 +1576,24 @@ def _drafts(folder, D, prs, fills, drop):
             rev = json.load(fh)
     except (OSError, ValueError):
         rev = {}
-    if 'slides' in rev:
-        return {k: v for k, v in (rev['slides'] or {}).items() if v}
+    reviewed = rev.get('slides') if 'slides' in rev else None
+    if reviewed:
+        # What he approved or rewrote wins; a box he cleared stays empty;
+        # the boxes he never touched keep the draft rather than a blank.
+        drafted = {}
+        if not os.environ.get('FQ_NO_DRAFTS'):
+            try:
+                import deck_drafts
+                drafted = deck_drafts.draft(folder, D, holes(D, prs, fills, drop))
+            except ImportError:
+                drafted = {}
+        out = dict(drafted)
+        for k, v in reviewed.items():
+            if v:
+                out[k] = v
+            else:
+                out.pop(k, None)
+        return out
     if os.environ.get('FQ_NO_DRAFTS'):
         return {}
     try:
@@ -2083,7 +2157,8 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
                 set_text(sh, label)
                 placeholder_style(sh, label == 'TBD')
                 asked.append(label)
-        prompts += len(asked)
+        if n not in drop:
+            prompts += len(asked)
         if slide.has_notes_slide and n not in KEEP_NOTES:
             note = NOTES.get(n, '')
             if drafted:
