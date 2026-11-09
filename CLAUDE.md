@@ -236,7 +236,9 @@ Two kinds of change, two ways they reach people:
 
 So when a change touches `plugin/fq-prospect/`: bump the version in
 `.claude-plugin/plugin.json`, and tell the person in plain words to upload
-`Prospects/FQ_Toolkit/fq-prospect.zip` after committing. When it does not,
+`Prospects/FQ_Toolkit/fq-prospect.zip` after committing, and always hand
+them the zip as a file card (present it) so they can open its folder in one
+click instead of hunting for it. When it does not,
 say "no plugin upload needed". The commit check does the same on its own: it
 rebuilds the zip and prints a box saying to upload it whenever a commit
 includes plugin changes, and "Plugin unchanged: no upload needed" otherwise.

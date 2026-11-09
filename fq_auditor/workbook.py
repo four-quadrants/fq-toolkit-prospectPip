@@ -640,11 +640,24 @@ def _summary_sheet(wb, bundle):
     # Overhead today is the most recent completed tax return's (the lead
     # advisor's rule), not the year-to-date P&L.
     ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')), default=None)
-    oh_now = R.get('overhead_now', oh[ty]['tax_pct'] / 100.0 if ty else None)
+    # No return yet (a first-year owner): the latest P&L of six months or
+    # more stands in, and says so. Left blank, the "with 4Q"
+    # income came out as the whole practice income.
+    py_ = max((y for y in oh if (oh[y] or {}).get('pnl_pct')),
+              key=lambda y: ((oh[y].get('pnl_months') or 12) >= 6, y), default=None)
+    if ty:
+        oh_now, how = oh[ty]['tax_pct'] / 100.0, \
+            'today: the %s tax return; with 4Q: 10.9%% lower' % ty
+    elif py_:
+        mo = oh[py_].get('pnl_months') or 12
+        oh_now, how = oh[py_]['pnl_pct'] / 100.0, \
+            'today: the %s P&L%s (no return on file yet); with 4Q: 10.9%% lower' % (
+                py_, ' (%d months)' % mo if mo < 12 else '')
+    else:
+        oh_now, how = None, 'today: no return or P&L on file yet; type it in'
+    oh_now = R.get('overhead_now', oh_now)
     rows = [
-        ('Overhead', oh_now, '=IFERROR(B{r}*(1-B%d),"")' % rin, '0.0%',
-         'today: the %s tax return; with 4Q: 10.9%% lower' % ty if ty
-         else 'today: no return on file yet; type it in'),
+        ('Overhead', oh_now, '=IFERROR(B{r}*(1-B%d),"")' % rin, '0.0%', how),
         ('Income', R.get('income_now'), '=IFERROR(B%d*(1-C{oh}),"")' % (rin + 2), MONEY,
          'practice income x (1 - overhead with 4Q)'),
         ('Savings', R.get('savings_now'), '=IFERROR(B{r}*B%d,"")' % (rin + 1), MONEY,

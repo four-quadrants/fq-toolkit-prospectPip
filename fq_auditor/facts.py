@@ -158,6 +158,11 @@ def attach_notes(bundle, folder):
             continue
         if got.get('note'):
             fact.note = got['note']
+            # A pain point with nothing from the IC form takes what was
+            # written from the calls as its value, rather than a yellow
+            # "add from the initial call" over a note that already says it.
+            if fact.value is None and fact.where == 'pain point':
+                fact.value, fact.note, fact.needed = got['note'], None, None
         # Flags the code raised itself stay; the written ones add to them.
         fact.flags = (list(fact.flags or ()) + [x for x in (got.get('flags') or ())
                                                  if x not in (fact.flags or ())])[:2]
@@ -216,7 +221,9 @@ def gather(folder, client=None):
         for y, v in (got.get('tax') or {}).items():
             tax.setdefault(y, v)
         for y, v in (got.get('production') or {}).items():
-            if not prod.get(y):
+            # The production reader leaves a stub ({'values': {}}) for a year
+            # whose report it found but could not read: that is not a reading.
+            if not (prod.get(y) or {}).get('values'):
                 prod[y] = v
         # Patients are patients seen (visits) from the reports, not a count
         # of active patients the client typed up: a reading of patients seen
@@ -235,8 +242,14 @@ def gather(folder, client=None):
             if (got.get('debts') or {}).get(side):
                 debts[side] = got['debts'][side]
         profile = got.get('profile') or {}
-        for k in ('marital_status', 'dependents', 'ownership', 'pms', 'age'):
-            if not form.get(k) and profile.get(k):
+        # Any IC form field can come from the call notes instead (profile in
+        # doc_readings, with the notes as its source) when the form is missing
+        # or is not this client's: what the client SAID still belongs on the
+        # sheet, marked with where it was said.
+        form_keys = {k for k, _ in _ic.FIELDS} | {
+            'marital_status', 'dependents', 'ownership', 'pms', 'age'}
+        for k in form_keys:
+            if not form.get(k) and (profile.get(k) or {}).get('value'):
                 form[k] = profile[k]['value']
 
     def pv_(key):
@@ -305,10 +318,12 @@ def gather(folder, client=None):
              if not pv_('associates')[1] or _prod.load_roles(folder)
              else pv_('associates')[1],
              'composed'),
-        Fact('Chairs', form.get('chairs_total') and
+        Fact('Chairs', form.get('chairs_total') and (
              '%s total (%s op, %s hyg)' % (form.get('chairs_total'),
                                            form.get('chairs_operative'),
-                                           form.get('chairs_hygiene')),
+                                           form.get('chairs_hygiene'))
+             if form.get('chairs_operative') or form.get('chairs_hygiene')
+             else '%s total' % form.get('chairs_total')),
              TEXT, ic_name, 'chairs'),
         Fact('Payer mix', _compose.payer_mix(form), TEXT, ic_name,
              'insurances in network'),

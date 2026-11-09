@@ -208,6 +208,12 @@ def read_pnl(text):
         if name is None and re.match(r'^Total (?:for )?\S', line.strip(), re.I):
             pending = line.strip()
             continue
+        # The same split for an ordinary account in a PDF: "Wages - Dr" on one
+        # line, "$199,992.00" on the next. Without it the doctor's pay on a
+        # PDF P&L is never found and stays in overhead.
+        if name is None and re.match(r'^[A-Za-z][^\d$]{2,80}$', line.strip()):
+            pending = line.strip()
+            continue
         if not name or val is None:
             continue
         # QuickBooks Online numbers its accounts: "71100 Depreciation
@@ -230,13 +236,22 @@ def read_pnl(text):
     other_exp = _find_total(sections, 'other expenses', 'other expense') or 0.0
     if expenses is None:
         return None
+    # QuickBooks puts some practices' staff, associate and owner wages (and
+    # supplies, labs) under Cost of Goods Sold, above Gross Profit, so they
+    # are not in "Total for Expenses". They are overhead all the same: left
+    # out, one practice printed 24% overhead against a true 82%.
+    cogs = _find_total(sections, 'cost of goods sold', 'cost of sales') or 0.0
+    expenses += cogs
 
     # Rebol's books call it "Owner Wages", under an Owner section that also
     # holds his auto, health insurance and payroll taxes. Only the wages come
     # out: that reproduces the 78.3% on his consult deck, and taking the
     # whole Owner section out would print 76.0%.
     doctor_salary = _find_total(lines, 'doctor wages', 'dr salary',
-                                'doctor salary', 'owner wages') or 0.0
+                                'doctor salary', 'owner wages', 'wages - dr',
+                                'wages-dr') or (
+        # a header account with sub-accounts: "Total for Wages - Dr"
+        _find_total(sections, 'wages - dr', 'doctor wages', 'owner wages')) or 0.0
     # Three independent lookups; a missing one contributes zero.
     da_found, da_total = [], 0.0
     for label, *aliases in (('Depreciation', 'depreciation expense',
@@ -263,6 +278,7 @@ def read_pnl(text):
         'income_base': round(base, 2),
         'expenses': round(expenses, 2),
         'other_expenses': round(other_exp, 2),
+        'cogs': round(cogs, 2),
         'doctor_salary': round(doctor_salary, 2),
         'depreciation_amort': round(da_total, 2),
         'da_found': da_found,
