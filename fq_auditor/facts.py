@@ -176,6 +176,55 @@ def attach_notes(bundle, folder):
     return bundle
 
 
+# Short forms people go by, both ways: a form signed "Bill" is not a mismatch
+# for a client filed as William.
+NICKNAMES = [{'james', 'jim', 'jimmy', 'jamie'}, {'william', 'will', 'bill', 'billy'},
+             {'robert', 'rob', 'bob', 'bobby'}, {'michael', 'mike'},
+             {'steven', 'stephen', 'steve'}, {'christopher', 'chris'},
+             {'matthew', 'matt'}, {'daniel', 'dan', 'danny'}, {'thomas', 'tom'},
+             {'joseph', 'joe'}, {'anthony', 'tony'}, {'katherine', 'kathryn', 'kate', 'katie'},
+             {'elizabeth', 'liz', 'beth'}, {'benjamin', 'ben'}, {'samuel', 'sam'},
+             {'jonathan', 'jon', 'john'}, {'nicholas', 'nick'}, {'andrew', 'andy', 'drew'},
+             {'richard', 'rick', 'rich'}, {'edward', 'ed', 'eddie'}, {'alexander', 'alex'}]
+
+
+def _same_first(a, b):
+    a, b = (a or '').strip().lower(), (b or '').strip().lower()
+    if not a or not b or a == b or a.startswith(b) or b.startswith(a):
+        return True
+    return any(a in g and b in g for g in NICKNAMES)
+
+
+def ic_mismatch(form, client, profile):
+    """Reasons to doubt the IC form in the folder is this client's.
+
+    The form is found by its file name, so a form for another doctor with the
+    same surname gets filed and read as this client's (a "Dana" form in a
+    Robin's folder: different age, family, software and rent). The name is
+    checked against the client folder, and age and marriage against what the
+    call notes say (profile).
+    """
+    why = []
+    m = re.match(r'\s*[^,]+,\s*([A-Za-z]+)', client or '')
+    first = m.group(1) if m else None
+    if first and form.get('first_name') and not _same_first(form['first_name'], first):
+        why.append('the form is signed %s %s; the client is %s'
+                   % (form.get('first_name'), form.get('last_name') or '', first))
+    try:
+        fa = int(re.search(r'\d+', str(form.get('age') or '')).group(0))
+        pa = int(re.search(r'\d+', str((profile.get('age') or {}).get('value') or '')).group(0))
+        if abs(fa - pa) > 2:
+            why.append('the form says age %d; the call notes say %d' % (fa, pa))
+    except (AttributeError, ValueError):
+        pass
+    fm = str(form.get('marital_status') or '').lower()
+    pm = str((profile.get('marital_status') or {}).get('value') or '').lower()
+    if fm and pm and (('single' in fm) != ('single' in pm)) and ('married' in fm or 'married' in pm):
+        why.append('the form says %s; the call notes say %s'
+                   % (form.get('marital_status'), (profile.get('marital_status') or {}).get('value')))
+    return why
+
+
 def gather(folder, client=None):
     client = client or os.path.basename(folder.rstrip('/'))
 
@@ -206,6 +255,7 @@ def gather(folder, client=None):
     # figure checked against its document (doc_readings.py). It only fills
     # what the readers left blank.
     profile = {}
+    ic_doubt = []
     extra_notes = {}
     balance_rows, extra_months = set(), {}
     overhead_extra = []
@@ -248,8 +298,11 @@ def gather(folder, client=None):
         # sheet, marked with where it was said.
         form_keys = {k for k, _ in _ic.FIELDS} | {
             'marital_status', 'dependents', 'ownership', 'pms', 'age'}
+        ic_doubt = ic_mismatch(form, client, profile) if form else []
         for k in form_keys:
-            if not form.get(k) and (profile.get(k) or {}).get('value'):
+            # When the form looks like someone else's, what the call notes say
+            # wins over it; otherwise the notes only fill its blanks.
+            if (ic_doubt or not form.get(k)) and (profile.get(k) or {}).get('value'):
                 form[k] = profile[k]['value']
 
     def pv_(key):
@@ -282,7 +335,18 @@ def gather(folder, client=None):
     t = tax.get(tax_year, {}) if tax_year else {}
 
     # ------------------------------------------------------------- practice
-    practice = [
+    if form and not ic_doubt:
+        ic_doubt = ic_mismatch(form, client, profile)
+    form_file = ic_name
+    if ic_doubt:
+        # The answers on the sheet now come from the call notes where they
+        # had one: say so in the source column rather than naming the form.
+        ic_name = 'call notes (the IC form in the folder is doubted)'
+    practice = ([Fact('IC form check', "may not be this client's", TEXT, form_file,
+                      'name, age and family against the call notes',
+                      flags=['IC form may not be this client\'s: %s. Confirm before using '
+                             'its answers; the call notes are used instead.' % '; '.join(ic_doubt)])]
+                if ic_doubt else []) + [
         Fact('Entity structure', _compose.entity(tax, pv_('entity')[0]), TEXT,
              'tax returns' + (' and %s' % pv_('entity')[1] if pv_('entity')[1]
                               and 'tax return' not in pv_('entity')[1] else '')
