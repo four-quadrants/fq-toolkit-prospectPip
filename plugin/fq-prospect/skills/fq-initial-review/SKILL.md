@@ -45,6 +45,12 @@ section "A short request means the whole step". The short version:
    `python3 fq_auditor/lb_fetch.py "<client folder>"`. Not filed: the
    intake (`audit.py ... --file-them`, then Claude's checklist check). Say in
    one line which of these you ran.
+   **Not everything comes through LaunchBay.** Production reports emailed to
+   the analyst, QuickBooks reports the team pulled with the client's login,
+   screenshots of a client's email: ask the analyst whether anything came by
+   another route, and have it dropped into the client folder (or
+   `Documents/`) before the notes are built. A team-filed `Documents/`
+   folder in the live client folder is where to look first.
 4. **Report the intake to the analyst** before anything else: every
    checklist item as received, answered in the portal, or open, then the open
    items as a short list. The analyst decides what is truly needed before the

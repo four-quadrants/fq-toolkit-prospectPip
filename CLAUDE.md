@@ -71,7 +71,9 @@ assumptions"). Claude does everything that step needs without being told:
 3. **Run any earlier step that is missing or stale, in order.** No
    `launchbay_manifest.json`, or older than 3 days: pull from LaunchBay. New
    documents not yet filed: run the intake. Then the step asked for. Say in
-   one line which earlier steps you ran.
+   one line which earlier steps you ran. Documents that came another way
+   (emailed production reports, QuickBooks reports pulled by the team) are
+   not in LaunchBay: ask, and drop them into the client folder first.
 4. **The intake always ends with a report to the analyst**: every checklist
    item as received, answered in the portal, or open, with the open items
    listed plainly. The analyst decides which of those are truly needed before

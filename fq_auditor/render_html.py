@@ -314,6 +314,11 @@ def plan_destination(doc):
                       'firm\u2019s working files', False)
 
     mapped = TYPE_MAP.get(dtype)
+    # A lease is filed under Personal/Assets as a rental property, unless the
+    # classifier read it as the practice's own premises (a commercial lease):
+    # then it goes with the practice, where the team files leases.
+    if dtype == 'rental_lease' and side == 'Practice':
+        mapped = ('Practice', 'Lease')
     # A file the team has already named "Business - Financials - ..." or
     # "Personal - Debt - ..." says its side and its folder. When the reader
     # cannot tell what it is (a .numbers P&L, a phone photo of a loan), that

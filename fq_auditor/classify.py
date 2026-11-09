@@ -580,6 +580,21 @@ RULES = [
     # — bookkeeping, tax returns, QuickBooks — and later rules would grab it on
     # those words. Spaulding's is filed as "Service Agreement.pdf" and calls
     # itself both names in its own second paragraph.
+    # A bookkeeper's trial balance or consolidated financials: a chart of
+    # accounts with balance-sheet and income lines side by side, usually a
+    # spreadsheet. Its cash and "Wells Fargo" lines made one read as a
+    # brokerage statement. Early, before the statement rules see the bank names.
+    _r('pnl', 'Financial statements / trial balance', 'Practice',
+       lambda h, t: (has(h, r'trial balance')
+                     and not has(h, r'form\s+1[01][24]0', r'u\.s\.\s+(?:income|return)'))
+                    or (not has(h, r'balance\s*sheet', r'form\s+1[01][246]\d', r'schedule\s+l\b',
+                                r'internal revenue', r'statement\s+(?:date|period)')
+                        and has(t[:20000], r'patient fees|income|revenue')
+                        and sum(1 for pat in (r'accumulated depreciation', r'retained earnings',
+                                         r'accounts receivable', r'notes payable',
+                                         r'current portion', r'distributions',
+                                         r'salaries (?:&|and) wages')
+                               if has(t[:20000], pat)) >= 4)),
     _r('engagement_letter', 'Engagement letter', None,
        lambda h, t: has(h, r'engagement letter', r'\bservice agreement\b',
                         r'terms and objectives of our engagement',
@@ -930,7 +945,11 @@ RULES = [
                     # Description | Original Amount | Current Amount | Term |
                     # Interest Rate | Monthly Payment"
                     or (has(h, r'loan\s+description|personal\s+loans|business\s+loans')
-                        and has(h, r'interest\s+rate') and has(h, r'monthly\s+payment'))),
+                        and has(h, r'interest\s+rate') and has(h, r'monthly\s+payment'))
+                    # a client's own loan list: "Payment Amount | Remaining
+                    # Balance | Early Payoff Balance | % interest"
+                    or (has(h, r'remaining\s+balance|payoff\s+balance|remaining\s+payments')
+                        and has(h, r'payment\s+amount|number\s+of\s+(?:remaining\s+)?payments'))),
     # After debt_schedule on purpose: a debt sheet that happens to LIST a line of
     # credit is still a debt sheet. This is for the LOC's own paperwork — the
     # bank's statement or agreement for the facility itself. No forced side; a

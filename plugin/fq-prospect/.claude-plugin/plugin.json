@@ -1,6 +1,6 @@
 {
   "name": "fq-prospect",
-  "version": "0.9.13",
+  "version": "0.9.14",
   "description": "The Claude side of the FQ Toolkit prospect pipeline: pull a prospect from LaunchBay, and load and pull in the lead advisor's analysis and consult review pages.",
   "author": {
     "name": "Four Quadrants"
