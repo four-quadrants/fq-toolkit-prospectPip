@@ -179,11 +179,27 @@ def compute(x):
     else:
         out['per_patient'] = _need('patients seen', 'net production by year')
 
+    # Patients per doctor day back to last year's (the lead advisor's
+    # "pat/day" block): the lost visits x days x gross per patient.
+    ppd, ppd0 = g('pats_per_day'), g('pats_per_day_prior')
+    dd, gpp = g('doctor_days_year'), g('gross_per_patient')
+    if None not in (ppd, ppd0, dd, gpp, adj):
+        add = max(0.0, ppd0 - ppd) * dd * gpp
+        v = add * (1 - adj) * COLLECT_IDEAL * owner
+        out['pats_per_day'] = _ok(v, 'Patients per doctor day from %.1f back to '
+                                  '%.1f, over %g doctor days.' % (ppd, ppd0, dd))
+    else:
+        out['pats_per_day'] = _need('patients seen', 'doctor days by year')
+
+    # Every lever with its conservative half beside it, as his tab shows it.
+    for v in out.values():
+        if v.get('value') is not None:
+            v['half'] = v['value'] / 2.0
     return out
 
 
 LABELS = {
-    'overhead': 'Overhead reduction to 50% target',
+    'overhead': 'Overhead reduction to target',
     'adjustment': 'Adjustment % / plan mix (drop carriers)',
     'pull_through': 'Doctor production pulled through by extra hygiene',
     'hygiene': 'Hygiene chair-days',
@@ -191,6 +207,7 @@ LABELS = {
     'fees': 'Fee study (raise fees to benchmark, FFS-scoped)',
     'collections': 'Collection % to 99.5% ideal',
     'per_patient': 'Net production per patient',
+    'pats_per_day': 'Patients per doctor day (recover last year’s)',
 }
 
 

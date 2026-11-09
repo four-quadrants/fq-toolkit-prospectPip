@@ -47,6 +47,9 @@ def main():
         # His J23: "hold - needs FFS %". The 20% is his assumption.
         'ffs_share_assumed': True,
         'collection_pct': n['M43'].value,
+        # His sheet sizes every block at a 50% goal; the module's default
+        # moved to 60% for the newer decks, so pass his.
+        'target_overhead': 0.50,
     }
     got = L.compute(x)
     bad = 0

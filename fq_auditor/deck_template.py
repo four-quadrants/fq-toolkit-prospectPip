@@ -243,6 +243,17 @@ def _series_inputs(bundle, folder):
     hyg = last_two('hygiene % of production')
     if hyg:
         out['hygiene_share'] = hyg[-1]
+    # Patients per doctor day, last year against the year before (the lead
+    # advisor's "pat/day" block), with the days and gross per patient that
+    # size it.
+    ppd = last_two('patients / doctor day')
+    if ppd:
+        out['pats_per_day_prior'], out['pats_per_day'] = ppd
+    for key, name in (('doctor_days_year', 'days worked, all doctors'),
+                      ('gross_per_patient', 'gross production / patient')):
+        two = last_two(name)
+        if two:
+            out[key] = two[-1]
     try:
         import intake_form as _ic
         f = _ic.find_form_near(folder)
@@ -819,9 +830,12 @@ def slide_fills(D):
         'hygiene': ('%g days' % lx['hygiene_days'] if lx.get('hygiene_days') else 'TBD', 'TBD'),
         'fees': ('%.1f%% below' % (100 * lx['fees_off']) if lx.get('fees_off') else 'TBD',
                  'benchmark'),
+        'pats_per_day': ('%.1f' % lx['pats_per_day'] if lx.get('pats_per_day') else 'TBD',
+                         '%.1f' % lx['pats_per_day_prior'] if lx.get('pats_per_day_prior') else 'TBD'),
     }
     for key, label in (('new_patients', 'New patient % of total patients'),
                        ('per_patient', 'Net production/patient'),
+                       ('pats_per_day', 'Patients per doctor day'),
                        ('hygiene', 'Hygiene chair-days'),
                        ('fees', 'Increase fees')):
         v = lv[key].get('value')

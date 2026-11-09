@@ -120,16 +120,18 @@ added on the consult review's Slides tab):
   on the share, and whoever commits next (the toolkit owner) saves them
   with the usual commit line.
 
-- **Mine the lead advisor's "practice improvements" tabs.** Most of his
-  past initial notes (the Numbers files in client folders, Signed and older
-  years) carry a "practice improvements" tab: ideal adjust % (16%),
-  collection ratio (99.5%), target overhead (50 to 60%), ideal hygiene share
-  (about 41%, "8 days/wk"), new patient %, gross production per patient, fee
-  gap, and what each is worth to the owner. Read them across clients to
-  check and widen the levers (`levers.py`) and the recommendations library:
-  the targets he uses, how he sizes each, and any efficiency metric the
-  toolkit does not compute yet. Watch for tabs copied from another client
-  (one on Echetubu's sheet carries an older client's figures).
+- **The lead advisor's "practice improvements" tabs: mined (Nov 9).** 40
+  tabs across 2026 clients; only 14 carry that client's own figures, the
+  other 24 are the template unchanged (still naming an older client). What the
+  14 show, now in `levers.py`: every block sizes extra production, takes it
+  to revenue, then to the owner at the client's target overhead (he picks it
+  per client: 50% to 68%, median 58%; pass it as the advisor input), with a
+  conservative half beside it (`half`). Added: patients per doctor day back
+  to last year's. Already there: overhead, adjustment %, hygiene days and the
+  doctor production they pull through, new patient %, fees, collection %,
+  production per patient. Not built: his "3% overhead lower = $" line and a
+  4% fee increase, both straight sensitivities. The 5-year projection and
+  2014-2018 bonus table at the bottom are template constants, never updated.
 
 ## Setting someone up
 
