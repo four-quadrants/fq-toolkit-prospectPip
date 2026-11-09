@@ -369,17 +369,19 @@ def _cash_sheet(wb, bundle):
     ws = wb.create_sheet('cash flow (light)')
     r = _sheet_head(ws, 'Cash flow, light  —  %s' % bundle.client,
                     'Per bank account, per statement: balance in, money in, '
-                    'money out, balance out, and transfers to the client\'s '
-                    'own accounts. Every statement balances to the dollar.',
-                    [16, 14, 14, 14, 14, 14, 16, 40], legend=True)
+                    'money out, balance out, what moved between the practice\'s '
+                    'own accounts, and what went to the owner (transfers to '
+                    'personal accounts and personal bills paid by the practice). '
+                    'Every statement balances to the dollar.',
+                    [16, 14, 14, 14, 14, 14, 16, 16, 40], legend=True)
     ends, avgs = [], []
     for a in accts:
         ws.cell(r, 1, a.get('account')).font = SECTION
-        for c in range(1, 9):
+        for c in range(1, 10):
             ws.cell(r, c).fill = F_SECTION
         r += 1
         for i, h in enumerate(('period', 'start', 'in', 'out', 'end',
-                               'change', 'to own accts', 'note'), 1):
+                               'change', 'between practice accts', 'to the owner', 'note'), 1):
             ws.cell(r, i, h).font = HEAD
             ws.cell(r, i).fill = F_HEAD
         r += 1
@@ -393,33 +395,39 @@ def _cash_sheet(wb, bundle):
                 c.number_format, c.font = MONEY, VALUE
             c = ws.cell(r, 6, '=E%d-B%d' % (r, r))
             c.number_format, c.font = MONEY, DERIVED
+            # Between the practice's own accounts (a sweep from collections
+            # to operating) is not money leaving the practice; what went to
+            # the owner is. Kept apart so neither inflates the other.
             c = ws.cell(r, 7, m.get('transfers_out'))
             c.number_format, c.font = MONEY, VALUE
-            ws.cell(r, 8, m.get('note') or '').font = NOTE
+            c = ws.cell(r, 8, m.get('to_owner'))
+            c.number_format, c.font = MONEY, VALUE
+            ws.cell(r, 9, m.get('note') or '').font = NOTE
             r += 1
         ws.cell(r, 1, 'average a month').font = Font(name=FONT, size=12, bold=True)
         ends.append('E%d' % (r - 1))
         avgs.append(r)
-        for col in (3, 4, 6, 7):
+        for col in (3, 4, 6, 7, 8):
             L = get_column_letter(col)
             c = ws.cell(r, col, '=IFERROR(AVERAGE(%s%d:%s%d),"")' % (L, first, L, r - 1))
             c.number_format = MONEY
             c.font = Font(name=FONT, size=12, bold=True)
         if a.get('note'):
-            ws.cell(r, 8, a['note']).font = NOTE
+            ws.cell(r, 9, a['note']).font = NOTE
         r += 2
     # All accounts together, the way the lead advisor totals them by hand.
     # The target balance is his call, so it is left for him to type.
     B = Font(name=FONT, size=12, bold=True)
     ws.cell(r, 1, 'ALL ACCOUNTS').font = SECTION
-    for c in range(1, 9):
+    for c in range(1, 10):
         ws.cell(r, c).fill = F_SECTION
     r += 1
     rows_ = [
         ('total balance (latest)', '=' + '+'.join(ends), None),
         ('total average change a month', '=' + '+'.join('F%d' % x for x in avgs), None),
-        ('total average to own accounts a month', '=' + '+'.join('G%d' % x for x in avgs),
-         'business to personal and between the practice accounts'),
+        ('total average to the owner a month', '=' + '+'.join('H%d' % x for x in avgs),
+         'business to personal: transfers to his own accounts and personal bills the practice paid. '
+         'Moves between the practice accounts are left out: they net to zero.'),
         ('target balance', None, 'Advisor to fill in'),
     ]
     first_tot = r
@@ -471,6 +479,12 @@ def _standard_areas(bundle, oh, target=OVERHEAD_TARGET):
         try:
             return float(str(v).replace('$', '').replace(',', '').strip())
         except (TypeError, ValueError):
+            pass
+        # As the client typed it on the IC form: "40K", "1.2M".
+        try:
+            from intake_form import money
+            return money(v)
+        except Exception:                                    # noqa: BLE001
             return None
 
     def m(v):
@@ -758,8 +772,8 @@ def write(bundle, out):
         r = _sheet_head(ws2, 'Practice, year by year  —  %s' % bundle.client,
                         'One column per year. Change columns compute '
                         'themselves.' + (
-                            ' %s is year to date (%d months); the annualized '
-                            'column is YTD / %d x 12, and its change compares '
+                            ' %s is year to date (%g months); the annualized '
+                            'column is YTD / %g x 12, and its change compares '
                             'the annualized figure with the year before. '
                             'Ratios are carried as they are.'
                             % (ytd_year, ytd['months'], ytd['months'])
@@ -775,7 +789,7 @@ def write(bundle, out):
         for i, y in enumerate(bundle.years):
             head = y
             if y == ytd_year:
-                head = '%s YTD (%d mo)' % (y, ytd['months'])
+                head = '%s YTD (%g mo)' % (y, ytd['months'])
             ws2.cell(r, col, head).font = HEAD
             ws2.cell(r, col).fill = F_HEAD
             col += 1
@@ -832,7 +846,7 @@ def write(bundle, out):
                     elif is_rate:
                         ac.value = '=%s%d' % (letter, r)
                     else:
-                        ac.value = '=%s%d/%d*12' % (letter, r, (getattr(bundle, 'series_months', {}) or {}).get(name) or ytd['months'])
+                        ac.value = '=%s%d/%g*12' % (letter, r, (getattr(bundle, 'series_months', {}) or {}).get(name) or ytd['months'])
                     ac.number_format = fmt
                     ac.font = Font(name=FONT, size=12, italic=True)
                     letter = get_column_letter(col)

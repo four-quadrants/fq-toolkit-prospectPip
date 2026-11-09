@@ -36,6 +36,10 @@ THE FILE (written by Claude, read here; years are strings)
  "tax": {"2025": {"source": "<file>", "form": "1120-S", "income_base": 0,
                   "total_deductions": 0, "officer_comp": 0,
                   "depreciation_amort": 0, "da_parts": [0],
+                  "cogs": 0,
+                  (cogs: Form 1125-A cost of goods sold, when the return has
+                   one; income_base is then line 6, after it, and the check
+                   adds it back so overhead is on revenue)
                   (da_parts: depreciation AND amortization. On a Schedule C
                    amortization sits in other expenses, not line 13: use the
                    preparer's depreciation summary grand total)
@@ -56,7 +60,9 @@ THE FILE (written by Claude, read here; years are strings)
       or "<field>_<year>" for one year)
  "debts": {"practice": [{"creditor": "", "what": "", "balance": 0,
                          "rate": 0.0, "payment": 0, "description": "",
-                         "source": "<file>", "pending": false}],
+                         "source": "<file>", "pending": false,
+                         "payment_source": "<file, when the payment is read
+                                            from another document>"}],
            "personal": []},
  "profile": {"owned_since": {"value": "", "source": "<file>"}}
 }
@@ -104,6 +110,27 @@ def _text(folder, name):
                                   timeout=120).stdout
         except Exception:                                    # noqa: BLE001
             text = ''
+        # Narrow table cells wrap a figure onto two lines ("$1,234,567.8"
+        # then "9": CareStack's end-of-day report). Reading order puts the
+        # two pieces next to each other; join them so the figure can be found.
+        try:
+            raw = subprocess.run(['pdftotext', '-raw', path, '-'],
+                                 capture_output=True, text=True,
+                                 timeout=120).stdout
+            text += '\n' + re.sub(r'([\d,]*\d)\n(\.?\d{1,3})(?=\s)', r'\1\2', raw)
+        except Exception:                                    # noqa: BLE001
+            pass
+        if path.lower().endswith(('.csv', '.txt')):
+            try:
+                raw = open(path, errors='replace').read()
+                if path.lower().endswith('.csv'):
+                    # Cells joined by " | ": the commas between cells would
+                    # otherwise run "60,,1234.56" into one figure.
+                    import csv
+                    raw = '\n'.join(' | '.join(r) for r in csv.reader(raw.splitlines()))
+                text = raw + '\n' + text
+            except OSError:
+                pass
         if len(text.strip()) < 40:
             h = hashlib.sha256(open(path, 'rb').read()).hexdigest()
             for cache in (os.path.join(folder, '.fq_cache'),
@@ -142,6 +169,12 @@ def _digits(text):
             out.add(whole)
             if frac.strip('0') == '':
                 out.add(whole)
+            # A spreadsheet stores a figure shown as 12,345.60 as 12345.6, or
+            # with a long float tail after the cents: add the two-decimal form.
+            try:
+                out.add('%.2f' % float(s))
+            except ValueError:
+                pass
     return out
 
 
@@ -161,9 +194,11 @@ def appears(folder, name, value):
     if cents in nums or whole in nums:
         return True
     # Rates print as "6.69%" or "0.0669"; a reading of 0.0669 is 6.69 on paper.
-    if v < 1 and ('%.2f' % (v * 100)).rstrip('0').rstrip('.') in {
-            n.rstrip('0').rstrip('.') for n in nums if '.' in n}:
-        return True
+    if v < 1:
+        printed = {n.rstrip('0').rstrip('.') for n in nums if '.' in n}
+        for pct in ('%.2f' % (v * 100), '%.3f' % (v * 100), '%.4f' % (v * 100)):
+            if pct.rstrip('0').rstrip('.') in printed:     # 3.125% as well as 6.69%
+                return True
     return False
 
 
@@ -233,16 +268,26 @@ def check(folder):
                 r['income_base'] - r['total_deductions'], r['net']):
             problems.append('%s: return %s does not tie to its own net' % (src, year))
             ok = False
+        cogs = r.get('cogs') or 0
+        if cogs and not need(src, 'return %s cost of goods sold' % year, cogs):
+            ok = False
         if not ok:
             continue
+        # A return with cost of goods sold (Form 1125-A: staff wages,
+        # supplies and labs moved above the line) has its total income
+        # (line 6) net of them. Add them back to both sides, so overhead is
+        # measured on the practice's revenue like every other year.
+        base_in = r['income_base'] + cogs
+        ded_in = r['total_deductions'] + cogs
         dep = sum(p or 0 for p in parts)
-        oh = r['total_deductions'] - (r.get('officer_comp') or 0) - dep
+        oh = ded_in - (r.get('officer_comp') or 0) - dep
         tax[year] = {
-            'income_base': r['income_base'],
-            'total_deductions': r['total_deductions'],
+            'income_base': base_in,
+            'total_deductions': ded_in,
+            'cogs': cogs or None,
             'officer_comp': r.get('officer_comp') or 0.0,
             'depreciation_amort': round(dep, 2), 'overhead': round(oh, 2),
-            'overhead_pct': round(100.0 * oh / r['income_base'], 1),
+            'overhead_pct': round(100.0 * oh / base_in, 1),
             'source': '%s (%s)' % (src, r.get('form') or 'return'),
         }
     good['tax'] = tax
@@ -313,8 +358,14 @@ def check(folder):
         rows = []
         for d in (raw.get('debts') or {}).get(side) or ():
             src = d.get('source') or ''
-            if not need(src, d.get('what') or d.get('creditor') or 'debt',
-                        d.get('balance'), d.get('payment'), d.get('rate')):
+            # The balance often comes from the balance sheet and the payment
+            # from the bank statement that pays it: payment_source names that
+            # second document.
+            psrc = d.get('payment_source') or src
+            label = d.get('what') or d.get('creditor') or 'debt'
+            ok_b = need(src, label, d.get('balance'), d.get('rate'))
+            ok_p = need(psrc, label, d.get('payment'))
+            if not (ok_b and ok_p):
                 continue
             row = dict(d)
             row['source'] = src
@@ -379,16 +430,28 @@ def check(folder):
 
     # ------------------------------------------------ light cash flow
     # Per bank account, per statement: opening and closing balance, money in,
-    # money out, and transfers to the client's own accounts. Opening + in -
+    # money out, transfers between the practice's own accounts (transfers_out)
+    # and money to the owner (to_owner: draws and personal bills). Opening + in -
     # out must equal closing to the dollar, or the statement is left out.
     cash = []
     for a in raw.get('cash_light') or ():
         rows = []
         for m in a.get('months') or ():
             src = m.get('source') or a.get('source') or ''
+            orig, m = m, dict(m)
+            # A statement that prints money in or out on several lines
+            # (branch deposits and automatic deposits; automatic withdrawals,
+            # other debits and fees) gives them as a list: each line must be
+            # printed, and the row carries their sum.
+            parts = []
+            for k in ('deposits', 'withdrawals', 'checks'):
+                if isinstance(m.get(k), list):
+                    parts += m[k]
+                    m[k] = round(sum(m[k]), 2)
             ok = need(src, 'cash %s' % m.get('period'), m.get('start'),
-                      m.get('end'), m.get('deposits'), m.get('withdrawals'),
-                      m.get('interest'), m.get('checks'))
+                      m.get('end'), m.get('interest'), *parts,
+                      *[m.get(k) for k in ('deposits', 'withdrawals', 'checks')
+                        if not isinstance(orig.get(k), list)])
             if ok and not _close((m.get('start') or 0) + (m.get('deposits') or 0)
                                  + (m.get('interest') or 0)
                                  - (m.get('withdrawals') or 0) - (m.get('checks') or 0),

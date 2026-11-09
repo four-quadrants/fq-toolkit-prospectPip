@@ -99,7 +99,12 @@ What the lead advisor expects in every initial notes (format in
   annualized), and give `ytd_months` when a row's newest year runs to a
   different month than the year-to-date column.
 - **`cash_light`**: each practice bank account, statement by statement (start,
-  in, out, end, interest, transfers to the client's own accounts). Every
+  in, out, end, interest). Two separate columns: `transfers_out` = moves
+  between the practice's own accounts (a sweep to operating or savings: not
+  money leaving the practice), and `to_owner` = business to personal (owner
+  draws to his accounts and personal bills the practice paid: personal tax
+  estimates, student loans). Only `to_owner` is totalled. Rent to the
+  owner's building entity goes in neither; say so in the note. Every
   statement must balance. The sheet adds the monthly averages and the
   all-accounts totals; the target balance is the lead advisor's to type.
   This is the light Stage 1 version, not the cash flow analysis.

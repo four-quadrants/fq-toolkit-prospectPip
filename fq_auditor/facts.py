@@ -246,9 +246,14 @@ def gather(folder, client=None):
 
     # What they own: a condo, when the debt or the analyst says so.
     premises = (pv_('premises')[0] if profile.get('premises') else None) or next(
-        ('condo' for r in (debts.get('practice') or []) + (debts.get('personal') or [])
+        ('condo' for side in ('practice', 'personal') for r in (debts.get(side) or [])
          if 'condo' in ' '.join(str(r.get(k) or '') for k in ('description', 'what')).lower()
-         and 'home' not in str(r.get('description') or '').lower()), None)
+         and 'home' not in str(r.get('description') or '').lower()
+         # a personal condo counts only when it is the office, not a rental
+         and (side == 'practice' or re.search(r'office|practice|suite', ' '.join(
+             str(r.get(k) or '') for k in ('description', 'what')), re.I))
+         and not re.search(r'rental', ' '.join(
+             str(r.get(k) or '') for k in ('description', 'what')), re.I)), None)
     years = sorted(set(pnl) | set(prod) | set(counts))[-3:]
     # A return for the year before those (often sent as "Action needed...
     # please sign") adds one earlier column, as the lead advisor lays it out.

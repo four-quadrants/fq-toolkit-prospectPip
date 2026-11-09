@@ -124,6 +124,15 @@ def period_months(text):
     return None
 
 
+def spans_years(text):
+    """True when the heading covers more than one calendar year."""
+    head = '\n'.join((text or '').split('\n')[:12]).lower()
+    m = re.search(r'(?:%s)\w*\.?\s*(?:\d{1,2},?\s*)?,?\s*(20\d\d)\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*'
+                  r'(?:%s)\w*\.?\s*(?:\d{1,2},?\s*)?,?\s*(20\d\d)'
+                  % ('|'.join(MONTHS), '|'.join(MONTHS)), head)
+    return bool(m and m.group(1) != m.group(2))
+
+
 def _find_total(rows, *names):
     """A 'Total for X' figure by name, matched exactly then by prefix."""
     norm = {re.sub(r'\s+', ' ', k).strip().lower(): v for k, v in rows.items()}
@@ -291,6 +300,11 @@ def gather(folder):
             continue
         doc = classify.classify(text)
         if doc['doc_type'] != 'pnl':
+            continue
+        if spans_years(text):
+            # A comparative P&L with a column per year ("January,
+            # 2021-June, 2025") cannot be read as one period: its totals
+            # column adds five years together. Leave it to Claude's readings.
             continue
         got = read_pnl(text)
         if got:
