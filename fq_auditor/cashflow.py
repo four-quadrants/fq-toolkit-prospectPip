@@ -66,6 +66,40 @@ def _entity_of(side, key):
     return name                # Moonridge, Eden, and friends, named by folder
 
 
+RENTAL_WORDS = re.compile(r'rental|\bcondo\b|propert|airbnb|vrbo|\bstr\b|beach\s*house', re.I)
+CUSTODIAL_WORDS = re.compile(r'\(cust\)|custodian|custodial|\butma\b|\bugma\b', re.I)
+
+
+def _personal_group(rows):
+    """Which personal sheet an account belongs on, from its title and holder.
+
+    A rental's account and a child's custodial account are the household's
+    money but not its spending: folded into Personal they made one family's
+    monthly spend $40,817 against a true $15,419. Rentals get their own sheet
+    with a net per property; children's accounts their own, where a large
+    withdrawal stands out.
+    """
+    text = ' '.join(str(r.get(k) or '') for r in rows
+                    for k in ('holder', 'file', 'title'))
+    if CUSTODIAL_WORDS.search(text):
+        return 'Children\u2019s accounts'
+    if RENTAL_WORDS.search(text):
+        return 'Rental properties'
+    return 'Personal'
+
+
+_GROUPS = {}
+
+
+def _groups(folder):
+    """{(side, key): sheet} for the personal accounts, cached per folder."""
+    if folder not in _GROUPS:
+        found = _st.gather(folder)
+        _GROUPS[folder] = {k: _personal_group(v) for k, v in found.items()
+                           if k[0] == 'Personal'}
+    return _GROUPS[folder]
+
+
 def build(folder):
     """Every account, grouped into entities ready for the workbook."""
     found = _st.gather(folder)
@@ -161,10 +195,25 @@ def build(folder):
                          if t.get('one_off')],
         }
         name = _entity_of(side, key)
+        if name == 'Personal':
+            name = _personal_group(rows)
+            _GROUPS.setdefault(folder, {})[(side, key)] = name
         ent = entities.setdefault(name, {'name': name, 'accounts': [],
                                          'liabilities': [],
                                          'adjustments': []})
         ent['accounts'].append(acct)
+        # A child's account should only grow. Money out of it is a question
+        # for the call (one family drew $14,500 from each child's account in
+        # one month), so every such month is listed for review.
+        if name == 'Children\u2019s accounts':
+            for r in usable:
+                if (r.get('expenses') or 0) >= 1000:
+                    ent['adjustments'].append(
+                        (_label(key, usable), _period(r), 'Note',
+                         r['expenses'],
+                         'Money out of a child\u2019s account: %s this period. '
+                         'What was it for?' % '{:,.0f}'.format(r['expenses']),
+                         'For review'))
 
         # Single outflows large enough to distort the run rate, already
         # flagged above.
@@ -189,7 +238,7 @@ def build(folder):
             if t.get('effect') not in ('propose',) and \
                     not t.get('note_only'):
                 continue
-            ent_name = _entity_of(side, key)
+            ent_name = name
             entities.setdefault(ent_name, {'name': ent_name, 'accounts': [],
                                            'liabilities': [],
                                            'adjustments': []})
@@ -222,7 +271,7 @@ def build(folder):
                  'statement reports money already counted.'
                  % (dropped, '' if dropped == 1 else 's'), 'For review'))
 
-    order = ['Personal', 'Practice']
+    order = ['Personal', 'Children\u2019s accounts', 'Rental properties', 'Practice']
     rest = sorted(k for k in entities if k not in order)
     built = [entities[k] for k in order + rest if k in entities]
     if _review:
@@ -591,8 +640,12 @@ def _liabilities(folder):
     """
     rows, periods = [], []
     moves = _tx.gather(folder)
-    for (side, _key), got in moves.items():
-        if side == 'Personal':
+    groups = _groups(folder)
+    for (side, key), got in moves.items():
+        # Household accounts only: a rental's mortgage is paid from the
+        # rental's account and belongs to the property, not to what the
+        # household lives on.
+        if side == 'Personal' and groups.get((side, key), 'Personal') == 'Personal':
             rows.extend(got)
     dates = [t['date'] for t in rows if t.get('date')]
     span = (round((max(dates) - min(dates)).days / 30.44) + 1

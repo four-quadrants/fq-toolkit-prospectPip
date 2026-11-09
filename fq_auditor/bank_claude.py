@@ -292,8 +292,11 @@ def as_statements(folder):
                 'begins': _date(s.get('period_start')), 'ends': ends,
                 'account': s.get('account_last4'), 'side': side,
                 'expenses': s.get('total_out'),
-                'notes': ['Read by Claude; balances and transactions tie.' if s['ties'] else
-                          'Read by Claude; balances tie, transactions read by the toolkit.'],
+                # Only what needs a look goes on the review list: a statement
+                # that ties is the normal case (40 of one client's 61 rows
+                # said so, and buried the ones that mattered).
+                'notes': [] if s['ties'] else
+                         ['Read by Claude; balances tie, transactions read by the toolkit.'],
                 'source': f['path'], 'text_path': None,
                 'claude_tx': tx if s['ties'] else None})
     return out, used

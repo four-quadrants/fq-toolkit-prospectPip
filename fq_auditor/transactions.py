@@ -682,7 +682,15 @@ def apply_rules(rows, sides, banks=None):
         row['effect'] = None
         row['why'] = None
         here = sides.get(_digits(row.get('account')))
-        there = sides.get(_digits(row.get('counterparty') or ''))
+        cp = _digits(row.get('counterparty') or '')
+        there = sides.get(cp)
+        if there is None and len(cp) >= 3:
+            # A masked number keeps fewer digits than the last four: INSBANK
+            # prints "TRANSFER FROM CHK XXXXX980" for account x1980. One
+            # account of his ending in those digits is that account.
+            ends = {k: v for k, v in sides.items() if k.endswith(cp) or cp.endswith(k)}
+            if len(set(ends.values())) == 1 and len(ends) == 1:
+                there = next(iter(ends.values()))
 
         if row['kind'] == 'borrowing':
             if row['direction'] == 'credit':
@@ -820,8 +828,22 @@ FIXED_KINDS = (
     # firm's liability table for him.
     ('Liability', re.compile(r'\bmtge?\b|mortgage|\bmort\b|\bloan\b|'
                              r'student\s*ln|auto\s*pay|truist|lending|'
-                             r'\bnote\b|heloc', re.I)),
+                             r'\bnote\b|heloc|'
+                             # consumer loans and installment plans, which the
+                             # lead advisor lists as fixed payments
+                             r'mariner|synchrony|affirm|nelnet|mohela|navient|'
+                             r'\bsloan\b|upstart|sofi|lightstream', re.I)),
 )
+
+# A credit card payment is spending, smoothed, never a fixed payment: the
+# card carries the household's groceries, travel and school. "CHASE CREDIT
+# CRD AUTOPAY" matched the "auto pay" loan words and took $13,300 a month
+# out of one household's spending.
+CARD_PAYMENT = re.compile(
+    r'credit\s*cr?d|credit\s*card|card\s*(?:services|pmt|payment)|'
+    r'citi\s*(?:autopay|card)|capital\s*one|\bamex\b|american\s*express|'
+    r'discover\s*(?:e-?payment|card)|barclay|bank\s*of\s*america\s*(?:payment|credit)|'
+    r'applecard|apple\s*card|cardmember', re.I)
 
 
 def find_fixed(rows, periods):
@@ -850,6 +872,9 @@ def find_fixed(rows, periods):
         # hid Rebol's Northwestern Mutual premium and HELOC payments here.
         if row.get('direction') != 'debit' or \
                 row.get('kind') not in (None, 'borrowing'):
+            continue
+        if CARD_PAYMENT.search(row.get('description') or '') and not re.search(
+                r'synchrony|affirm', row.get('description') or '', re.I):
             continue
         kind = None
         for name, pattern in FIXED_KINDS:
