@@ -285,7 +285,7 @@ def gather(folder, client=None):
                 else:
                     counts.setdefault(y, {}).setdefault(k, v)
         count_months = (got.get('counts_months') or {})
-        for side in ('practice', 'personal'):
+        for side in ('practice', 'building', 'personal'):
             # Claude's checked reading wins when there is one: it has put each
             # debt on the right side (a home mortgage typed on the practice
             # schedule) and read terms a template cannot (a quarterly payment).
@@ -530,18 +530,34 @@ def gather(folder, client=None):
             out.append(Fact('%s total' % side_label,
                             round(sum(r.get('balance') or 0 for r in rows), 2),
                             MONEY, 'derived', 'sum of the rows above'))
+            # No payment on any row is unknown, not zero.
+            paid = [r.get('payment') for r in rows if r.get('payment')]
             out.append(Fact('%s debt service' % side_label,
-                            round(sum(r.get('payment') or 0 for r in rows), 2),
-                            MONEY, 'derived', 'sum of monthly payments'))
+                            round(sum(paid), 2) if paid else None,
+                            MONEY, 'derived', 'sum of monthly payments',
+                            needed=None if paid else 'The monthly payments'))
         return out
 
     practice_debt = obligations(debts.get('practice') or (), 'Practice')
+    # The building LLC's loans sit inside practice debt, as their own lines
+    # and subtotal, with a combined total: the practice's rent pays them, and
+    # the lead advisor counts them with the practice.
+    building = [dict(r, building=True) for r in debts.get('building') or ()]
+    if building:
+        practice_debt += obligations(building, 'Building (LLC)')
+        both = [r for r in (debts.get('practice') or []) + building if not r.get('pending')]
+        practice_debt.append(Fact('Practice + building total',
+                                  round(sum(r.get('balance') or 0 for r in both), 2),
+                                  MONEY, 'derived', 'practice and building LLC together'))
+        practice_debt.append(Fact('Practice + building debt service',
+                                  round(sum(r.get('payment') or 0 for r in both), 2),
+                                  MONEY, 'derived', 'monthly payments, practice and building'))
     personal_debt = obligations(debts.get('personal') or (), 'Personal')
 
     # The composed line goes first, because it is the one a reader needs and
     # the rows beneath it are the working. "Two mature by 2028" cannot be seen
     # by scanning six balances; it has to be said.
-    head = _compose.practice_debt(debts.get('practice') or (),
+    head = _compose.practice_debt(list(debts.get('practice') or ()) + building,
                                   debts.get('unread') or ())
     if head:
         practice_debt.insert(0, Fact('Practice debt', head, TEXT,
@@ -741,7 +757,7 @@ def gather(folder, client=None):
         import painpoints as _pp
         rows = _pp.themes(form, src, p, t, latest, series,
                           _compose.fee_study(folder),
-                          _compose.practice_debt(debts.get('practice') or (),
+                          _compose.practice_debt(list(debts.get('practice') or ()) + building,
                                                  debts.get('unread') or ()),
                           folder)
         blocks.append(Block('Pain points and consult themes', [

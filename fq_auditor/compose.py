@@ -64,7 +64,7 @@ def practice_debt(rows, unread=()):
     bits = ['%s across %d obligations' % (money(total), len(live))]
     # The building is not the practice: a condo or office mortgage is real
     # estate (often in its own LLC), so it is shown apart from practice debt.
-    bld = [r for r in live if BUILDING.search(' '.join(
+    bld = [r for r in live if r.get('building') or BUILDING.search(' '.join(
         str(r.get(k) or '') for k in ('description', 'what', 'creditor')))]
     if bld and len(bld) < len(live):
         b = sum(r['balance'] for r in bld)

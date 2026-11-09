@@ -122,7 +122,11 @@ What the lead advisor expects in every initial notes (format in
   adds it to the entity type the returns show. `profile.premises` ("condo")
   when they own a condo rather than a building.
 - **Debts**: the code shows rate, payment, original amount and year, the
-  full term, fixed or variable, and lists what is MISSING. Fill what the
+  full term, fixed or variable, and lists what is MISSING. Loans of the LLC
+  that owns the office building go in `debts.building`, not personal: the
+  sheet shows them as their own lines inside practice debt, with a practice
+  plus building total (the lead advisor counts them with the practice, since
+  the practice's rent pays them). A home or a rental is personal. Fill what the
   documents give; leave the rest to show as missing.
 - **`_Audit/summary.json`** for the Summary tab (savings projection, 3-year
   average results, areas to improve with CHECK placeholders, info due /

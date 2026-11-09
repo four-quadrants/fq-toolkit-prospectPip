@@ -63,7 +63,12 @@ THE FILE (written by Claude, read here; years are strings)
                          "source": "<file>", "pending": false,
                          "payment_source": "<file, when the payment is read
                                             from another document>"}],
-           "personal": []},
+           "personal": [],
+           "building": []},
+     (building: loans of the LLC that owns the office building. The lead
+      advisor counts them with the practice, because the practice's rent
+      pays them: the sheet shows them as their own lines inside practice
+      debt, with a combined total)
  "profile": {"owned_since": {"value": "", "source": "<file>"}}
 }
 """
@@ -354,7 +359,7 @@ def check(folder):
 
     # -------------------------------------------------------------- debts
     debts = {}
-    for side in ('practice', 'personal'):
+    for side in ('practice', 'building', 'personal'):
         rows = []
         for d in (raw.get('debts') or {}).get(side) or ():
             src = d.get('source') or ''
