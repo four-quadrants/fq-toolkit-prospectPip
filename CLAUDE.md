@@ -36,10 +36,9 @@ portfolio work happens before the client accepts the consult.
 
 | Step | Code (fq_auditor/) | Output |
 |---|---|---|
-| Analysis review, analyst's check: the analyst works the page first, Claude fixes what he flags | review_page.py, assets/review_page.html | review page on claude.ai (stage "analyst") |
-| Analysis review, lead advisor: the analyst hands it over; he checks and picks his questions | as above | the same page (stage "lead"); the questions email is copied from it |
-| Answers come back: intake, then rebuild what changed | as above | |
-| Consult review: plan, recommendations, projections, slides | review_page.py | review page on claude.ai |
+| Review, analyst's check: the analyst works the Assumptions first, Claude fixes what he flags | review_page.py, assets/review_page.html | one review page per prospect on claude.ai (stage "analyst", `--mode review`) |
+| Review, lead advisor: sorts the analyst's comments, picks the questions, copies the email; plan, recommendations, projections and slides on the same page (provisional until answers are in) | as above | the same page (stage "lead") |
+| Answers come back ("Check for new answers and documents" button): intake, answers onto their questions, `review_page.py judge` each one, rebuild what changed | as above | the same page, refreshed |
 | Deck | deck_template.py (+ plan.py, savings.py, levers.py) | Consult deck .pptx |
 
 The app (`fq_app.py`, port 8765) is kept as a fallback only; day to day the

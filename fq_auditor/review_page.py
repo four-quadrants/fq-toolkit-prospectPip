@@ -59,6 +59,12 @@ def _num(text):
     return v / 100.0 if pct else v
 
 
+def _ckey(k):
+    """Sort key for a comment key: "8", "8.2", "8.3" sort under section 8."""
+    a, _, b = str(k).partition('.')
+    return (int(a) if a.isdigit() else 99, int(b) if b.isdigit() else 1)
+
+
 def apply(folder, plan_json):
     """Write the lead advisor’s decisions from the page into the client folder."""
     import inputs as _inputs
@@ -187,7 +193,14 @@ def apply(folder, plan_json):
                 fh.write(text)
         except Exception:                                    # noqa: BLE001
             pass
-        entry.pop('savings_schedule', None)
+        # The ticked recommendations set the savings schedule, unless he
+        # typed a year's savings on the Plan tab: those years are his.
+        typed = {int(k[5:]): _num(v) for k, v in decided.items()
+                 if k.startswith('save_') and v not in (None, '')}
+        if typed:
+            entry['savings_schedule'] = [[y, typed[y]] for y in sorted(typed)]
+        else:
+            entry.pop('savings_schedule', None)
         changed.append('recommendations (%d)' % len(chosen))
     _inputs.put(folder, 'deck', entry, by='the lead advisor, on the consult review page',
                 note='decided on the review page')
@@ -288,8 +301,8 @@ def apply(folder, plan_json):
         if out['analyst_notes']:
             print('     ' + out['analyst_notes'])
         for k, v in sorted(out['analyst_assumption_notes'].items(),
-                           key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
-            print('     - Assumptions %s (%s)%s: %s' % (k, titles_an.get(str(k), ''),
+                           key=lambda kv: _ckey(kv[0])):
+            print('     - Assumptions %s (%s)%s: %s' % (k, titles_an.get(str(k).split('.')[0], ''),
                   ' [a question to the client]' if (rec.get('an_assume_kind') or {}).get(k) == 'q' else '', v))
     # What he marked on the items carried over from the analysis review.
     marks = rec.get('carried_marks') or {}
@@ -300,8 +313,9 @@ def apply(folder, plan_json):
                 _car = {i['id']: i for i in (json.load(fh).get('items') or [])}
         except (OSError, ValueError):
             _car = {}
-        for want, head in (('revisit', 'FROM THE ANALYSIS REVIEW, FOR THE TEAM TO REVISIT (raise each with the analyst before building the deck):'),
-                           ('follow', 'FROM THE ANALYSIS REVIEW, STILL OPEN (asked again on the Open questions tab):')):
+        _car.update({i['id']: i for i in out.get('log') or []})
+        for want, head in (('revisit', 'FOR THE TEAM TO REVISIT (raise each with the analyst before building the deck):'),
+                           ('follow', 'STILL OPEN (asked again on the Questions tab):')):
             got = [k for k, v in sorted(marks.items()) if v == want]
             if got:
                 print('   ' + head)
@@ -310,7 +324,7 @@ def apply(folder, plan_json):
                     print('     - [%s, %s] %s' % (it.get('kind', '?'), it.get('about', k), it.get('text', '')))
         n_ok = sum(1 for v in marks.values() if v == 'ok')
         if n_ok:
-            print('   from the analysis review, marked answered or done: %d' % n_ok)
+            print('   marked answered or done: %d' % n_ok)
     if out['notes'] or notes or out['assumption_notes']:
         print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
         if out['notes']:
@@ -320,8 +334,8 @@ def apply(folder, plan_json):
         titles = {str(x.get('number')): x.get('title') for x in
                   ((rec.get('assumptions') or {}).get('sections') or ())}
         for k, v in sorted(out['assumption_notes'].items(),
-                           key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
-            print('     - Assumptions %s (%s)%s: %s' % (k, titles.get(str(k), ''),
+                           key=lambda kv: _ckey(kv[0])):
+            print('     - Assumptions %s (%s)%s: %s' % (k, titles.get(str(k).split('.')[0], ''),
                   ' [a question to the client]' if (rec.get('assume_kind') or {}).get(k) == 'q' else '', v))
     # The follow-up email, now that he has said which questions go.
     try:
@@ -360,7 +374,7 @@ def custom_questions(rec):
     out = []
     for kind, notes, prefix, who in (('an_assume_kind', 'an_assume_notes', 'aq_', 'the analyst'),
                                      ('assume_kind', 'assume_notes', 'lq_', 'the lead advisor')):
-        for num, k in sorted((rec.get(kind) or {}).items()):
+        for num, k in sorted((rec.get(kind) or {}).items(), key=lambda kv: _ckey(kv[0])):
             text = ((rec.get(notes) or {}).get(num) or '').strip()
             if k != 'q' or not text:
                 continue
@@ -368,7 +382,7 @@ def custom_questions(rec):
             out.append({'id': qid, 'text': (qt.get(qid) or text).strip(),
                         'decision': qd.get(qid) or 'Send',
                         'why': 'From %s\'s comment on the assumptions' % who,
-                        'source': 'Assumptions %s%s' % (num, ': ' + titles[str(num)] if titles.get(str(num)) else '')})
+                        'source': 'Assumptions %s%s' % (str(num).split('.')[0], ': ' + titles[str(num).split('.')[0]] if titles.get(str(num).split('.')[0]) else '')})
     for c in rec.get('qcustom') or ():
         text = (qt.get(c.get('id')) or c.get('text') or '').strip()
         if text:
@@ -422,10 +436,10 @@ def log_items(rec):
     for pre, notes, kinds, who in (('an', 'an_assume_notes', 'an_assume_kind', 'Analyst'),
                                    ('ld', 'assume_notes', 'assume_kind', 'Lead advisor')):
         for num, text in sorted((rec.get(notes) or {}).items(),
-                                key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
+                                key=lambda kv: _ckey(kv[0])):
             if not (text or '').strip():
                 continue
-            about = 'Assumptions %s%s' % (num, ': ' + titles[str(num)] if titles.get(str(num)) else '')
+            about = 'Assumptions %s%s' % (str(num).split('.')[0], ': ' + titles[str(num).split('.')[0]] if titles.get(str(num).split('.')[0]) else '')
             if (rec.get(kinds) or {}).get(num) == 'q':
                 qid = ('aq_' if pre == 'an' else 'lq_') + str(num)
                 items.append({'id': qid, 'kind': 'question', 'who': who, 'about': about,
@@ -582,11 +596,12 @@ def findings(folder, D):
     return out
 
 
-def seed(folder, outdir, mode='consult'):
+def seed(folder, outdir, mode='review'):
     """The JSON files Claude loads into a client's review page. mode
-    'analysis' is the first review (what the documents show, and the
-    questions); 'consult' is the second (the plan, recommendations,
-    projections and slides), once the answers are in."""
+    'review' (the default) is the one page per prospect: what the documents
+    show, the questions and email, and the plan, recommendations,
+    projections and slides, refreshed as the answers come in. 'analysis'
+    and 'consult' are the two halves, kept for pages made before."""
     import importlib.util
     import deck_template as dt
     import duediligence as dd
@@ -724,7 +739,7 @@ def seed(folder, outdir, mode='consult'):
     # point to ticked, for the lead advisor to keep, change or add to.
     try:
         import recommendations as _rec
-        recs = _rec.propose(folder, D) if mode == 'consult' else []
+        recs = _rec.propose(folder, D) if mode != 'analysis' else []
     except Exception as exc:                                 # noqa: BLE001
         print('   recommendations skipped: %s' % exc)
         recs = []
@@ -749,7 +764,7 @@ def seed(folder, outdir, mode='consult'):
     # toolkit no longer raises, after new documents, is one they settled.
     asked_path = _store.json_path(folder, 'analysis_questions.json')
     answered_by_docs = []
-    if mode == 'analysis':
+    if mode == 'analysis' or (mode == 'review' and not os.path.exists(asked_path)):
         with open(asked_path, 'w') as fh:
             json.dump({v['key']: v['text'] for v in ids.values()}, fh, indent=1)
     else:
@@ -764,7 +779,7 @@ def seed(folder, outdir, mode='consult'):
                 answered_by_docs.append({'text': text})
     # The slide wording Claude drafted from the documents, for approval.
     try:
-        words = dt.proposed_wording(folder, D) if mode == 'consult' else []
+        words = dt.proposed_wording(folder, D) if mode != 'analysis' else []
     except Exception as exc:  # noqa: BLE001 - the page works without it
         print('   slide wording skipped: %s' % exc)
         words = []
@@ -776,7 +791,7 @@ def seed(folder, outdir, mode='consult'):
     # and change any of it: the figures, the concerns, the lever rows, the
     # debt wording. His edits are applied when the deck is built.
     data_text = {}
-    if mode == 'consult':
+    if mode != 'analysis':
         try:
             have = {it['id'] for it in slides['items']}
             for it in deck_boxes(folder, D):
@@ -792,7 +807,7 @@ def seed(folder, outdir, mode='consult'):
         json.dump(data_text, fh, indent=1)
     fig_slides = sorted({f['slide'] for f in figs if f.get('slide')})
     pics = slide_pictures(folder, slides['items'], outdir, also=fig_slides) \
-        if mode == 'consult' else {}
+        if mode != 'analysis' else {}
     for it in slides['items']:
         it['pic'] = pics.get(it['slide'])
     titles = {}
@@ -814,15 +829,15 @@ def seed(folder, outdir, mode='consult'):
             'decided': {}, 'qdecisions': {}, 'qtext': {},
             'sdecisions': {}, 'stext': {}, 'qanswers': {}, 'notes': '',
             'recommendations': recs, 'recs': {}, 'recs_custom': [],
-            'library': _library() if mode == 'consult' else [],
-            'schedule': [[int(y), v] for y, v in (p.get('schedule') or [])] if mode == 'consult' else [],
-            'slide_list': _slide_list() if mode == 'consult' else [],
-            'slides_auto_dropped': sorted(dt.dropped(D)) if mode == 'consult' else [],
+            'library': _library() if mode != 'analysis' else [],
+            'schedule': [[int(y), v] for y, v in (p.get('schedule') or [])] if mode != 'analysis' else [],
+            'slide_list': _slide_list() if mode != 'analysis' else [],
+            'slides_auto_dropped': sorted(dt.dropped(D)) if mode != 'analysis' else [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,
             'answered_by_docs': answered_by_docs,
-            'findings': findings(folder, D) if mode == 'analysis' else None}
+            'findings': findings(folder, D) if mode != 'consult' else None}
     # The Assumptions, as the first tab: the lead advisor reads the plan's
     # base figures in the layout he knows before anything else.
     try:
@@ -881,13 +896,28 @@ def seed(folder, outdir, mode='consult'):
             print('   with: review_page.py judge <folder> <id> ok|short "<why, one line>", then seed again):')
             for it in unjudged:
                 print('     - %s [%s] Q: %s | A: %s' % (it['id'], it.get('about', ''), it.get('text', ''), it['answer']))
+    # Claude's read of each client answer (review_page.py judge), shown
+    # beside the answer; any answer not yet judged is listed for Claude.
+    try:
+        with open(_store.json_path(folder, 'analysis_verdicts.json')) as fh:
+            plan['verdicts'] = json.load(fh)
+    except (OSError, ValueError):
+        plan['verdicts'] = {}
+    if mode == 'review':
+        todo = [(k, v) for k, v in (prev_all.get('qanswers') or {}).items()
+                if (v or '').strip() and k not in plan['verdicts']]
+        if todo:
+            print('   ANSWERS TO JUDGE (read each answer against its question and the documents; record whether')
+            print('   it settles it: review_page.py judge <folder> <id> ok|short "<why, one line>", then refresh):')
+            for k, v in todo:
+                print('     - %s: %s' % (k, v))
     plan['notes'] = prev_all.get('notes') or ''
     plan['assume_notes'] = prev_all.get('assumption_notes') or {}
     plan['an_notes'] = prev_all.get('analyst_notes') or ''
     plan['an_assume_notes'] = prev_all.get('analyst_assumption_notes') or {}
     # A new analysis review starts with the analyst; the consult review is
     # the lead advisor's.
-    plan['stage'] = ('analyst' if mode == 'analysis' and
+    plan['stage'] = ('analyst' if mode in ('analysis', 'review') and
                      prev_all.get('stage') != 'lead' else 'lead')
     plan['handoff'] = prev_all.get('handoff')
     # The page's own link, so the hand-off can show it. Known once the page
@@ -1146,7 +1176,7 @@ def main():
     s = sub.add_parser('seed')
     s.add_argument('folder')
     s.add_argument('--out', required=True)
-    s.add_argument('--mode', choices=('analysis', 'consult'), default='consult')
+    s.add_argument('--mode', choices=('review', 'analysis', 'consult'), default='review')
     a_ = sub.add_parser('apply')
     a_.add_argument('folder')
     a_.add_argument('plan_json')

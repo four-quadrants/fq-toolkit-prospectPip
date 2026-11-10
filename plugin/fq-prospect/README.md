@@ -5,12 +5,13 @@ analyst's Mac) reads and builds; these skills do what only Claude can:
 
 - **fq-launchbay-pull**: "pull [client] from LaunchBay" writes the document list
   and checklist the app downloads and audits from. Needs the LaunchBay connector.
-- **fq-analysis-review**: "load / pull in [client]'s analysis review". The lead
-  advisor's first page: what the documents show, and the follow-up questions,
-  with the client email written on the page.
-- **fq-consult-review**: "load / refresh / pull in [client]'s consult review".
-  The second page: the plan, recommendations, projections and slides. Pulling
-  it in is what the deck is built from.
+- **fq-analysis-review**: the review, one page per prospect: "build / load
+  [client]'s assumptions", "refresh [client]'s review with the new answers and
+  documents", "pull in and build [client]'s consult deck". Assumptions, what
+  the documents show, questions and client email, then the plan,
+  recommendations, projections and slides, and the deck built from it.
+- **fq-consult-review**: only for older clients that still have a separate
+  consult review page.
 
 Needs, in the Claude session: the FQ_Toolkit folder and the Prospects folder on
 the Analysis share connected. See the toolkit's `fq_auditor/SETUP.md`.

@@ -121,9 +121,10 @@ def _stage(s):
         return 'Stage 3 · deck built', [
             ('Check the deck', "Open %s's consult deck and tell me what still needs a human check." % n)]
     if s['assumptions']:
-        return 'Stage 3 · analysis review', [
-            ('Load the analysis review', "Load %s's analysis review." % n),
-            ('Pull in my check', "Pull in my check for %s." % n)]
+        return 'Stage 3 · review', [
+            ('Load the review', "Load %s's review." % n),
+            ('Pull in my check', "Pull in my check for %s." % n),
+            ('New answers came in', "Refresh %s's review with the new answers and documents." % n)]
     if accepted:
         if s['cashflow']:
             return 'Stage 2 · cash flow done', [

@@ -1,9 +1,9 @@
 # Review pages: the mechanics
 
-Shared by the analysis review and the consult review. Both are the same page
-(the toolkit's `fq_auditor/assets/review_page.html`) in two modes, published as
-a private claude.ai artifact per client per stage, with a small database (the
-`db` capability).
+The review page: the toolkit's `fq_auditor/assets/review_page.html`, published
+as a private claude.ai artifact, one per prospect, with a small database (the
+`db` capability). Older clients may have the two earlier halves (an analysis
+review and a consult review), the same page in two modes.
 
 ## Finding things
 
@@ -15,8 +15,8 @@ a private claude.ai artifact per client per stage, with a small database (the
 - If either folder is not connected, request it (request_cowork_directory)
   before anything else. Use the shell paths the session lists for them.
 - **Which page belongs to which client**: `<client>/_Audit/review_pages.json`,
-  `{"analysis": "<artifact url>", "consult": "<artifact url>"}`. Read it first;
-  write it after publishing a new page.
+  `{"review": "<artifact url>"}` (older clients: `"analysis"` and `"consult"`).
+  Read it first; write it after publishing a new page.
 
 - **First thing in a session**: read `prospectPip/CLAUDE.md` (the rules and
   the map). On a Mac not used before, or if anything fails to import, run
@@ -28,7 +28,7 @@ a private claude.ai artifact per client per stage, with a small database (the
 Run in the shell, from TOOLKIT/prospectPip/fq_auditor:
 
 ```
-FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client folder>" --out <scratch dir> --mode analysis|consult
+FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client folder>" --out <scratch dir> --mode review
 ```
 
 - `FQ_NO_CLAUDE=1`: the readings Claude makes (statements, returns, accounts)
@@ -36,8 +36,9 @@ FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client fol
   client's `_Audit`; seeding uses those and must not re-read.
 - `FQ_ROOT_FILE` keeps the app's own settings file untouched.
 - It takes one to three minutes. Use the longest shell timeout.
-- It writes `plan.json`, `workings.json`, `slides.json` (consult), `q<id>.json`
-  per question, and `slides/*.jpg` (consult) into the scratch dir.
+- It writes `plan.json`, `workings.json`, `slides.json`, `q<id>.json` per
+  question, and `slides/*.jpg` into the scratch dir. (`--mode analysis` or
+  `consult` only for an older client's existing page of that kind.)
 - If it prints that Claude readings are missing (no `bank_statements.json`,
   `accounts.json` or `income_facts.json` in `_Audit`), tell the analyst to
   build Initial notes, Cash flow and Assumptions first (ask Claude for each
@@ -46,12 +47,12 @@ FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client fol
 ## Publishing a NEW page
 
 1. Copy `fq_auditor/assets/review_page.html` to a scratch file and change its
-   `<title>` to "<Surname> Analysis Review" or "<Surname> Consult Review".
+   `<title>` to "<Surname> Review".
 2. Publish it with the Artifact tool: icon `clipboard`, capabilities `{"db": {}}`,
-   a one-line description, and for the consult review `files` mapping
+   a one-line description, and `files` mapping
    `slides/<n>.jpg` to each picture the seed made.
 3. Write the data with ArtifactData `batch` (one call, all `set`):
-   `plan/figures` from plan.json, `plan/workings`, `plan/slides` (consult), and
+   `plan/figures` from plan.json, `plan/workings`, `plan/slides`, and
    `questions/<id>` for every q file.
 4. Record the URL in `<client>/_Audit/review_pages.json`.
 5. Tell the analyst in one sentence what the page is and that the lead advisor
@@ -63,7 +64,7 @@ Never overwrite the lead advisor's work. Re-seed, then:
 - ArtifactData `get` plan/figures (note its version).
 - `update` plan/figures with ONLY the computed fields: `figures`, `findings`,
   `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`,
-  `carried`, `note_done`, `library`, `schedule`, `slide_list`,
+  `carried`, `note_done`, `verdicts`, `library`, `schedule`, `slide_list`,
   `slides_auto_dropped`
   (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
@@ -96,8 +97,7 @@ Never overwrite the lead advisor's work. Re-seed, then:
    with `python3 inputs.py`, a note saying "hold the 401(k) until 2028" means
    checking the recommendation was moved to that year). Say plainly what was
    done about each one, and what could not be done.
-6. Tell the analyst the next step (on a consult review: build the deck,
-   see the consult review skill).
+6. Tell the analyst the next step (see the review skill).
 
 ## Do not
 

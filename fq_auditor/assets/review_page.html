@@ -146,7 +146,9 @@ section[data-tab].tab-off{display:none}
 .citem .ntext{margin:4px 0;white-space:pre-wrap} .citem .nstat{font-size:14px}
 .citem .nstat.ok{color:var(--ok)} .citem .nstat.wait{color:var(--accent)}
 .cv{font-size:14px;margin-top:4px;padding:6px 9px;border-radius:5px} .cv.ok{background:var(--ok-soft);color:var(--ok)} .cv.short{background:#FDE2D3;color:#9A3412}
-.citem .seg button[aria-pressed="true"][data-cm="ok"]{background:var(--ok)}
+.citem .seg button[aria-pressed="true"][data-cm="ok"],.cmk .seg button[aria-pressed="true"][data-cm="ok"]{background:var(--ok)}
+.cmk{margin:2px 0 8px;display:grid;gap:4px}.cmk .seg button{font-size:13px;padding:4px 10px}.cmk .nstat{font-size:14px}.cmk .nstat.ok{color:var(--ok)}.cmk .nstat.wait{color:var(--accent)}
+.cmk .seg button[aria-pressed="true"][data-cm="follow"],.cmk .seg button[aria-pressed="true"][data-cm="revisit"]{background:var(--accent)}
 .citem .seg button[aria-pressed="true"][data-cm="follow"],.citem .seg button[aria-pressed="true"][data-cm="revisit"]{background:var(--accent)}
 #libpanel{margin-top:12px;padding:12px 14px}
 #libpanel input{width:100%;font:16px var(--body);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
@@ -228,21 +230,23 @@ tr.off td{opacity:.55}
   <header>
     <div class="eyebrow">Due diligence · Four Quadrants</div>
     <h1 id="title">Review</h1>
-    <p class="lede">The toolkit's proposal for each figure the consult deck is built from, the client's biggest concerns, the slide wording Claude drafted, and the follow-up questions. Leave a box blank to accept the proposal. Everything saves as you go.</p>
+    <p class="lede">The toolkit's starting figure for each figure the consult deck is built from, the client's biggest concerns, the slide wording Claude drafted, and the follow-up questions. Leave a box blank to keep the toolkit's starting figure. Everything saves as you go.</p>
     <div class="status" id="status">Loading the plan…</div>
     <div class="note" id="heard">Checking the connection…</div>
+    <div id="refreshbar" class="note" style="display:none"><button type="button" id="refreshbtn">Check for new answers and documents</button> <span id="refreshmsg">Click, then paste the line into Claude. It reads what came in from the client (portal answers, emails, new documents), puts each answer on its question with a verdict on whether it settles it, and refreshes this page.</span></div>
   </header>
   <nav class="tabs" role="tablist" aria-label="Review sections">
-    <button type="button" data-tabgo="assume" data-modes="analysis consult" aria-selected="true">1 Assumptions</button>
-    <button type="button" data-tabgo="found" data-modes="analysis" aria-selected="false">2 What we found</button>
-    <button type="button" data-tabgo="qs" data-modes="analysis consult" aria-selected="false"><span class="m-a">3 Questions</span><span class="m-c">2 Open questions</span> <span class="tc" id="tc-qs"></span></button>
-    <button type="button" data-tabgo="email" data-modes="analysis" aria-selected="false">4 Email</button>
-    <button type="button" data-tabgo="plan" data-modes="consult" aria-selected="false">3 Plan</button>
-    <button type="button" data-tabgo="recs" data-modes="consult" aria-selected="false">4 Recommendations <span class="tc" id="tc-recs"></span></button>
-    <button type="button" data-tabgo="proj" data-modes="consult" aria-selected="false">5 Projections</button>
-    <button type="button" data-tabgo="slides" data-modes="consult" aria-selected="false">6 Slides <span class="tc" id="tc-slides"></span></button>
-    <button type="button" data-tabgo="notes" data-modes="analysis consult" aria-selected="false"><span class="m-a">5</span><span class="m-c">7</span> Notes &amp; questions <span class="tc" id="tc-notes"></span></button>
+    <button type="button" data-tabgo="assume" data-modes="analysis consult review" aria-selected="true">Assumptions</button>
+    <button type="button" data-tabgo="found" data-modes="analysis review" aria-selected="false">What we found</button>
+    <button type="button" data-tabgo="qs" data-modes="analysis consult review" aria-selected="false">Questions <span class="tc" id="tc-qs"></span></button>
+    <button type="button" data-tabgo="email" data-modes="analysis review" aria-selected="false">Email</button>
+    <button type="button" data-tabgo="plan" data-modes="consult review" aria-selected="false">Plan inputs</button>
+    <button type="button" data-tabgo="recs" data-modes="consult review" aria-selected="false">Recommendations <span class="tc" id="tc-recs"></span></button>
+    <button type="button" data-tabgo="proj" data-modes="consult review" aria-selected="false">Projections</button>
+    <button type="button" data-tabgo="slides" data-modes="consult review" aria-selected="false">Slides <span class="tc" id="tc-slides"></span></button>
+    <button type="button" data-tabgo="notes" data-modes="analysis consult review" aria-selected="false">Notes &amp; questions <span class="tc" id="tc-notes"></span></button>
   </nav>
+  <div id="provis" class="abox" style="display:none;margin:-8px 0 14px"></div>
 
   <section data-tab="assume">
     <h2>Assumptions <small id="as-count"></small></h2>
@@ -273,10 +277,10 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="plan">
-    <h2>The plan <small>Your figure replaces the proposal</small></h2>
+    <h2>Plan inputs <small>The toolkit's starting figure is in the middle; type your own to replace it, or leave it blank to keep it</small></h2>
     <div class="card ledger">
       <table>
-        <thead><tr><th>Figure</th><th style="text-align:right">Proposed</th><th>Your figure</th></tr></thead>
+        <thead><tr><th>Figure</th><th style="text-align:right">Starting figure</th><th>Your figure</th></tr></thead>
         <tbody id="figs"><tr><td colspan="3" class="empty">The plan figures appear here once the analyst loads them.</td></tr></tbody>
       </table>
     </div>
@@ -305,7 +309,7 @@ tr.off td{opacity:.55}
     </div>
     <div class="card pad" id="whatif">
       <h3>What if: try different figures</h3>
-      <p class="note">Change anything in the amber boxes and the worksheet below recalculates at once, on the same arithmetic as the deck. Nothing is saved until you press <b>Use these figures</b>.</p>
+      <p class="note">Starts from the plan as it stands (your Plan inputs, and the toolkit's starting figure wherever you have not typed one). Change anything in the amber boxes and the worksheet below recalculates at once, on the same arithmetic as the deck. Nothing is saved until you press <b>Use these figures</b>, which puts them on Plan inputs; <b>Back to the plan inputs</b> undoes your tries.</p>
       <div class="wi-grid">
         <label>Retirement age<input type="text" id="wi-retire" class="wi"></label>
         <label>Target retirement income, a year<input type="text" id="wi-income" class="wi"></label>
@@ -319,7 +323,7 @@ tr.off td{opacity:.55}
       <div class="ledger" id="w-gains"></div>
       <div class="ledger" id="wi-later"></div>
       <div class="wi-results" id="wi-results"></div>
-      <div class="row-actions"><button type="button" id="wi-use" class="primary-btn">Use these figures</button><button type="button" id="wi-reset" class="ghost-btn">Back to the proposal</button></div>
+      <div class="row-actions"><button type="button" id="wi-use" class="primary-btn">Use these figures</button><button type="button" id="wi-reset" class="ghost-btn">Back to the plan inputs</button></div>
     </div>
     <div class="card pad"><h3>Practice levers</h3><p class="note">What each lever is worth a year to the owner, from the practice's own numbers. A lever with no figure says what it still needs.</p><div class="ledger" id="w-levers"></div></div>
     <div class="card pad"><h3>Savings worksheet</h3><p class="note" id="w-proj-note"></p><div class="ledger" id="w-proj"></div></div>
@@ -371,12 +375,12 @@ tr.off td{opacity:.55}
 
   function renderPlan(){
     if(!plan) return;
-    var an=(plan.mode==='analysis');
-    $('title').textContent=(plan.client||'Client')+' · '+(an?'analysis review':'consult review');
-    document.title=(plan.surname||'Client')+(an?' Analysis Review':' Consult Review');
+    var an=(plan.mode==='analysis'), rv=(plan.mode==='review');
+    $('title').textContent=(plan.client||'Client')+' · '+(rv?'review':an?'analysis review':'consult review');
+    document.title=(plan.surname||'Client')+(rv?' Review':an?' Analysis Review':' Consult Review');
     var ld=document.querySelector('.lede');
-    if(ld) ld.textContent=an?(isAnalyst()?'The assumptions and what the documents show, for the analyst to check before the lead advisor sees them. Comment on anything wrong or missing; everything saves as you go.':'The assumptions, what the documents show, the follow-up questions and the email to the client. Comment on any section, mark each question, and the email writes itself. Everything saves as you go.')
-      :'The plan, the recommendations, the projections and every slide of the deck, for the lead advisor to shape. Leave a box blank to accept the proposal. Everything saves as you go.';
+    if(ld) ld.textContent=rv?(isAnalyst()?'The assumptions and what the documents show, for the analyst to check before the lead advisor sees them. Comment on anything wrong or missing; everything saves as you go.':'Everything for this prospect in one place: the assumptions, the questions and the client email, then the plan, recommendations, projections and slides. Work through it in one sitting or come back as the answers arrive. Everything saves as you go.'):an?(isAnalyst()?'The assumptions and what the documents show, for the analyst to check before the lead advisor sees them. Comment on anything wrong or missing; everything saves as you go.':'The assumptions, what the documents show, the follow-up questions and the email to the client. Comment on any section, mark each question, and the email writes itself. Everything saves as you go.')
+      :'The plan, the recommendations, the projections and every slide of the deck, for the lead advisor to shape. Leave a box blank to keep the toolkit\u2019s starting figure. Everything saves as you go.';
     var lastG=null;
     var rows=planFigures().map(function(f,i){
       if(f.marker) return '<!--SAVEYEARS-->';
@@ -387,7 +391,7 @@ tr.off td{opacity:.55}
         '<td class="yours"><input type="text" id="fig-'+esc(f.key)+'" data-key="'+esc(f.key)+'" class="'+(mine?'set':'')+'" value="'+esc(mine||'')+'" placeholder="accept" aria-label="Your figure for '+esc(f.label)+'"></td></tr>';
     }).join('');
     var yrs=(plan.save_years||[1,2,5,8,12]).join(', ');
-    var yrsRow=(plan.mode==='consult'&&(plan.schedule||[]).length)?'<tr class="grp"><td colspan="3">Savings by plan year <span class="basis" style="display:inline">(year 1 is '+planY0()+')</span>'+
+    var yrsRow=(plan.mode!=='analysis'&&(plan.schedule||[]).length)?'<tr class="grp"><td colspan="3">Savings by plan year <span class="basis" style="display:inline">(year 1 is '+planY0()+')</span>'+
       '<div class="basis">Years shown: <input type="text" id="saveyears" value="'+esc(yrs)+'" style="width:160px;display:inline-block" aria-label="Plan years shown"> type the plan years you want, separated by commas.</div></td></tr>':'';
     rows=rows.replace('<!--SAVEYEARS-->',yrsRow);
     $('figs').innerHTML=rows||'<tr><td colspan="3" class="empty">No figures yet.</td></tr>';
@@ -414,7 +418,7 @@ tr.off td{opacity:.55}
   function planFigures(){
     var all=(plan.figures||[]).filter(function(f){return !f.slide});
     var sch=(plan.schedule||[]).slice().sort(function(a,b){return a[0]-b[0]});
-    if(plan.mode!=='consult'||!sch.length) return all;
+    if(plan.mode==='analysis'||!sch.length) return all;
     var y0=planY0(), basis='', at=-1, out=[];
     all.forEach(function(f){ if(/^save_\d{4}$/.test(f.key)){ if(at<0) at=out.length; basis=f.basis||basis; } else out.push(f); });
     if(at<0) at=out.length;
@@ -449,7 +453,7 @@ tr.off td{opacity:.55}
     $('w-sale').className='kv'; $('w-sale').innerHTML=sale;
     $('w-levers').innerHTML='<table><thead><tr><th>Lever</th><th class="r">A year</th><th>Basis</th></tr></thead><tbody>'+
       (w.levers||[]).map(function(l){return '<tr><td><b>'+esc(l.label)+'</b></td><td class="r">'+(l.value==null?'—':$m(l.value))+'</td><td class="'+(l.value==null?'needs':'')+'">'+esc(l.basis)+'</td></tr>'}).join('')+'</tbody></table>';
-    WK=w; if(!WI) wiReset(); wiRender(); recImpact();
+    WK=w; if(!WI||!WI.dirty) wiReset(); wiRender(); recImpact();
   }
 
 // Port of savings.py: both paths, year-end values.
@@ -479,8 +483,13 @@ function fqModel(P){
     var x=parseFloat(t.replace(/[kKmM%]$/,'')); if(isNaN(x)) return null; if(k)x*=1e3; if(m)x*=1e6; if(p)x/=100; return x; }
   function wiReset(){
     if(!WK||!WK.model) return; var M=WK.model;
-    WI={retire:M.retire_age, income:M.income, sale:M.sale_net, cur:M.current_savings, oh:M.target_overhead,
-        sched:(M.schedule||[]).map(function(r){return r.slice()})};
+    // Start from the plan as it stands: his Plan inputs where he typed one,
+    // the toolkit's starting figure where he did not.
+    var D=(plan&&plan.decided)||{}, g=function(k,d){ var v=n(D[k]); return (D[k]!==undefined&&D[k]!==''&&v!=null)?v:d; };
+    var oh=g('target_overhead',M.target_overhead); if(oh>1) oh=oh/100;
+    WI={retire:Math.round(g('retire_age',M.retire_age)), income:g('target_income',M.income), sale:g('sale_net',M.sale_net),
+        cur:g('current_savings',M.current_savings), oh:oh,
+        sched:((typeof recsSchedule==='function'&&plan&&plan.recommendations&&plan.recommendations.length&&recsSchedule())||M.schedule||[]).map(function(r){ return [r[0], g('save_'+r[0], r[1])]; }), dirty:false};
     $('wi-retire').value=WI.retire; $('wi-income').value=$m(WI.income); $('wi-sale').value=$m(WI.sale);
     $('wi-cur').value=$m(WI.cur); $('wi-oh').value=Math.round(WI.oh*100)+'%';
   }
@@ -496,7 +505,7 @@ function fqModel(P){
       return '<tr><td><b>'+esc(x.label)+'</b><div class="basis">'+esc(x.basis||'')+'</div></td><td class="r">'+$m(x.gain)+'</td>'+
       (x.invested||[]).map(function(v){return '<td class="r">'+$m(v)+'</td>'}).join('')+'</tr>'; }).join('');
     $('w-gains').innerHTML='<table><thead><tr><th>Source</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr></thead><tbody>'+rows+
-      '<tr class="ret"><td>Proposed to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
+      '<tr class="ret"><td>Toolkit\u2019s starting split to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
     var a2=document.activeElement, typing=a2&&a2.classList&&a2.classList.contains('wcell');
     if(!typing) $('wi-later').innerHTML='<table><thead><tr><th>4Q savings schedule (what the plan uses)</th><th class="r">From</th><th class="r">Saved a year</th></tr></thead><tbody>'+
       WI.sched.map(function(r,k){return '<tr><td>Step '+(k+1)+'</td><td class="r">Year '+(r[0]-WI.sched[0][0]+1)+' ('+r[0]+')</td><td class="r"><input type="text" class="wcell" id="sch-'+k+'" data-l="'+k+'" value="'+$m(r[1])+'" aria-label="Savings from '+r[0]+'"></td></tr>'}).join('')+'</tbody></table>';
@@ -511,7 +520,7 @@ function fqModel(P){
     $('wi-results').innerHTML=
       '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">'+(r.cur_runout?'Runs out in '+r.cur_runout:'Lasts to age '+(M.horizon||90))+'</span></div>'+
       '<div class="tile good"><span class="k">With 4Q at retirement</span><span class="v">'+$m(r.fq_at)+'</span><span class="s">Retiring in '+r.retire+' at '+WI.retire+'</span></div>'+
-      '<div class="tile"><span class="k">Difference</span><span class="v">'+$m(r.fq_at-r.cur_at)+'</span><span class="s">vs the proposal: '+$m(r.fq_at-(base.fq_at||r.fq_at))+'</span></div>'+
+      '<div class="tile"><span class="k">Difference</span><span class="v">'+$m(r.fq_at-r.cur_at)+'</span><span class="s">4Q path minus the current path</span></div>'+
       '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(WI.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
     $('w-proj-note').textContent='Current path at '+pct(0.085)+'; 4Q path at '+pct(0.09)+' ('+pct(0.085)+' in the first year). Spending today '+$m(M.spend)+' a year, grown at 3.2%.';
     var yrs=[]; for(var y=r.y0;y<=Math.min(r.end,r.retire+3);y++) yrs.push(y);
@@ -537,11 +546,12 @@ function fqModel(P){
     else if(t.id==='wi-oh'){ v=n(t.value); if(v!=null){ if(v>1) v=v/100; WI.oh=v; } }
     else if(t.dataset && t.dataset.l!=null){ v=n(t.value); WI.sched[+t.dataset.l][1]=v||0; }
     else return;
+    WI.dirty=true;
     wiRender();
   });
   document.addEventListener('click',function(e){
     var t=e.target; if(!t) return;
-    if(t.id==='wi-reset'){ wiReset(); if(WI) WI.saleTyped=false; var a=document.activeElement; if(a&&a.blur) a.blur(); wiRender(); say('Back to the proposal.'); }
+    if(t.id==='wi-reset'){ wiReset(); if(WI) WI.saleTyped=false; var a=document.activeElement; if(a&&a.blur) a.blur(); wiRender(); say('Back to the plan inputs.'); }
     if(t.id==='wi-use' && WI && plan){
       plan.decided=plan.decided||{};
       plan.decided.retire_age=String(WI.retire); plan.decided.target_income=$m(WI.income);
@@ -549,7 +559,8 @@ function fqModel(P){
       plan.decided.target_overhead=Math.round(WI.oh*100)+'%';
       wiSchedule().forEach(function(r){ plan.decided['save_'+r[0]]=$m(r[1]); });
       pending.figs=true;
-      write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'the what-if figures, now the plan');
+      WI.dirty=false;
+      write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'the what-if figures, now on Plan inputs');
       renderPlan();
     }
   });
@@ -568,7 +579,7 @@ function fqModel(P){
       Object.keys(kind).forEach(function(num){
         var t=(notes[num]||'').trim();
         if(kind[num]!=='q'||!t) return;
-        out.push({id:f[2]+num, text:t, why:'From '+f[3]+' on the assumptions', source:'Assumptions '+num+(titles[num]?': '+titles[num]:''), priority:'Normal', decision:'Send', custom:true});
+        var bn=String(num).split('.')[0]; out.push({id:f[2]+num, text:t, why:'From '+f[3]+' on the assumptions', source:'Assumptions '+bn+(titles[bn]?': '+titles[bn]:''), priority:'Normal', decision:'Send', custom:true});
       });
     });
     (plan.qcustom||[]).forEach(function(c){
@@ -600,6 +611,7 @@ function fqModel(P){
         '<span class="seg">'+b('Send','send')+b('Answered','answered')+b('Strike','strike')+'</span></div>'+
         '<textarea id="q-'+esc(q.id)+'" data-id="'+esc(q.id)+'" rows="3"'+(q.custom?' placeholder="Type the question as the client should read it"':'')+' aria-label="Question '+esc(q.n)+'">'+esc(q.text)+'</textarea>'+
         '<textarea class="qans" data-qa="'+esc(q.id)+'" rows="2" placeholder="The client\'s answer, when it comes back" aria-label="Answer to question '+esc(q.n)+'">'+esc(((plan&&plan.qanswers)||{})[q.id]||'')+'</textarea>'+
+        (function(){ var v=((plan&&plan.verdicts)||{})[q.id]; return v?'<div class="cv '+(v.ok?'ok':'short')+'"><b>'+(v.ok?'Claude: the answer settles it':'Claude: the answer does not settle it')+'</b>'+(v.why?' '+esc(v.why):'')+'</div>':''; })()+
         '<div class="why">'+(q.custom?'<span class="chip">Added</span> ':'')+'Why: '+esc(q.why)+' <span>· '+esc(q.source)+'</span></div></div>';
     }).join('')+addbtn;
     $('qs').querySelectorAll('textarea').forEach(function(el){
@@ -641,7 +653,7 @@ function fqModel(P){
   function recImpact(){
     var el=$('recimpact'); if(!el||!WK||!WK.model) return;
     var sch=recsSchedule(); if(!sch){ el.innerHTML=''; return; }
-    if(WI){ WI.sched=sch.map(function(r){return r.slice()}); }
+    if(!WI||!WI.dirty) wiReset();
     var M=WK.model;
     var P={rates:M.rates, consult_date:M.consult_date, age:M.age, retire_age:WI?WI.retire:M.retire_age, start:M.start,
            current_savings:WI?WI.cur:M.current_savings, spend:M.spend, schedule:sch, income:WI?WI.income:M.income,
@@ -649,7 +661,7 @@ function fqModel(P){
     var r=fqModel(P), base=WK.base||{}, lasts=r.fq_end>=-1000;
     el.innerHTML=
       '<div class="tile"><span class="k">Invested, years 1 · 2 · 3</span><span class="v">'+$m(sch[0][1])+'</span><span class="s">'+$m(sch[1][1])+' · '+$m(sch[2][1])+'</span></div>'+
-      '<div class="tile good"><span class="k">With 4Q at retirement</span><span class="v">'+$m(r.fq_at)+'</span><span class="s">'+(base.fq_at?((r.fq_at-base.fq_at>=0?'+':'')+$m(r.fq_at-base.fq_at)+' vs the proposal'):'')+'</span></div>'+
+      '<div class="tile good"><span class="k">With 4Q at retirement</span><span class="v">'+$m(r.fq_at)+'</span><span class="s">With the recommendations ticked above</span></div>'+
       '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">Difference '+$m(r.fq_at-r.cur_at)+'</span></div>'+
       '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(P.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
     if(typeof wiRender==='function') wiRender();
@@ -828,7 +840,7 @@ function fqModel(P){
     // Build the deck: the page cannot reach the client folder, so the button
     // hands over the one line Claude needs (pull in, then build), copied.
     var line='Pull in and build '+(plan.surname||'this client')+'\u2019s consult deck';
-    $('scount').innerHTML=(plan.mode==='consult')?
+    $('scount').innerHTML=(plan.mode!=='analysis')?
       '<div class="note" style="margin:8px 0"><button type="button" id="builddeck">Build the deck</button> '+
       '<span id="buildmsg">When the slides are decided: click, then paste the line into Claude. It saves your choices and builds the deck into the client folder.</span></div>':'';
     var bd=$('builddeck');
@@ -844,7 +856,7 @@ function fqModel(P){
       if(!its.length && !fs.length) return '';
       var any=its[0]||{}, pic=any.pic||(plan.pics||{})[n], head=any.heading||(plan.slide_titles||{})[n]||('Slide '+n);
       var right='';
-      if(fs.length) right+='<div class="ledger"><table><thead><tr><th>Figure</th><th style="text-align:right">Proposed</th><th>Your figure</th></tr></thead><tbody>'+fs.map(figRow).join('')+'</tbody></table></div>';
+      if(fs.length) right+='<div class="ledger"><table><thead><tr><th>Figure</th><th style="text-align:right">Starting figure</th><th>Your figure</th></tr></thead><tbody>'+fs.map(figRow).join('')+'</tbody></table></div>';
       right+=its.map(function(x){
         var d=sd[x.id]||'Use', t=(st[x.id]!=null&&st[x.id]!=='')?st[x.id]:x.text;
         var b=function(name,cls){return '<button type="button" class="'+cls+'" data-sid="'+esc(x.id)+'" data-s="'+name+'" aria-pressed="'+(d===name)+'">'+name+'</button>'};
@@ -911,6 +923,39 @@ function fqModel(P){
       '<button type="button" data-cm="revisit" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='revisit')+'">Team to revisit</button></span>'+
       (cm==='revisit'?'<span class="basis" style="margin-left:8px">Claude raises it with the team before the deck is built.</span>':cm==='follow'?'<span class="basis" style="margin-left:8px">On the Open questions tab for the client.</span>':'')+'</div></div>';
   }
+  // A section's comments are keyed "8", "8.2", "8.3"...: the first is the
+  // section number, each added one gets the next suffix.
+  function ckeys(field,num){
+    var o=(plan&&plan[field])||{}, b=String(num);
+    return Object.keys(o).filter(function(k){ return k===b||k.indexOf(b+'.')===0; })
+      .sort(function(x,y){ return (+(x.split('.')[1]||1))-(+(y.split('.')[1]||1)); });
+  }
+  // Under a comment once the lead advisor has it: where a question stands
+  // (the client's answer, and Claude's read of whether it settles it), and
+  // his mark: answered / done, still open, or for the team to revisit.
+  function cmarks(id, isq, text){
+    if(!plan||plan.mode==='analysis'||isAnalyst()) return '';
+    var cm=((plan.carried_marks||{})[id])||'', v=(plan.verdicts||{})[id]||null, h='<div class="cmk">';
+    if(isq){
+      var ans=((plan.qanswers||{})[id]||'').trim(), d=((plan.qdecisions||{})[id])||'Send';
+      h+='<div class="nstat '+(ans?'ok':'wait')+'">'+(ans?'Client’s answer: '+esc(ans):d==='Send'?'In the email; waiting for the answer':esc(d))+'</div>';
+      if(v) h+='<div class="cv '+(v.ok?'ok':'short')+'"><b>'+(v.ok?'Claude: the answer settles it':'Claude: the answer does not settle it')+'</b>'+(v.why?' '+esc(v.why):'')+'</div>';
+    }
+    h+='<span class="seg" style="margin-left:0"><button type="button" data-cm="ok" data-cid="'+esc(id)+'" data-ct="'+esc(text)+'" data-cq="'+(isq?1:0)+'" aria-pressed="'+(cm==='ok')+'">'+(isq?'Answered':'Done')+'</button>'+
+      (isq?'<button type="button" data-cm="follow" data-cid="'+esc(id)+'" data-ct="'+esc(text)+'" data-cq="1" aria-pressed="'+(cm==='follow')+'">Still open: ask again</button>':'')+
+      '<button type="button" data-cm="revisit" data-cid="'+esc(id)+'" data-ct="'+esc(text)+'" data-cq="'+(isq?1:0)+'" aria-pressed="'+(cm==='revisit')+'">Team to revisit</button></span>'+
+      (cm==='revisit'?'<span class="basis" style="margin-left:8px">Claude raises it with the team before the deck is built.</span>':cm==='follow'?'<span class="basis" style="margin-left:8px">Asked again on the Questions tab.</span>':'')+'</div>';
+    return h;
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target && e.target.closest && e.target.closest('button[data-addc]'); if(!b||!plan) return;
+    var f=isAnalyst()?'an_assume_notes':'assume_notes', num=b.dataset.addc, ks=ckeys(f,num);
+    plan[f]=plan[f]||{};
+    if(!ks.length){ plan[f][num]=''; ks=[num]; }
+    var n=Math.max.apply(null,ks.map(function(k){ return +(k.split('.')[1]||1); }))+1, k=num+'.'+n;
+    plan[f][k]=''; renderAssume(); applyMode();
+    var t=document.querySelector('textarea[data-an="'+k+'"]'); if(t) t.focus();
+  });
   function renderAssume(){
     var el=$('assume'); if(!el||!plan) return;
     var A=plan.assumptions;
@@ -931,22 +976,30 @@ function fqModel(P){
       if(s.flag) h+='<div class="abox"><b>CHECK THIS</b>'+esc(s.flag)+'</div>';
       if(s.needed) h+='<div class="abox"><b>STILL NEEDED</b>'+esc(s.needed)+(s.why?'<div>'+esc(s.why)+'</div>':'')+
         (s.link?'<div><a href="'+esc(s.link)+'" target="_blank" rel="noopener">'+esc(s.link)+'</a></div>':'')+'</div>';
-      var mine=isAnalyst()?(plan.an_assume_notes||{}):(plan.assume_notes||{});
-      var theirs=((plan.an_assume_notes||{})[s.number])||'';
       carriedFor(s.number).forEach(function(it){ h+=citem(it); });
-      if(!isAnalyst()&&theirs.trim()&&plan.mode!=='consult'){
-        // The lead advisor decides what the analyst's comment becomes: a note
-        // for the team, or a question that goes in the client email.
-        var aq=((plan.an_assume_kind||{})[s.number]==='q');
-        h+='<div class="anfrom"><b>\u270e Analyst\u2019s comment</b>'+esc(theirs)+'</div>'+
-          '<div class="akind"><span class="seg"><button type="button" data-kind="n" data-kf="an_assume_kind" data-num="'+s.number+'" aria-pressed="'+(!aq)+'">Note</button><button type="button" data-kind="q" data-kf="an_assume_kind" data-num="'+s.number+'" aria-pressed="'+aq+'">Question to the client</button></span>'+
-          '<span class="basis">'+(aq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
+      var ownF=isAnalyst()?'an_assume_notes':'assume_notes', ownK=isAnalyst()?'an_assume_kind':'assume_kind';
+      // The analyst's comments, as the lead advisor sees them: each one his
+      // to sort (note or client question) and, once answers come, to mark.
+      if(!isAnalyst()&&plan.mode!=='consult'){
+        ckeys('an_assume_notes',s.number).forEach(function(k){
+          var t=((plan.an_assume_notes||{})[k]||'').trim(); if(!t) return;
+          var aq=((plan.an_assume_kind||{})[k]==='q');
+          h+='<div class="anfrom"><b>✎ Analyst’s comment</b>'+esc(t)+'</div>'+
+            '<div class="akind"><span class="seg"><button type="button" data-kind="n" data-kf="an_assume_kind" data-num="'+k+'" aria-pressed="'+(!aq)+'">Note</button><button type="button" data-kind="q" data-kf="an_assume_kind" data-num="'+k+'" aria-pressed="'+aq+'">Question to the client</button></span>'+
+            '<span class="basis">'+(aq?'On the Questions tab, and in the email':'For the team only')+'</span></div>'+
+            cmarks(aq?'aq_'+k:'an_a'+k, aq, t);
+        });
       }
-      var an=mine[s.number]||'';
-      var kf=isAnalyst()?'an_assume_kind':'assume_kind', isq=((plan[kf]||{})[s.number]==='q');
-      h+='<textarea class="anote'+(an.trim()?' set':'')+'" data-an="'+s.number+'" rows="1" placeholder="'+(isAnalyst()?'Your check: anything wrong, missing or to fix (Claude reads this)':'Your comment on this section (a change, a question, a correction)')+'" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
-      h+='<div class="akind" data-kn="'+s.number+'"><span class="seg"><button type="button" data-kind="n" data-num="'+s.number+'" aria-pressed="'+(!isq)+'">Note</button><button type="button" data-kind="q" data-num="'+s.number+'" aria-pressed="'+isq+'">Question to the client</button></span>'+
-        '<span class="basis">'+(isq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
+      // His own comments: as many as he wants on a section.
+      var keys=ckeys(ownF,s.number); if(!keys.length) keys=[String(s.number)];
+      keys.forEach(function(k){
+        var an=((plan[ownF]||{})[k])||'', isq=((plan[ownK]||{})[k]==='q');
+        h+='<textarea class="anote'+(an.trim()?' set':'')+'" data-an="'+k+'" rows="1" placeholder="'+(isAnalyst()?'Your check: anything wrong, missing or to fix (Claude reads this)':'Your comment on this section (a change, a question, a correction)')+'" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
+        h+='<div class="akind" data-kn="'+k+'"><span class="seg"><button type="button" data-kind="n" data-num="'+k+'" aria-pressed="'+(!isq)+'">Note</button><button type="button" data-kind="q" data-num="'+k+'" aria-pressed="'+isq+'">Question to the client</button></span>'+
+          '<span class="basis">'+(isq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
+        if(!isAnalyst()&&an.trim()&&plan.mode==='review') h+=cmarks(isq?'lq_'+k:'ld_a'+k, isq, an.trim());
+      });
+      h+='<div><button type="button" class="ybtn" data-addc="'+s.number+'">+ Add another comment</button></div>';
       h+='</div></div>';
     });
     var S=A.summary||{};
@@ -997,9 +1050,9 @@ function fqModel(P){
     var qd=plan.qdecisions||{}, qt=plan.qtext||{}, qa=plan.qanswers||{}, dn=plan.note_done||{}, out=[];
     [['an','an_assume_notes','an_assume_kind','Analyst'],['ld','assume_notes','assume_kind','Lead advisor']].forEach(function(f){
       var notes=plan[f[1]]||{}, kind=plan[f[2]]||{};
-      Object.keys(notes).sort(function(a,b){return (+a)-(+b)}).forEach(function(num){
+      Object.keys(notes).sort(function(a,b){return (+String(a).split('.')[0])-(+String(b).split('.')[0])||(+(String(a).split('.')[1]||1))-(+(String(b).split('.')[1]||1))}).forEach(function(num){
         var t=(notes[num]||'').trim(); if(!t) return;
-        var about='Assumptions '+num+(titles[num]?': '+titles[num]:'');
+        var bn=String(num).split('.')[0], about='Assumptions '+bn+(titles[bn]?': '+titles[bn]:'');
         if(kind[num]==='q'){ var id=(f[0]==='an'?'aq_':'lq_')+num;
           out.push({id:id,kind:'question',who:f[3],about:about,text:qt[id]!=null&&qt[id]!==''?qt[id]:t,decision:qd[id]||'Send',answer:qa[id]||''}); }
         else out.push({id:f[0]+'_a'+num,kind:'note',who:f[3],about:about,text:t,done:dn[f[0]+'_a'+num]||''});
@@ -1069,13 +1122,13 @@ function fqModel(P){
   });
   document.addEventListener('click',function(e){
     var b=e.target && e.target.closest && e.target.closest('button[data-cm]'); if(!b||!plan) return;
-    var id=b.dataset.cid, mark=b.dataset.cm, it=(plan.carried||[]).find(function(x){return x.id===id});
+    var id=b.dataset.cid, mark=b.dataset.cm, it=(plan.carried||[]).find(function(x){return x.id===id})||(b.dataset.ct!=null?{kind:b.dataset.cq==='1'?'question':'note',text:b.dataset.ct}:null);
     plan.carried_marks=plan.carried_marks||{};
     plan.carried_marks[id]=(plan.carried_marks[id]===mark)?'':mark; pending.cm=true;
     var patch={carried_marks:plan.carried_marks}, fid='f_'+id;
     var cu=(plan.qcustom||[]).filter(function(c){ return c.id!==fid; });
     if(plan.carried_marks[id]==='follow' && it){
-      cu.push({id:fid, by:'follow-up from the analysis review', text:'Following up on '+(it.kind==='question'?'our earlier question':'an earlier note')+': '+it.text});
+      cu.push({id:fid, by:'follow-up', text:'Following up on '+(it.kind==='question'?'our earlier question':'an earlier note')+': '+it.text});
     }
     if(cu.length!==(plan.qcustom||[]).length || plan.carried_marks[id]==='follow'){ plan.qcustom=cu; patch.qcustom=cu; pending.qc=true; }
     write('plan/figures',patch,function(){pending.cm=false;pending.qc=false;},
@@ -1206,7 +1259,7 @@ function fqModel(P){
     var a=plan.answered_by_docs||[];
     if(!a.length||plan.mode==='analysis'){ el.style.display='none'; return; }
     el.style.display='';
-    el.innerHTML='<b>Answered by the documents received since the analysis review ('+a.length+')</b>'+
+    el.innerHTML='<b>Answered by the documents received since the questions were drafted ('+a.length+')</b>'+
       '<div class="note" style="margin:4px 0 8px">The toolkit no longer needs to ask these: the documents that came in settle them.</div>'+
       '<ul style="margin:0;padding-left:18px">'+a.map(function(x){ return '<li class="basis" style="margin:3px 0">'+esc(x.text)+'</li>'; }).join('')+'</ul>';
   }
@@ -1282,17 +1335,40 @@ function fqModel(P){
     document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.hidden=(' '+b.dataset.modes+' ').indexOf(' '+mode+' ')<0 || (isAnalyst() && b.dataset.tabgo!=='assume' && b.dataset.tabgo!=='found' && b.dataset.tabgo!=='notes'); });
     var cur=document.querySelector('[data-tabgo][aria-selected=true]');
     if(!cur||cur.hidden){ var first=document.querySelector('[data-tabgo]:not([hidden])'); if(first) showTab(first.dataset.tabgo); }
-    var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='analysis'?'Analysis review':'Consult review')+
-      (mode==='analysis'?(isAnalyst()?' · analyst check':' · lead advisor'):'')+' · Four Quadrants';
+    var eb=document.querySelector('.eyebrow'); if(eb) eb.textContent=(mode==='review'?'Review':mode==='analysis'?'Analysis review':'Consult review')+
+      (mode!=='consult'?(isAnalyst()?' · analyst check':' · lead advisor'):'')+' · Four Quadrants';
+    var rb=$('refreshbar'); if(rb) rb.style.display=(mode==='review'&&!isAnalyst())?'':'none';
+    provis();
     document.body.classList.toggle('stage-analyst',isAnalyst());
     var gn=$('gnote2'); if(gn) gn.placeholder=isAnalyst()?'For the lead advisor: what you checked, what you could not settle, what to look at first.':'What looks off, what to ask, what to keep in mind for the plan.';
     var an=$('an-note'); if(an){ var t=(plan&&plan.an_notes)||''; an.style.display=(!isAnalyst()&&t)?'':'none'; an.innerHTML='<b>\u270e From the analyst</b>'+esc(t); }
   }
+  // Before the client's answers are in, the plan side is provisional.
+  function openAnswers(){
+    var qa=(plan&&plan.qanswers)||{}, qd=(plan&&plan.qdecisions)||{};
+    return allQs().filter(function(q){ var d=qd[q.id]||q.decision||'Send'; return d==='Send' && !(qa[q.id]||'').trim(); }).length;
+  }
+  function provis(){
+    var el=$('provis'); if(!el||!plan) return;
+    var cur=(document.querySelector('[data-tabgo][aria-selected=true]')||{dataset:{}}).dataset.tabgo;
+    var n=(plan.mode==='review')?openAnswers():0;
+    var on=n&&['plan','recs','proj','slides'].indexOf(cur)>=0;
+    el.style.display=on?'':'none';
+    if(on) el.innerHTML='<b>PROVISIONAL</b>Waiting on '+n+' answer'+(n===1?'':'s')+' from the client. Everything here can be worked now; figures an answer changes are updated when the answers come in.';
+  }
+  document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='refreshbtn'||!plan) return;
+    var line='Refresh '+(plan.surname||'this client')+'\u2019s review with the new answers and documents';
+    var done=function(){ $('refreshmsg').textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
+    try{ navigator.clipboard.writeText(line).then(done,function(){ $('refreshmsg').textContent='Copy this into Claude: '+line; }); }
+    catch(err){ $('refreshmsg').textContent='Copy this into Claude: '+line; }
+  });
   // ---- tabs ------------------------------------------------------------
   function showTab(t){
     document.querySelectorAll('section[data-tab]').forEach(function(sec){ sec.classList.toggle('tab-off', sec.dataset.tab!==t); });
     document.querySelectorAll('[data-tabgo]').forEach(function(b){ b.setAttribute('aria-selected', String(b.dataset.tabgo===t)); });
     try{ localStorage.setItem('review-tab', t); }catch(e){}
+    try{ provis(); }catch(e){}
     window.scrollTo(0,0);
   }
   document.addEventListener('click',function(e){
@@ -1306,7 +1382,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v49';
+  var BUILD='v52';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
