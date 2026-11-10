@@ -137,9 +137,17 @@ section[data-tab].tab-off{display:none}
 .nitem .nstat{font-size:14px}
 .nitem .nstat.ok{color:var(--ok)} .nitem .nstat.wait{color:var(--accent)}
 .nitem .seg button[aria-pressed="true"][data-cm="ok"]{background:var(--ok)}
-.nitem .seg button[aria-pressed="true"][data-cm="follow"]{background:var(--accent)}
+.nitem .seg button[aria-pressed="true"][data-cm="follow"],.nitem .seg button[aria-pressed="true"][data-cm="revisit"]{background:var(--accent)}
 .nitem.follow{border-left:4px solid var(--accent)} .nitem.okd{border-left:4px solid var(--ok)}
 .chip.qk{background:var(--accent-soft)} .chip.nk{background:var(--off-soft)}
+.citem{border:2px solid var(--an-line,#E0B400);border-left-width:6px;background:#FFFBE6;border-radius:6px;padding:9px 12px}
+.citem.okd{border-color:var(--ok);background:var(--ok-soft)} .citem.follow{border-color:var(--accent);background:var(--accent-soft)}
+.citem .nhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.citem .ntext{margin:4px 0;white-space:pre-wrap} .citem .nstat{font-size:14px}
+.citem .nstat.ok{color:var(--ok)} .citem .nstat.wait{color:var(--accent)}
+.cv{font-size:14px;margin-top:4px;padding:6px 9px;border-radius:5px} .cv.ok{background:var(--ok-soft);color:var(--ok)} .cv.short{background:#FDE2D3;color:#9A3412}
+.citem .seg button[aria-pressed="true"][data-cm="ok"]{background:var(--ok)}
+.citem .seg button[aria-pressed="true"][data-cm="follow"],.citem .seg button[aria-pressed="true"][data-cm="revisit"]{background:var(--accent)}
 #libpanel{margin-top:12px;padding:12px 14px}
 #libpanel input{width:100%;font:16px var(--body);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
 #liblist{max-height:460px;overflow:auto}
@@ -238,7 +246,7 @@ tr.off td{opacity:.55}
 
   <section data-tab="assume">
     <h2>Assumptions <small id="as-count"></small></h2>
-    <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own.</p>
+    <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own. On the consult review, the notes and questions from the analysis review sit on their section, with the client's answer and Claude's read of whether it settles the point: mark each <b>Answered</b> / <b>Done</b>, <b>Still open</b> (asked again) or <b>Team to revisit</b>.</p>
     <div id="assume"><div class="card empty">Appears once the analyst loads this client.</div></div>
   </section>
 
@@ -339,7 +347,7 @@ tr.off td{opacity:.55}
 
   <section data-tab="notes">
     <h2>Notes &amp; questions <small id="ncount"></small></h2>
-    <p class="note">Everything written on this review, in one place: every note for the team and every question to the client, who wrote it, what it is about, and where it stands. A <b>note</b> is acted on by Claude when the review is pulled in; what was done shows here after the next refresh. A <b>question</b> shows whether it was sent, the client's answer, or that documents settled it. On the consult review, everything from the analysis review is listed first: mark each <b>Answered well</b> or <b>Follow up</b> (a follow-up goes on the Open questions tab).</p>
+    <p class="note">Everything written on this review, in one place: every note for the team and every question to the client, who wrote it, what it is about, and where it stands. A <b>note</b> is acted on by Claude when the review is pulled in; what was done shows here after the next refresh. A <b>question</b> shows whether it was sent, the client's answer, or that documents settled it. On the consult review, what the analysis review said about each assumption sits on that section of the Assumptions tab, to be marked there.</p>
     <div id="notesbox"><div class="card empty">Nothing written on this review yet.</div></div>
   </section>
 </div>
@@ -884,12 +892,32 @@ function fqModel(P){
   }
 
   // ---- assumptions -------------------------------------------------------
+  // On the consult review, what the analysis review said about a section
+  // sits on that section: each item with where it stands, Claude's read of
+  // any answer, and the lead advisor's mark.
+  function carriedFor(num){
+    if(!plan||plan.mode!=='consult') return [];
+    return (plan.carried||[]).filter(function(it){
+      var m=/^Assumptions (\d+)/.exec(it.about||''); return num==null?!m:(m&&m[1]===String(num)); });
+  }
+  function citem(it){
+    var st=nstatus(it), cm=((plan.carried_marks||{})[it.id])||'', v=it.verdict||null;
+    var who=String(it.who||''); who=who.charAt(0).toUpperCase()+who.slice(1);
+    var vline=v?'<div class="'+(v.ok?'cv ok':'cv short')+'"><b>'+(v.ok?'Claude: the answer settles it':'Claude: the answer does not settle it')+'</b>'+(v.why?' '+esc(v.why):'')+'</div>':'';
+    return '<div class="citem'+(cm==='ok'?' okd':cm?' follow':'')+'"><div class="nhead"><span class="chip '+(it.kind==='question'?'qk':'nk')+'">'+(it.kind==='question'?'Question':'Note')+'</span><b>'+esc(who)+'</b> \u00b7 from the analysis review</div>'+
+      '<div class="ntext">'+esc(it.text)+'</div><div class="nstat '+st[0]+'">'+esc(st[1])+'</div>'+vline+
+      '<div style="margin-top:6px"><span class="seg" style="margin-left:0"><button type="button" data-cm="ok" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='ok')+'">'+(it.kind==='question'?'Answered':'Done')+'</button>'+
+      (it.kind==='question'?'<button type="button" data-cm="follow" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='follow')+'">Still open: ask again</button>':'')+
+      '<button type="button" data-cm="revisit" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='revisit')+'">Team to revisit</button></span>'+
+      (cm==='revisit'?'<span class="basis" style="margin-left:8px">Claude raises it with the team before the deck is built.</span>':cm==='follow'?'<span class="basis" style="margin-left:8px">On the Open questions tab for the client.</span>':'')+'</div></div>';
+  }
   function renderAssume(){
     var el=$('assume'); if(!el||!plan) return;
     var A=plan.assumptions;
     if(!A||!A.sections){ el.innerHTML='<div class="card empty">The assumptions were not built for this client yet.</div>'; return; }
     $('as-count').textContent=A.done+' of '+A.sections.length+' sections written from the documents';
-    var h='';
+    var h='', loose=carriedFor(null);
+    if(loose.length) h+='<div class="card asec"><div class="ahead"><span>From the analysis review</span></div><div class="abody">'+loose.map(citem).join('')+'</div></div>';
     A.sections.forEach(function(s){
       h+='<div class="card asec"><div class="ahead"><span class="n">'+s.number+'</span><span>'+esc(s.title)+'</span></div><div class="abody">';
       if(s.text) h+='<p class="atext">'+esc(s.text)+'</p>';
@@ -905,11 +933,19 @@ function fqModel(P){
         (s.link?'<div><a href="'+esc(s.link)+'" target="_blank" rel="noopener">'+esc(s.link)+'</a></div>':'')+'</div>';
       var mine=isAnalyst()?(plan.an_assume_notes||{}):(plan.assume_notes||{});
       var theirs=((plan.an_assume_notes||{})[s.number])||'';
-      if(!isAnalyst()&&theirs.trim()) h+='<div class="anfrom"><b>\u270e Analyst\u2019s note</b>'+esc(theirs)+'</div>';
+      carriedFor(s.number).forEach(function(it){ h+=citem(it); });
+      if(!isAnalyst()&&theirs.trim()&&plan.mode!=='consult'){
+        // The lead advisor decides what the analyst's comment becomes: a note
+        // for the team, or a question that goes in the client email.
+        var aq=((plan.an_assume_kind||{})[s.number]==='q');
+        h+='<div class="anfrom"><b>\u270e Analyst\u2019s comment</b>'+esc(theirs)+'</div>'+
+          '<div class="akind"><span class="seg"><button type="button" data-kind="n" data-kf="an_assume_kind" data-num="'+s.number+'" aria-pressed="'+(!aq)+'">Note</button><button type="button" data-kind="q" data-kf="an_assume_kind" data-num="'+s.number+'" aria-pressed="'+aq+'">Question to the client</button></span>'+
+          '<span class="basis">'+(aq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
+      }
       var an=mine[s.number]||'';
       var kf=isAnalyst()?'an_assume_kind':'assume_kind', isq=((plan[kf]||{})[s.number]==='q');
       h+='<textarea class="anote'+(an.trim()?' set':'')+'" data-an="'+s.number+'" rows="1" placeholder="'+(isAnalyst()?'Your check: anything wrong, missing or to fix (Claude reads this)':'Your comment on this section (a change, a question, a correction)')+'" aria-label="Comment on section '+s.number+'">'+esc(an)+'</textarea>';
-      h+='<div class="akind" data-kn="'+s.number+'"'+(an.trim()?'':' hidden')+'><span class="seg"><button type="button" data-kind="n" data-num="'+s.number+'" aria-pressed="'+(!isq)+'">Note</button><button type="button" data-kind="q" data-num="'+s.number+'" aria-pressed="'+isq+'">Question to the client</button></span>'+
+      h+='<div class="akind" data-kn="'+s.number+'"><span class="seg"><button type="button" data-kind="n" data-num="'+s.number+'" aria-pressed="'+(!isq)+'">Note</button><button type="button" data-kind="q" data-num="'+s.number+'" aria-pressed="'+isq+'">Question to the client</button></span>'+
         '<span class="basis">'+(isq?'On the Questions tab, and in the email':'For the team only')+'</span></div>';
       h+='</div></div>';
     });
@@ -930,7 +966,6 @@ function fqModel(P){
     plan[f]=plan[f]||{}; plan[f][el.dataset.an]=el.value; pending.an=true;
     el.classList.toggle('set',!!el.value.trim());
     // The Note / Question switch shows once there is a comment to sort.
-    var sw=document.querySelector('.akind[data-kn="'+el.dataset.an+'"]'); if(sw) sw.hidden=!el.value.trim();
     var kf=isAnalyst()?'an_assume_kind':'assume_kind';
     if(((plan[kf]||{})[el.dataset.an])==='q') debounce('qre',function(){ renderQs(); });
     debounce('nt',function(){ renderNotes(); });
@@ -939,7 +974,7 @@ function fqModel(P){
 
   document.addEventListener('click',function(e){
     var b=e.target && e.target.closest && e.target.closest('button[data-kind]'); if(!b||!plan) return;
-    var f=isAnalyst()?'an_assume_kind':'assume_kind', num=b.dataset.num;
+    var f=b.dataset.kf||(isAnalyst()?'an_assume_kind':'assume_kind'), num=b.dataset.num;
     plan[f]=plan[f]||{}; plan[f][num]=b.dataset.kind; pending.kind=true;
     var patch={}; patch[f]=plan[f];
     write('plan/figures',patch,function(){pending.kind=false;},
@@ -993,16 +1028,19 @@ function fqModel(P){
   }
   function nitem(it,carried){
     var st=nstatus(it), cm=((plan.carried_marks||{})[it.id])||'';
-    return '<div class="card nitem'+(carried?(cm==='follow'?' follow':cm==='ok'?' okd':''):'')+'">'+
+    return '<div class="card nitem'+(carried?(cm==='follow'||cm==='revisit'?' follow':cm==='ok'?' okd':''):'')+'" data-cmk="'+(carried?(cm||'none'):'live')+'">'+
       '<div class="nhead"><span class="chip '+(it.kind==='question'?'qk':'nk')+'">'+(it.kind==='question'?'Question':'Note')+'</span><b>'+esc(String(it.who||'').charAt(0).toUpperCase()+String(it.who||'').slice(1))+'</b> \u00b7 '+esc(it.about)+'</div>'+
       '<div class="ntext">'+esc(it.text)+'</div>'+
       '<div class="nstat '+st[0]+'">'+esc(st[1])+'</div>'+
-      (carried?'<div style="margin-top:8px"><span class="seg" style="margin-left:0"><button type="button" data-cm="ok" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='ok')+'">Answered well</button><button type="button" data-cm="follow" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='follow')+'">Follow up</button></span></div>':'')+
+      (carried?'<div style="margin-top:8px"><span class="seg" style="margin-left:0"><button type="button" data-cm="ok" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='ok')+'">'+(it.kind==='question'?'Answered':'Done')+'</button>'+
+        (it.kind==='question'?'<button type="button" data-cm="follow" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='follow')+'">Still open: ask again</button>':'')+
+        '<button type="button" data-cm="revisit" data-cid="'+esc(it.id)+'" aria-pressed="'+(cm==='revisit')+'">Team to revisit</button></span>'+
+        (cm==='revisit'?'<div class="basis" style="margin-top:4px">Claude raises this with the team when the review is pulled in, before the deck is built.</div>':cm==='follow'?'<div class="basis" style="margin-top:4px">Added to the Open questions tab for the client.</div>':'')+'</div>':'')+
       '</div>';
   }
   function renderNotes(){
     var el=$('notesbox'); if(!el||!plan) return;
-    var car=(plan.mode==='consult')?(plan.carried||[]):[];
+    var car=[];
     // The consult review starts with the analysis review's notes in its own
     // boxes; list each once, under where it came from.
     var seen={}; car.forEach(function(it){ seen[(it.text||'').trim()]=1; });
@@ -1010,7 +1048,13 @@ function fqModel(P){
     var h='';
     if(car.length){
       var open=car.filter(function(it){ return !((plan.carried_marks||{})[it.id]); }).length;
-      h+='<h3>From the analysis review <small>'+open+' of '+car.length+' not yet marked</small></h3>'+car.map(function(it){ return nitem(it,true); }).join('');
+      var M=plan.carried_marks||{}, cnt={none:0,ok:0,follow:0,revisit:0};
+      car.forEach(function(it){ cnt[M[it.id]||'none']++; });
+      var NF=window.__nf||'all';
+      var chip=function(k,label){ return '<button type="button" class="sf sf-'+(k==='ok'?'sure':k==='none'?'needed':'check')+'" data-nf="'+k+'" aria-pressed="'+(NF===k)+'">'+label+' ('+(k==='all'?car.length:cnt[k])+')</button>'; };
+      h+='<h3>From the analysis review <small>'+open+' of '+car.length+' not yet marked</small></h3>'+
+        '<div class="sfilter">Show: '+chip('all','All')+chip('none','Not marked')+chip('ok','Answered / done')+chip('follow','Still open')+chip('revisit','Team to revisit')+'</div>'+
+        car.filter(function(it){ return NF==='all'||(M[it.id]||'none')===NF; }).map(function(it){ return nitem(it,true); }).join('');
       h+='<h3 style="margin-top:22px">On this review</h3>';
     }
     h+=live.length?live.map(function(it){ return nitem(it,false); }).join(''):'<div class="card empty">Nothing written on this review yet.</div>';
@@ -1019,6 +1063,10 @@ function fqModel(P){
     $('ncount').textContent=n?(n+' item'+(n===1?'':'s')):'';
     var tc=$('tc-notes'); if(tc) tc.textContent=n?'\u00b7 '+n:'';
   }
+  document.addEventListener('click',function(e){
+    var f=e.target && e.target.closest && e.target.closest('button[data-nf]'); if(!f) return;
+    window.__nf=f.dataset.nf; renderNotes();
+  });
   document.addEventListener('click',function(e){
     var b=e.target && e.target.closest && e.target.closest('button[data-cm]'); if(!b||!plan) return;
     var id=b.dataset.cid, mark=b.dataset.cm, it=(plan.carried||[]).find(function(x){return x.id===id});
@@ -1031,8 +1079,8 @@ function fqModel(P){
     }
     if(cu.length!==(plan.qcustom||[]).length || plan.carried_marks[id]==='follow'){ plan.qcustom=cu; patch.qcustom=cu; pending.qc=true; }
     write('plan/figures',patch,function(){pending.cm=false;pending.qc=false;},
-          plan.carried_marks[id]==='follow'?'marked for follow-up; it is on the Open questions tab':(plan.carried_marks[id]==='ok'?'marked answered well':'mark cleared'));
-    renderNotes(); renderQs(); applyMode();
+          plan.carried_marks[id]==='follow'?'still open; it is on the Open questions tab':(plan.carried_marks[id]==='revisit'?'marked for the team to revisit':(plan.carried_marks[id]==='ok'?'marked answered':'mark cleared')));
+    renderAssume(); renderNotes(); renderQs(); applyMode();
   });
 
   // ---- recommendations library -------------------------------------------
@@ -1258,7 +1306,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v46';
+  var BUILD='v49';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

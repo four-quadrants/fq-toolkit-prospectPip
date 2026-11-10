@@ -28,9 +28,10 @@ and pulled in.
 
 Before seeding a NEW consult review, pull the analysis review in once more
 (fq-analysis-review, "pull in") so the answers typed on it since are carried:
-the consult review's Notes & questions tab lists everything asked and noted
-on the analysis review, with its answer, for the lead advisor to mark
-Answered well or Follow up (a follow-up becomes an open question). The
+each note and question from the analysis review then sits on its section of
+the consult review's Assumptions tab, with the client's answer, for the lead
+advisor to mark Answered / Done, Still open (asked again as an open question)
+or Team to revisit. The
 Recommendations tab's **Add from the library** lists the whole library
 (`fq_auditor/recommendations_library.md`); what he adds there is pulled in
 like any other recommendation. A recommendation he writes himself (Add a
@@ -54,6 +55,12 @@ removed, N added"; the next deck build applies them.
 2. Seed with `--mode consult`. The seed carries over his decisions from the
    analysis review, and lists the analysis questions that documents received
    since have answered (`answered_by_docs`).
+   If it prints ANSWERS TO JUDGE, read each client answer against its
+   question and the documents, and record whether it settles the point:
+   `python3 fq_auditor/review_page.py judge "<client folder>" <id> ok|short "<one line why>"`.
+   Short means it leaves a figure or fact the plan needs still unknown (a
+   loan with no balance, "both of us" with no split); say what is missing.
+   Then seed again so the verdicts show beside the answers.
 3. Before publishing, tell the analyst briefly what stands out: recommendations
    suggested and why, figures still missing (4Q returns, building value), and
    questions still open.
@@ -65,7 +72,9 @@ removed, N added"; the next deck build applies them.
 1. Pull in (mechanics: Pulling in). The recommendations he left ticked become
    the savings table; his figures and assumptions go into the plan inputs.
 2. Act on every note and client answer printed, before anything else, and say
-   what was done about each.
+   what was done about each. Items marked Team to revisit (printed FROM THE
+   ANALYSIS REVIEW, FOR THE TEAM TO REVISIT) are raised with the analyst
+   before the deck is built.
 3. Build the deck, in the same run: from fq_auditor,
    `FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 build_outputs.py "<client folder>" --what deck`.
    It fills the firm's consult template from the plan and his slide

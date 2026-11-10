@@ -269,6 +269,7 @@ def apply(folder, plan_json):
     if edits:
         out.setdefault('slides', {}).update(edits)
         print('   deck boxes he changed: %s' % ', '.join(sorted(edits)))
+    out['carried_marks'] = rec.get('carried_marks') or {}
     with open(_store.json_path(folder, 'review_decisions.json'), 'w') as fh:
         json.dump(out, fh, indent=1)
     print('   figures applied: %s' % (', '.join(changed) or 'none'))
@@ -290,6 +291,26 @@ def apply(folder, plan_json):
                            key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 99):
             print('     - Assumptions %s (%s)%s: %s' % (k, titles_an.get(str(k), ''),
                   ' [a question to the client]' if (rec.get('an_assume_kind') or {}).get(k) == 'q' else '', v))
+    # What he marked on the items carried over from the analysis review.
+    marks = rec.get('carried_marks') or {}
+    out['carried_marks'] = marks
+    if marks:
+        try:
+            with open(_store.json_path(folder, 'analysis_log.json')) as fh:
+                _car = {i['id']: i for i in (json.load(fh).get('items') or [])}
+        except (OSError, ValueError):
+            _car = {}
+        for want, head in (('revisit', 'FROM THE ANALYSIS REVIEW, FOR THE TEAM TO REVISIT (raise each with the analyst before building the deck):'),
+                           ('follow', 'FROM THE ANALYSIS REVIEW, STILL OPEN (asked again on the Open questions tab):')):
+            got = [k for k, v in sorted(marks.items()) if v == want]
+            if got:
+                print('   ' + head)
+                for k in got:
+                    it = _car.get(k) or {}
+                    print('     - [%s, %s] %s' % (it.get('kind', '?'), it.get('about', k), it.get('text', '')))
+        n_ok = sum(1 for v in marks.values() if v == 'ok')
+        if n_ok:
+            print('   from the analysis review, marked answered or done: %d' % n_ok)
     if out['notes'] or notes or out['assumption_notes']:
         print('   NOTES FROM THE LEAD ADVISOR (act on these before building the deck):')
         if out['notes']:
@@ -436,6 +457,22 @@ def log_items(rec):
                           'about': 'Follow-up questions', 'text': (qt.get(qid) or '').strip(),
                           'decision': d, 'answer': (qa.get(qid) or '').strip(), 'page': page})
     return items
+
+
+def judge(folder, item_id, verdict, why):
+    """Claude's read of a client answer to a question carried from the
+    analysis review: does it settle the point ('ok') or not ('short')?
+    Shown on the consult review's Assumptions tab beside the answer."""
+    p = _store.json_path(folder, 'analysis_verdicts.json')
+    try:
+        with open(p) as fh:
+            got = json.load(fh)
+    except (OSError, ValueError):
+        got = {}
+    got[item_id] = {'ok': verdict == 'ok', 'why': why.strip()}
+    with open(p, 'w') as fh:
+        json.dump(got, fh, indent=1)
+    print('judged %s: %s, %s' % (item_id, 'settles it' if verdict == 'ok' else 'does not settle it', why.strip()))
 
 
 def noted(folder, nid, text):
@@ -823,12 +860,27 @@ def seed(folder, outdir, mode='consult'):
         except (OSError, ValueError):
             carried = []
         by_docs = {(x.get('text') or '').strip() for x in answered_by_docs}
+        try:
+            with open(_store.json_path(folder, 'analysis_verdicts.json')) as fh:
+                verdicts = json.load(fh)
+        except (OSError, ValueError):
+            verdicts = {}
+        unjudged = []
         for it in carried:
+            if it['id'] in verdicts:
+                it['verdict'] = verdicts[it['id']]
+            elif it['kind'] == 'question' and (it.get('answer') or '').strip():
+                unjudged.append(it)
             if it['kind'] == 'note' and plan['note_done'].get(it['id']):
                 it['done'] = plan['note_done'][it['id']]
             if it['kind'] == 'question' and it.get('text', '').strip() in by_docs:
                 it['by_docs'] = True
         plan['carried'] = carried
+        if unjudged:
+            print('   ANSWERS TO JUDGE (read each answer against its question; record whether it settles it,')
+            print('   with: review_page.py judge <folder> <id> ok|short "<why, one line>", then seed again):')
+            for it in unjudged:
+                print('     - %s [%s] Q: %s | A: %s' % (it['id'], it.get('about', ''), it.get('text', ''), it['answer']))
     plan['notes'] = prev_all.get('notes') or ''
     plan['assume_notes'] = prev_all.get('assumption_notes') or {}
     plan['an_notes'] = prev_all.get('analyst_notes') or ''
@@ -1098,6 +1150,11 @@ def main():
     a_ = sub.add_parser('apply')
     a_.add_argument('folder')
     a_.add_argument('plan_json')
+    j_ = sub.add_parser('judge', help="record whether a client answer settles a carried question")
+    j_.add_argument('folder')
+    j_.add_argument('id')
+    j_.add_argument('verdict', choices=('ok', 'short'))
+    j_.add_argument('why')
     n_ = sub.add_parser('noted', help='record what was done about a note')
     n_.add_argument('folder')
     n_.add_argument('id')
@@ -1105,6 +1162,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == 'seed':
         seed(a.folder, a.out, a.mode)
+    elif a.cmd == 'judge':
+        judge(a.folder, a.id, a.verdict, a.why)
     elif a.cmd == 'noted':
         noted(a.folder, a.id, a.text)
     else:
