@@ -48,6 +48,10 @@ again** (it goes back on the Questions tab), or **Team to revisit** (Claude
 raises it with the analyst before the deck is built). Notes get **Done** or
 **Team to revisit**.
 
+**Print the assumptions** (button at the top of the Assumptions tab) copies a
+line for Claude, which saves the Assumptions as a PDF in the client folder,
+ready to print.
+
 **What we found.** What the documents show (accounts, debts, cards, pay,
 cash), each with where it came from. Read-only: if something is wrong, say so
 in a comment on the Assumptions section it belongs to.

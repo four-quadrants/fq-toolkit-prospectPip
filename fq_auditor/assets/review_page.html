@@ -250,6 +250,7 @@ tr.off td{opacity:.55}
 
   <section data-tab="assume">
     <h2>Assumptions <small id="as-count"></small></h2>
+    <div class="note"><button type="button" id="printasm">Print the assumptions</button> <span id="printmsg">Click, then paste the line into Claude: it saves the Assumptions as a PDF in the client folder, ready to print.</span></div>
     <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own. On the consult review, the notes and questions from the analysis review sit on their section, with the client's answer and Claude's read of whether it settles the point: mark each <b>Answered</b> / <b>Done</b>, <b>Still open</b> (asked again) or <b>Team to revisit</b>.</p>
     <div id="assume"><div class="card empty">Appears once the analyst loads this client.</div></div>
   </section>
@@ -1376,6 +1377,13 @@ function fqModel(P){
     if(on) el.innerHTML='<b>PROVISIONAL</b>Waiting on '+n+' answer'+(n===1?'':'s')+' from the client. Everything here can be worked now; figures an answer changes are updated when the answers come in.';
   }
   document.addEventListener('click',function(e){
+    if(!e.target||e.target.id!=='printasm'||!plan) return;
+    var line='Print '+(plan.surname||'this client')+'\u2019s assumptions';
+    var done=function(){ $('printmsg').textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
+    try{ navigator.clipboard.writeText(line).then(done,function(){ $('printmsg').textContent='Copy this into Claude: '+line; }); }
+    catch(err){ $('printmsg').textContent='Copy this into Claude: '+line; }
+  });
+  document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='refreshbtn'||!plan) return;
     var line='Refresh '+(plan.surname||'this client')+'\u2019s review with the new answers and documents';
     var done=function(){ $('refreshmsg').textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
@@ -1401,7 +1409,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v54';
+  var BUILD='v56';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

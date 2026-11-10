@@ -440,17 +440,46 @@ TITLES = {
 }
 
 
-def render(sections, client, out, practice=None):
+NOTES_W = 2.3 * inch          # the notes column on a print-for-notes copy
+
+
+def _notes_column(draw):
+    """Wrap the page furniture: a ruled notes column down the right side."""
+    def both(c, doc):
+        draw(c, doc)
+        c.saveState()
+        w, h = letter
+        x0 = w - RIGHT - NOTES_W + 0.15 * inch
+        top = h - BAND - 0.3 * inch
+        bottom = 0.95 * inch
+        c.setFillColor(BAND_BG)
+        c.rect(x0, bottom, NOTES_W - 0.15 * inch, top - bottom, stroke=0, fill=1)
+        c.setFillColor(MUTE)
+        c.setFont('Helvetica-Bold', 7.5)
+        c.drawString(x0 + 0.12 * inch, top - 0.2 * inch, 'NOTES')
+        c.setStrokeColor(RULE)
+        c.setLineWidth(0.5)
+        y = top - 0.45 * inch
+        while y > bottom + 0.1 * inch:
+            c.line(x0 + 0.12 * inch, y, w - RIGHT - 0.12 * inch, y)
+            y -= 0.3 * inch
+        c.restoreState()
+    return both
+
+
+def render(sections, client, out, practice=None, notes=False):
     when = datetime.date.today().strftime('%d.%m.%Y')
     doc = BaseDocTemplate(
         out, pagesize=letter, leftMargin=LEFT, rightMargin=RIGHT,
         topMargin=BAND + 0.3 * inch, bottomMargin=0.95 * inch,
         title='Assumptions - %s' % client, author='Four Quadrants Advisory')
-    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height,
+    width = doc.width - (NOTES_W if notes else 0)
+    frame = Frame(doc.leftMargin, doc.bottomMargin, width, doc.height,
                   id='f', leftPadding=0, rightPadding=0, topPadding=0,
                   bottomPadding=0)
+    furniture = _furniture(client, when)
     doc.addPageTemplates([PageTemplate(id='p', frames=[frame],
-                                       onPage=_furniture(client, when))])
+                                       onPage=_notes_column(furniture) if notes else furniture)])
 
     done = sum(1 for s in sections if s.complete)
     story = []
@@ -463,8 +492,8 @@ def render(sections, client, out, practice=None):
         'omitted.' % (done, len(sections), len(sections) - done), intro))
     story.append(Spacer(1, 10))
     for sec in sections:
-        story.extend(_section(sec, TITLES.get(sec.number, ''), doc.width))
-    story.append(_summary(sections, doc.width))
+        story.extend(_section(sec, TITLES.get(sec.number, ''), width))
+    story.append(_summary(sections, width))
     doc.build(story)
     return out
 

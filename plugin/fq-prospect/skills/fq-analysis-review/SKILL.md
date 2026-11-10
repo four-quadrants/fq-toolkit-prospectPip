@@ -1,6 +1,6 @@
 ---
 name: fq-analysis-review
-description: "Build, load, refresh or pull in a Four Quadrants prospect's REVIEW: the one page per prospect, which is also how the ASSUMPTIONS are built and reviewed. Assumptions first, then what the documents show, the follow-up questions and client email, then the plan, recommendations, projections and slides, and the consult deck built from it. Use when someone says \"build [client]'s assumptions\", \"load [client]'s assumptions\", \"load [client]'s review\", \"load [client]'s analysis review\" or \"consult review\", \"refresh [client]'s review with the new answers and documents\", \"check [client]'s answers\", \"pull in my check\", \"pull in [client]'s questions\", \"pull in [client]'s review\", \"pull in and build [client]'s consult deck\", or asks how the review page works (\"walk me through [client]'s review\", \"what's the difference between Plan inputs and Recommendations\"). Comes after the cash flow."
+description: "Build, load, refresh or pull in a Four Quadrants prospect's REVIEW: the one page per prospect, which is also how the ASSUMPTIONS are built and reviewed. Assumptions first, then what the documents show, the follow-up questions and client email, then the plan, recommendations, projections and slides, and the consult deck built from it. Use when someone says \"build [client]'s assumptions\", \"load [client]'s assumptions\", \"load [client]'s review\", \"load [client]'s analysis review\" or \"consult review\", \"refresh [client]'s review with the new answers and documents\", \"check [client]'s answers\", \"pull in my check\", \"pull in [client]'s questions\", \"pull in [client]'s review\", \"pull in and build [client]'s consult deck\", \"print [client]'s assumptions\", or asks how the review page works (\"walk me through [client]'s review\", \"what's the difference between Plan inputs and Recommendations\"). Comes after the cash flow."
 ---
 
 # The review (one page per prospect)
@@ -164,6 +164,17 @@ When the page's `stage` is `lead` and he has pressed Done:
    comments and decisions stay.
 5. Tell him in a few lines what came in, which answers settle their question
    and which do not, and what changed in the plan.
+
+## Print the assumptions ("print [client]'s assumptions")
+
+The Assumptions tab has a **Print the assumptions** button that copies this
+line. From fq_auditor:
+`FQ_ASSUMPTIONS_PDF=1 FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 build_outputs.py "<client folder>" --what assumptions --outdir "<client folder>"`.
+It saves `Assumptions - <Surname>.pdf` in the client folder, the same
+sections as the page, ready to print. Present the file so it opens; it
+prints from Preview. Comments written on the page are not printed on it.
+(Only if someone asks for room to write notes: `FQ_ASSUMPTIONS_PDF=notes`
+adds a ruled notes column.)
 
 ## The slide library
 

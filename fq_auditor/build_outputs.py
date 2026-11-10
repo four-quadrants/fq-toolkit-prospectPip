@@ -147,10 +147,11 @@ def step_assumptions(folder, client, outdir):
     # made only when someone asks for one (FQ_ASSUMPTIONS_PDF=1, or "print
     # the assumptions as a PDF" to Claude).
     out = None
-    if os.environ.get('FQ_ASSUMPTIONS_PDF') == '1':
-        out = os.path.join(outdir, 'Assumptions - %s.pdf'
-                           % (bundle.surname or _surname(folder, client)))
-        _pdf.render(sections, bundle.client or client or 'Client', out)
+    if os.environ.get('FQ_ASSUMPTIONS_PDF') in ('1', 'notes'):
+        notes = os.environ.get('FQ_ASSUMPTIONS_PDF') == 'notes'
+        out = os.path.join(outdir, 'Assumptions - %s%s.pdf'
+                           % (bundle.surname or _surname(folder, client), ' (for notes)' if notes else ''))
+        _pdf.render(sections, bundle.client or client or 'Client', out, notes=notes)
     done = sum(1 for s in sections if s.complete)
     print('   %d of %d sections written from documents' % (done, len(sections)))
     # What the lead advisor's review page needs from the documents, read now
