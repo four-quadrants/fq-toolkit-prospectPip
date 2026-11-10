@@ -45,9 +45,12 @@ section "A short request means the whole step". The short version:
    form, the initial call notes (the sales lead's notes, or the call's
    transcript or Otter summary) and the fee study (its results file in
    Documents/Business/Fees, from the fee-comparison step on the practice's
-   fee schedule). If any is missing, stop and tell the analyst plainly which
-   is still needed and that the initial notes wait for it (for the fee study,
-   offer to run the fee comparison when the fee schedule is on file); build only if they say to go ahead without it, and then say in the
+   fee schedule). If the IC form or the call notes are missing, stop and tell
+   the analyst plainly which is still needed and that the initial notes wait
+   for it. If only the fee study is missing (NOT ON FILE), say so and ask:
+   build the notes without it now (the fee lever waits for the study), or run
+   the fee comparison first when the fee schedule is on file. Build without
+   it only once the operator confirms; build only if they say to go ahead without it, and then say in the
    notes which input was missing. The intake (steps 3 and 4) can still run.
 3. **Run what is missing, in order.** No `launchbay_manifest.json`, or older
    than 3 days: run the fq-launchbay-pull skill. Documents not downloaded:

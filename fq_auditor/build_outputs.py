@@ -74,9 +74,11 @@ def step_workbook(folder, client, outdir):
     import workbook as _wb
     try:
         import notes_inputs as _ni
-        _gap = _ni.check(folder)['missing']
-        if _gap:
-            print('   STILL NEEDED for the initial notes: ' + '; '.join(_gap))
+        _r = _ni.check(folder)
+        if _r['missing']:
+            print('   STILL NEEDED for the initial notes: ' + '; '.join(_r['missing']))
+        if _r.get('flags'):
+            print('   NOT ON FILE: ' + '; '.join(_r['flags']))
     except Exception:                                        # noqa: BLE001
         pass
     bundle = _facts.gather(folder, client=client)

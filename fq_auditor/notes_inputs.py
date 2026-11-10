@@ -49,10 +49,11 @@ def check(folder):
         fee = txt if pct is not None else None
     except Exception:                                        # noqa: BLE001
         fee = None
-    if not fee:
-        missing.append('the fee study (results in Documents/Business/Fees; run the fee comparison '
-                       'on the practice fee schedule if it has not been)')
-    return {'ic_form': ic, 'call_notes': call, 'fee_study': fee, 'missing': missing}
+    # The fee study is flagged, not required: the notes can be built without
+    # it once the operator says so (the fee lever then waits for it).
+    flags = [] if fee else ['the fee study (results in Documents/Business/Fees; run the fee '
+                            'comparison on the practice fee schedule if it has not been)']
+    return {'ic_form': ic, 'call_notes': call, 'fee_study': fee, 'missing': missing, 'flags': flags}
 
 
 def main():
@@ -60,6 +61,9 @@ def main():
     print('IC form: %s' % (', '.join(r['ic_form']) or 'NOT FOUND'))
     print('Initial call notes: %s' % (', '.join(r['call_notes']) or 'NOT FOUND'))
     print('Fee study: %s' % (r['fee_study'] or 'NOT FOUND'))
+    if r['flags']:
+        print('NOT ON FILE (the notes can be built without it if the operator confirms): '
+              + '; '.join(r['flags']))
     if r['missing']:
         print('STILL NEEDED before the initial notes: ' + '; '.join(r['missing']))
         sys.exit(1)
