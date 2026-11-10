@@ -1056,8 +1056,8 @@ def slide_fills(D):
         out[11].update({
             'Text 3': '%s%s/mo business cashflow' % (sg(inc['gain']), k1(inc['gain'])),
             'Text 4': 'with a new 401(k) in %d' % inc['plan_year'],
-            'Text 6': 'Decrease %s\u2019s W-2 (\u2212%s/yr ) and take %s, '
-                      'consistent distributions ( %s%s/yr ) to have fewer '
+            'Text 6': 'Decrease %s\u2019s W-2 (\u2212%s/yr) and take %s, '
+                      'consistent distributions (%s%s/yr) to have fewer '
                       'tax surprises and smoother cashflow.'
                       % (D['first'], _k(inc['w2_cut'] * 12),
                          'lower' if inc['dist_cut'] >= 0 else 'higher',
@@ -1890,7 +1890,7 @@ def _dd_text(s, x, y, w, h, runs, size=16, align='l', anchor='top', font='Barlow
     return tb
 
 
-def _dd_head(s, x, y, w, text, col=DD_ORANGE, size=19):
+def _dd_head(s, x, y, w, text, col=DD_ORANGE, size=24):
     return _dd_text(s, x, y, w, 30, [((text or '').upper(), col, True)], size=size,
                     font='Barlow Condensed', spacing=1.5)
 
@@ -1943,19 +1943,19 @@ def _deep_dive(prs, a):
     # Left: sector bars
     _dd_head(s, L, 126, 520, a.get('bars_head') or 'Where the invested equity sits')
     if a.get('bars_note'):
-        _dd_text(s, L + 540, 128, LW - 540, 40, [(a['bars_note'], DD_MUTED, False)], size=13)
+        _dd_text(s, L + 540, 130, LW - 540, 40, [(a['bars_note'], DD_MUTED, False)], size=16)
     bars = [b for b in (a.get('bars') or []) if b and b[0]][:8]
-    top = 172
+    top = 176
     rowh = min(52, (548 - top) / float(max(len(bars), 1)))
     mx = max([_dd_pct(b[1]) for b in bars] + [1])
     cols = [DD_ORANGE, DD_BLUE, DD_GREY, DD_GREY, DD_GREY2, DD_GREY2, DD_GREY2, DD_GREY3]
     for i, b in enumerate(bars):
         y = top + i * rowh
         last = i == len(bars) - 1 and len(bars) == 8
-        _dd_text(s, L, y, 560, 18, [(b[0], DD_MUTED if last else DD_DARK, not last)], size=15)
-        _dd_rect(s, L, y + 20, 560 * _dd_pct(b[1]) / mx, 15, cols[i])
+        _dd_text(s, L, y, 560, 22, [(b[0], DD_MUTED if last else DD_DARK, not last)], size=19)
+        _dd_rect(s, L, y + 25, 560 * _dd_pct(b[1]) / mx, 18, cols[i])
         vc = DD_ORANGE if i == 0 else DD_BLUE if i == 1 else DD_MUTED
-        _dd_text(s, L + 580, y + 10, LW - 580, 26, [(b[1], vc, i < 2)], size=22 if i < 2 else 18,
+        _dd_text(s, L + 580, y + 12, LW - 580, 32, [(b[1], vc, i < 2)], size=30 if i < 2 else 24,
                  align='r', font='Barlow Condensed', anchor='middle')
     # Left bottom: how the sleeve splits
     cy = 572
@@ -1968,35 +1968,35 @@ def _deep_dive(prs, a):
     for i, m in enumerate(mix):
         w = (LW - 52) * _dd_pct(m[1]) / tot
         _dd_rect(s, x, cy + 72, w, 38, mcol[i][0])
-        _dd_text(s, x, cy + 72, w, 38, [(('%s %s' % (m[0], m[1])).upper(), mcol[i][1], True)], size=17,
+        _dd_text(s, x, cy + 72, w, 38, [(('%s %s' % (m[0], m[1])).upper(), mcol[i][1], True)], size=21,
                  align='c', anchor='middle', font='Barlow Condensed', spacing=1)
         x += w
     if a.get('mix_note'):
-        _dd_text(s, L + 26, cy + 128, LW - 52, 70, _bold_split(a['mix_note'], DD_TEXT), size=16)
+        _dd_text(s, L + 26, cy + 128, LW - 52, 70, _bold_split(a['mix_note'], DD_TEXT), size=20)
 
     # Right: the concentration callout
     y = 126
-    _dd_rect(s, R, y, RW, 110, 'FFFFFF')
+    _dd_rect(s, R, y, RW, 124, 'FFFFFF')
     _dd_rect(s, R, y, RW, 4, DD_BLUE)
-    _dd_text(s, R + 22, y + 20, RW - 44, 28, [((a.get('card_head') or '').upper(), DD_DARK, True)], size=21,
+    _dd_text(s, R + 22, y + 18, RW - 44, 30, [((a.get('card_head') or '').upper(), DD_DARK, True)], size=26,
              font='Barlow Condensed')
-    _dd_text(s, R + 22, y + 52, RW - 44, 52, _bold_split(a.get('card_body') or '', DD_TEXT), size=16)
+    _dd_text(s, R + 22, y + 54, RW - 44, 64, _bold_split(a.get('card_body') or '', DD_TEXT), size=19)
     # Right: the holdings that recur
-    y = 250
+    y = 264
     rows = [r for r in (a.get('recur_rows') or []) if r and r[0]][:6]
-    hgt = 80 + 25 * len(rows) + (28 if a.get('recur_note') else 0)
+    hgt = 82 + 27 * len(rows) + (30 if a.get('recur_note') else 0)
     _dd_rect(s, R, y, RW, hgt, 'FFFFFF', DD_LINE)
     _dd_text(s, R + 22, y + 16, RW - 44, 26, [((a.get('recur_head') or '').upper(), DD_ORANGE, True)],
-             size=20, font='Barlow Condensed')
+             size=24, font='Barlow Condensed')
     if a.get('recur_sub'):
-        _dd_text(s, R + 22, y + 40, RW - 44, 18, [(a['recur_sub'], DD_MUTED, False)], size=13)
+        _dd_text(s, R + 22, y + 44, RW - 44, 20, [(a['recur_sub'], DD_MUTED, False)], size=16)
     for i, r in enumerate(rows):
-        _dd_text(s, R + 22, y + 66 + 25 * i, 90, 24, [(r[0], DD_DARK, True)], size=16)
-        _dd_text(s, R + 112, y + 66 + 25 * i, RW - 134, 24, [(r[1] if len(r) > 1 else '', DD_MUTED, False)], size=16)
+        _dd_text(s, R + 22, y + 70 + 27 * i, 90, 26, [(r[0], DD_DARK, True)], size=19)
+        _dd_text(s, R + 112, y + 70 + 27 * i, RW - 134, 26, [(r[1] if len(r) > 1 else '', DD_MUTED, False)], size=19)
     if a.get('recur_note'):
-        _dd_text(s, R + 22, y + hgt - 32, RW - 44, 24, [(a['recur_note'], DD_GREY, False)], size=14)
+        _dd_text(s, R + 22, y + hgt - 34, RW - 44, 26, [(a['recur_note'], DD_GREY, False)], size=17)
     # Right: what nobody can see
-    y = max(y + hgt + 24, 520)
+    y = y + hgt + 22
     _dd_head(s, R, y, RW, a.get('zoom_head') or '')
     z = [p for p in (a.get('zoom') or []) if p and p[0]][:2]
     ztot = sum(_dd_pct(p[1]) for p in z) or 1
@@ -2004,16 +2004,16 @@ def _deep_dive(prs, a):
     for i, p in enumerate(z):
         w = RW * _dd_pct(p[1]) / ztot
         _dd_rect(s, x, y + 40, w, 40, DD_BLUE if i == 0 else DD_GREY)
-        _dd_text(s, x, y + 40, w, 40, [(p[0].upper(), 'FFFFFF', True)], size=17, align='c', anchor='middle',
+        _dd_text(s, x, y + 40, w, 40, [(p[0].upper(), 'FFFFFF', True)], size=20, align='c', anchor='middle',
                  font='Barlow Condensed', spacing=1)
         x += w
     if a.get('zoom_body'):
-        _dd_text(s, R, y + 92, RW, 110, _bold_split(a['zoom_body'], DD_TEXT), size=15)
+        _dd_text(s, R, y + 92, RW, 110, _bold_split(a['zoom_body'], DD_TEXT), size=17)
     # The takeaway band
     band = a.get('band') or ['', '']
     _dd_rect(s, R, 730, RW, 56, DD_DARK)
     _dd_text(s, R + 18, 730, RW - 36, 56, [(band[0] + ' ', 'FFFFFF', True), (band[1] if len(band) > 1 else '', 'F5A25D', True)],
-             size=18, anchor='middle', font='Barlow Condensed')
+             size=24, anchor='middle', font='Barlow Condensed')
     return s
 
 
@@ -2282,6 +2282,59 @@ def apply_deck_edits(prs, edits, auto_drop):
     return sorted(gone)
 
 
+def _tidy(prs):
+    """Small things that look wrong once a client's words are in: a space left
+    before a full stop where a run ended, and a one-line figure longer than
+    its box (widened toward its alignment, so Keynote and PowerPoint show it
+    on one line), and text boxes that run off the slide."""
+    from pptx.util import Pt
+    W = prs.slide_width
+    for slide in prs.slides:
+        for sh in slide.shapes:
+            if not sh.has_text_frame:
+                continue
+            # A text box running past the slide's edge (left-aligned headings
+            # in the template): keep it on the slide, so it is easy to select
+            # and edit in Keynote.
+            if sh.left is not None and sh.left + sh.width > W and sh.left < W - Pt(200):
+                sh.width = W - sh.left - Pt(48)
+            for para in sh.text_frame.paragraphs:
+                runs = para.runs
+                for r0, r1 in zip(runs, runs[1:]):
+                    if r0.text.endswith(' ') and r1.text[:1] in '.,;:)':
+                        r0.text = r0.text.rstrip()
+            bp = sh.text_frame._txBody.bodyPr
+            text = sh.text_frame.text.strip()
+            if bp.get('wrap') != 'none' or not text or '\n' in text:
+                continue
+            size = None
+            for para in sh.text_frame.paragraphs:
+                for r in para.runs:
+                    if r.font.size:
+                        size = r.font.size.pt
+                if size is None:
+                    d = para._p.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}defRPr')
+                    if d is None:
+                        d = sh.text_frame._txBody.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}defRPr')
+                    if d is not None and d.get('sz'):
+                        size = int(d.get('sz')) / 100.0
+            if not size:
+                continue
+            need = len(text) * size * 0.55 + 6
+            have = sh.width / 12700.0
+            if need > have:
+                extra = need - have
+                algn = None
+                for tag in ('pPr', 'lvl1pPr'):
+                    el = sh.text_frame._txBody.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}' + tag)
+                    if el is not None and el.get('algn'):
+                        algn = el.get('algn')
+                        break
+                if algn == 'r':
+                    sh.left = sh.left - Pt(extra)
+                sh.width = sh.width + Pt(extra)
+
+
 def render(folder, client, out, template=TEMPLATE, edits=True):
     D = figures(folder, client)
     fills = slide_fills(D)
@@ -2359,6 +2412,7 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
     else:
         for n in sorted(drop, reverse=True):
             _drop(prs, n - 1)
+    _tidy(prs)
     prs.save(out)
     return out, len(prs.slides._sldIdLst), prompts, drop
 
