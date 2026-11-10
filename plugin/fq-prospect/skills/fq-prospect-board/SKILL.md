@@ -1,6 +1,6 @@
 ---
 name: fq-prospect-board
-description: "Show the analyst the Four Quadrants prospects they are working, where each stands, and buttons for the next step. Use when someone says \"show my prospects\", \"what's next\", \"where are my prospects\", \"prospect board\", \"add [client] to my prospects\", \"drop [client]\", or opens a session without naming a client. Also use after any step finishes, to show what comes next."
+description: "Show anyone on the team the Four Quadrants prospects in the pipeline, where each stands, and buttons for the next step. Use when someone says \"show my prospects\", \"what's next\", \"where are my prospects\", \"prospect board\", \"add [client] to my prospects\", \"drop [client]\", \"[client] isn't moving forward\", \"[client] signed\", or opens a session without naming a client. Also use after any step finishes, to show what comes next."
 ---
 
 # Prospect board
@@ -22,46 +22,45 @@ The analyst's front door: one panel in the chat with the prospects they are
 working, each one's stage, and buttons that send the next request. They never
 need to remember a phrase.
 
-**The board is every client folder in this year's Prospects folder, minus
-the ones the analyst removed.** The team makes a folder at the initial call,
-so a folder is the signal someone is a prospect. A LaunchBay project with no
-folder never appears. Prospects that go quiet stay until the analyst removes
-them.
+**The board is every client folder in this year's Prospects folder.** The
+team makes a folder at the initial call, so a folder is the signal someone is
+a prospect. A LaunchBay project with no folder never appears. The board is
+built fresh from the share every time, so everyone (analyst, lead advisor,
+anyone covering) sees the same prospects at the same stages. There is no page
+to keep and nothing to share.
 
 ## 1. Folders
 
 Everything is under `/Volumes/Analysis/Brogan/Prospects` (the toolkit is
 `Prospects/FQ_Toolkit/prospectPip`, clients are `Prospects/<year>`). If it is
-not connected, ask for it with the folder-access tool and tell the analyst
-only "click Allow".
+not connected, ask for it with the folder-access tool and tell them only
+"click Allow".
 
-## 2. The list: folders, minus what the analyst removed
-
-The removals live on a page in the analyst's own Claude account, titled
-**My Prospects**, never in a file on the share. It is owned by whoever runs
-the pipeline (the analyst), who shares it with the team.
-
-- Find it with the Artifact tool, `action: "list"`, `scope: "all"`, title
-  "My Prospects". If the analyst has none, create it: load the
-  `artifact-capabilities` skill, then publish `references/my_prospects.html`
-  as a new artifact in their account with `capabilities: {"db": {}, "user": {}}`
-  and icon `list`. Tell them in one line to share it with the team from its
-  Share menu (Can edit). Never publish it from anyone else's account.
-- Read it: `ArtifactData` `list` of collection `prospects`. Documents with
-  `hidden: true` were removed by the analyst.
-- Run the folder scan, passing each removed one:
+## 2. The list
 
 ```
-python3 <toolkit>/fq_auditor/prospects.py "<Prospects/2026>" --hide "Lamberti" --hide "Smith"
+python3 <toolkit>/fq_auditor/prospects.py "<Prospects/2026>"
 ```
 
-- Sync the page in one `ArtifactData` `batch`: for every folder, `update`
-  (or `set` if new) `prospects/<slug>` with `name`, `folder`, `stage`, a
-  one-line `note` and any `flag`, never touching `hidden`; `delete` the
-  documents whose folder is gone (moved to Signed or Not moving forward), and
-  say so in one line. Slug = lower-case surname and first name, hyphens.
-- "Drop Lamberti" / "he's gone": `update` `prospects/<slug>` with
-  `{hidden: true, removed: <today>}`. "Bring Lamberti back": `hidden: false`.
+It skips the numbered folders (`1.) Not moving forward`, `2.) Signed`,
+`3.) Documents`, `4.) Claude outputs`) and `_TEST`.
+
+**Removing a prospect moves their folder; it never deletes anything.**
+"Drop Lamberti", "he's gone", "Lamberti isn't moving forward":
+
+1. Find the one folder that matches (ask if two do).
+2. Ask to confirm, naming the folder and where it goes: "Move *Lamberti,
+   Alberto due 10:19* to *1.) Not moving forward*? Nothing is deleted; it just
+   drops off the board for everyone." Wait for a yes.
+3. Move it with `mv` (the whole folder, as is) into
+   `Prospects/<year>/1.) Not moving forward/`. If a folder of that name is
+   already there, stop and ask. Never delete, rename or open files inside.
+4. Say it is moved and offer the undo.
+
+"He signed" moves it the same way into `2.) Signed`, after the same
+confirmation. "Bring Lamberti back" moves it back into `Prospects/<year>`,
+after confirming. The toolkit's own files for the client (in `4.) Claude
+outputs`) stay where they are.
 
 ## 3. Add LaunchBay, for the prospects on the board only
 
@@ -76,11 +75,12 @@ With the LaunchBay connector, for each prospect on the board:
   came in", sending: "<Name> sent more in the portal. Pull them again, run
   the intake and show me what changed and what is still open."
 - If nothing has come in for 3 weeks while documents are still due, mark it
-  **Quiet since <date>** and offer a button "Remove from my prospects".
+  **Quiet since <date>** and offer a button "Not moving forward" (it asks
+  to confirm, then moves the folder).
 - Where LaunchBay's stage disagrees with the folder, trust LaunchBay and say
   so in the status line.
 
-Do not pull, file or build anything here. Apart from the page sync, this step only reads.
+Do not pull, file or build anything here. This step only reads.
 
 ## 4. Draw the board
 
@@ -92,11 +92,11 @@ then the rest by due date). Each button calls
 `sendPrompt` with its request. Keep the free-text box at the bottom.
 
 After the panel, write at most two sentences: what needs attention first,
-and anything that dropped off. Mention how many are removed, with a button
-"Show removed prospects".
+and anything that dropped off. 
 
 ## Rules
 
-- Read only. The board never pulls, files, builds or emails.
+- The board never pulls, files, builds or emails. The only thing it changes
+  is where a prospect's folder sits, and only after a yes.
 - No client data beyond names, stages and dates on the board.
 - No em dashes.

@@ -32,7 +32,7 @@ import re
 import sys
 from datetime import date
 
-SKIP = re.compile(r'^(\d|_|\.|%s$)' % re.escape(_store.OUT_DIR))
+SKIP = re.compile(r'^(\d|_|\.|%s$|Claude outputs$)' % re.escape(_store.OUT_DIR))
 
 
 def _has(folder, *patterns):
