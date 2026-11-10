@@ -235,6 +235,42 @@ before building.
 - The app's dots go orange when code an output is built from changes; that is
   expected after a change. **Update** rebuilds.
 
+## Changing the pipeline (working with the toolkit owner)
+
+The toolkit owner asks for changes in plain words ("the pay slide should...",
+"flag the fee study like the IC form"). Make the change, check it, and hand
+back one commit line. How that has worked:
+
+- **Where things live.** The deck: `deck_template.py` (figures, slide fills,
+  `_house_style` for the lead advisor's styling rules, `_tidy` for spacing,
+  `current_path_data`, `two_earner`, `_deep_dive`) on
+  `assets/consult_template.pptx`. Levers: `levers.py`. The review page:
+  `assets/review_page.html` (bump `BUILD` on every change) and
+  `review_page.py` (seed, apply, judge, savelib). Assumptions:
+  `assumptions.py`, printed by `assumptions_pdf.py`. Accounts:
+  `accounts.py`. Initial-notes inputs check: `notes_inputs.py`. Other-client
+  name check: `deck_check.py`. Occasional slides: `slide_library.json` (run
+  `slide_layouts.py` after changing it or the template, then republish the
+  page). The steps Claude follows: `plugin/fq-prospect/skills/`.
+- **Team data that is not code** lives on the share outside git:
+  `Prospects/FQ_Toolkit/Slide library (team).json` and
+  `Prospects/FQ_Toolkit/Deck name check (team).txt`.
+- **Test on a `_TEST` client,** then show the result: render the deck or page
+  (`soffice` to PDF, `pdftoppm` to pictures) and look at it before saying it
+  works. Run `python3 fq_auditor/preview_fonts.py` once per workspace first,
+  so renders use the deck's own fonts. Rebuild a second client to be sure
+  nothing else moved.
+- **Review page changes:** copy `assets/review_page.html`, set its title,
+  republish to the TEST page's link (the owner's own TEST page), and say what
+  to refresh and which BUILD the page should read.
+- **What the owner sees:** figures as they will look in Keynote (the team
+  uses Numbers and Keynote, not Excel or PowerPoint), files as cards they can
+  open, short plain answers. In docs and emails for the team, say "the
+  toolkit" or "the pipeline", not "we".
+- **When a rule comes from the lead advisor's own work,** say which client it
+  came from in a comment (as `_house_style` and `two_earner` do), so the next
+  person knows why it is there.
+
 ## Committing
 
 ```
