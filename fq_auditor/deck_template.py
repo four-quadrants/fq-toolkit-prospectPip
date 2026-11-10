@@ -2282,6 +2282,62 @@ def apply_deck_edits(prs, edits, auto_drop):
     return sorted(gone)
 
 
+def _house_style(prs):
+    """The lead advisor's styling, applied to every deck. The tax red flags
+    page: every finding bold, dollar figures in the deck's orange, and the
+    words "IRS Red Flag n" in red. The savings future: the last year-end
+    portfolio in the same blue as the rest, red only when it runs short."""
+    import copy as _copy
+    from pptx.dml.color import RGBColor
+    tok = re.compile(r"(IRS [Rr]ed [Ff]lag \d|\$[\d,]+(?:\.\d+)?[kKM]?\+?)")
+    for slide in prs.slides:
+        names = {sh.name: sh for sh in slide.shapes if sh.has_text_frame}
+        title = ' '.join(names[n].text_frame.text for n in ('Text 1', 'Text 2') if n in names).upper()
+        if 'RED FLAGS' in title and 'TAX RETURN' in title:
+            for n in ('Text 8', 'Text 10', 'Text 12', 'Text 14', 'Text 16', 'Text 21', 'Text 23', 'Text 25'):
+                sh = names.get(n)
+                if sh is None:
+                    continue
+                text = sh.text_frame.text.strip()
+                if not text or text.startswith('['):
+                    continue                      # a placeholder keeps its look
+                text = re.sub(r'IRS red flag (\d)', r'IRS Red Flag \1', text, flags=re.I)
+                para = sh.text_frame.paragraphs[0]
+                for q in sh.text_frame.paragraphs[1:]:
+                    q._p.getparent().remove(q._p)
+                base = para.runs[0]._r
+                for r in para.runs[1:]:
+                    r._r.getparent().remove(r._r)
+                parts = [x for x in tok.split(text) if x]
+                prev = None
+                for i, part in enumerate(parts):
+                    r = base if i == 0 else _copy.deepcopy(base)
+                    if i:
+                        prev.addnext(r)
+                    prev = r
+                    r.find('{http://schemas.openxmlformats.org/drawingml/2006/main}t').text = part
+                # one size for every finding: no box shrinks its own text
+                bp = sh.text_frame._txBody.bodyPr
+                for el in list(bp):
+                    if el.tag.endswith('normAutofit'):
+                        bp.remove(el)
+                if n == 'Text 25':
+                    from pptx.util import Pt as _Pt
+                    sh.height = _Pt(130)
+                for run, part in zip(para.runs, parts):
+                    run.font.bold = True
+                    run.font.color.rgb = RGBColor.from_string(
+                        'B03A1A' if part.upper().startswith('IRS RED FLAG') else
+                        'E8730C' if part.startswith('$') else '3A3F45')
+        if 'SAVINGS FUTURE' in title and 'Text 78' in names:
+            sh = names['Text 78']
+            v = sh.text_frame.text.strip()
+            col = 'B03A1A' if v.startswith(('-', '−', '(')) else '1F6FB2'
+            for para in sh.text_frame.paragraphs:
+                for r in para.runs:
+                    r.font.color.rgb = RGBColor.from_string(col)
+
+
 def _tidy(prs):
     """Small things that look wrong once a client's words are in: a space left
     before a full stop where a run ended, and a one-line figure longer than
@@ -2412,6 +2468,7 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
     else:
         for n in sorted(drop, reverse=True):
             _drop(prs, n - 1)
+    _house_style(prs)
     _tidy(prs)
     prs.save(out)
     return out, len(prs.slides._sldIdLst), prompts, drop
