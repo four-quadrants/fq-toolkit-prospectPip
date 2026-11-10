@@ -1841,10 +1841,188 @@ def _point_cards(s, items, top, bottom):
         _font(_shape(s, txt), size)
 
 
+DD_ORANGE, DD_BLUE, DD_DARK, DD_TEXT, DD_MUTED = 'E8730C', '1F6FB2', '3A3F45', '4A5056', '8A9098'
+DD_GREY, DD_GREY2, DD_GREY3, DD_LINE = 'A8AEB4', 'C9CDD1', 'DCDCDC', 'E3E1DE'
+
+
+def _dd_rect(s, x, y, w, h, fill, line=None):
+    from pptx.util import Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    r = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Pt(x), Pt(y), Pt(max(w, 0.5)), Pt(max(h, 0.5)))
+    r.fill.solid()
+    r.fill.fore_color.rgb = RGBColor.from_string(fill)
+    if line:
+        r.line.color.rgb = RGBColor.from_string(line)
+        r.line.width = Pt(0.75)
+    else:
+        r.line.fill.background()
+    r.shadow.inherit = False
+    return r
+
+
+def _dd_text(s, x, y, w, h, runs, size=16, align='l', anchor='top', font='Barlow', spacing=None, lines=None):
+    """A text box. runs: [(text, colour, bold)] for one paragraph, or a list
+    of such lists for several paragraphs."""
+    from pptx.util import Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+    tb = s.shapes.add_textbox(Pt(x), Pt(y), Pt(w), Pt(h))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+    tf.vertical_anchor = {'top': MSO_ANCHOR.TOP, 'middle': MSO_ANCHOR.MIDDLE, 'bottom': MSO_ANCHOR.BOTTOM}[anchor]
+    paras = runs if runs and isinstance(runs[0], list) else [runs]
+    for i, pr in enumerate(paras):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.alignment = {'l': PP_ALIGN.LEFT, 'r': PP_ALIGN.RIGHT, 'c': PP_ALIGN.CENTER}[align]
+        if lines:
+            p.space_after = Pt(lines)
+        for text, col, bold in pr:
+            r = p.add_run()
+            r.text = text
+            r.font.size = Pt(size)
+            r.font.bold = bool(bold)
+            r.font.name = font
+            r.font.color.rgb = RGBColor.from_string(col)
+            if spacing:
+                r.font._element.set('spc', str(int(spacing * 100)))
+    return tb
+
+
+def _dd_head(s, x, y, w, text, col=DD_ORANGE, size=19):
+    return _dd_text(s, x, y, w, 30, [((text or '').upper(), col, True)], size=size,
+                    font='Barlow Condensed', spacing=1.5)
+
+
+def _dd_pct(v):
+    try:
+        return float(re.sub(r'[^0-9.]', '', str(v)) or 0)
+    except ValueError:
+        return 0.0
+
+
+def _bold_split(text, col, boldcol=None):
+    """**bold** inside a line of text, as runs."""
+    out = []
+    for i, part in enumerate(re.split(r'\*\*', text or '')):
+        if part:
+            out.append((part, (boldcol or DD_DARK) if i % 2 else col, bool(i % 2)))
+    return out or [(' ', col, False)]
+
+
+def _deep_dive(prs, a):
+    """The deeper investments slide: what the money is actually in. Left: the
+    invested equity by sector (bars) and how the steerable sleeve splits
+    (cash, equity, bonds). Right: the concentration callout, the holdings
+    that recur across funds, and the share nobody can see into. A dark band
+    with the one-line takeaway."""
+    s = _clone(prs, prs.slides[LAYOUTS['points'] - 1])
+    header = {'Shape 0', 'Text 1', 'Text 2'}
+    _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in header])
+    set_text(_shape(s, 'Text 1'), (a.get('eyebrow') or 'Investments').upper())
+    title, accent = (a.get('title') or 'A deeper look').upper(), (a.get('title_accent') or '').upper()
+    t = _shape(s, 'Text 2')
+    set_text(t, title)
+    if accent and title.endswith(accent):
+        from pptx.dml.color import RGBColor
+        para = t.text_frame.paragraphs[0]
+        r0 = para.runs[0]
+        r0.text = title[:-len(accent)]
+        r1 = copy.deepcopy(r0._r)
+        r0._r.addnext(r1)
+        para.runs[1].text = accent
+        para.runs[1].font.color.rgb = RGBColor.from_string(DD_ORANGE)
+    t.width = _shape(s, 'Text 1').width = __import__('pptx.util', fromlist=['Pt']).Pt(860)
+    if a.get('note'):
+        _dd_text(s, 930, 38, 462, 30, [(a['note'], DD_DARK, True)], size=26, align='r', font='Barlow Condensed')
+    if a.get('sub'):
+        _dd_text(s, 830, 70, 562, 22, [(a['sub'], DD_MUTED, False)], size=15, align='r')
+
+    L, LW, R, RW = 48, 760, 838, 554
+    # Left: sector bars
+    _dd_head(s, L, 126, 520, a.get('bars_head') or 'Where the invested equity sits')
+    if a.get('bars_note'):
+        _dd_text(s, L + 540, 128, LW - 540, 40, [(a['bars_note'], DD_MUTED, False)], size=13)
+    bars = [b for b in (a.get('bars') or []) if b and b[0]][:8]
+    top = 172
+    rowh = min(52, (548 - top) / float(max(len(bars), 1)))
+    mx = max([_dd_pct(b[1]) for b in bars] + [1])
+    cols = [DD_ORANGE, DD_BLUE, DD_GREY, DD_GREY, DD_GREY2, DD_GREY2, DD_GREY2, DD_GREY3]
+    for i, b in enumerate(bars):
+        y = top + i * rowh
+        last = i == len(bars) - 1 and len(bars) == 8
+        _dd_text(s, L, y, 560, 18, [(b[0], DD_MUTED if last else DD_DARK, not last)], size=15)
+        _dd_rect(s, L, y + 20, 560 * _dd_pct(b[1]) / mx, 15, cols[i])
+        vc = DD_ORANGE if i == 0 else DD_BLUE if i == 1 else DD_MUTED
+        _dd_text(s, L + 580, y + 10, LW - 580, 26, [(b[1], vc, i < 2)], size=22 if i < 2 else 18,
+                 align='r', font='Barlow Condensed', anchor='middle')
+    # Left bottom: how the sleeve splits
+    cy = 572
+    _dd_rect(s, L, cy, LW, 214, 'FFFFFF')
+    _dd_rect(s, L, cy, 5, 214, DD_ORANGE)
+    _dd_head(s, L + 26, cy + 22, LW - 50, a.get('mix_head') or 'How the sleeve splits')
+    mix = [m for m in (a.get('mix') or []) if m and m[0]][:4]
+    tot = sum(_dd_pct(m[1]) for m in mix) or 1
+    x, mcol = L + 26, [(DD_ORANGE, 'FFFFFF'), (DD_BLUE, 'FFFFFF'), (DD_GREY2, DD_DARK), (DD_GREY3, DD_DARK)]
+    for i, m in enumerate(mix):
+        w = (LW - 52) * _dd_pct(m[1]) / tot
+        _dd_rect(s, x, cy + 72, w, 38, mcol[i][0])
+        _dd_text(s, x, cy + 72, w, 38, [(('%s %s' % (m[0], m[1])).upper(), mcol[i][1], True)], size=17,
+                 align='c', anchor='middle', font='Barlow Condensed', spacing=1)
+        x += w
+    if a.get('mix_note'):
+        _dd_text(s, L + 26, cy + 128, LW - 52, 70, _bold_split(a['mix_note'], DD_TEXT), size=16)
+
+    # Right: the concentration callout
+    y = 126
+    _dd_rect(s, R, y, RW, 110, 'FFFFFF')
+    _dd_rect(s, R, y, RW, 4, DD_BLUE)
+    _dd_text(s, R + 22, y + 20, RW - 44, 28, [((a.get('card_head') or '').upper(), DD_DARK, True)], size=21,
+             font='Barlow Condensed')
+    _dd_text(s, R + 22, y + 52, RW - 44, 52, _bold_split(a.get('card_body') or '', DD_TEXT), size=16)
+    # Right: the holdings that recur
+    y = 250
+    rows = [r for r in (a.get('recur_rows') or []) if r and r[0]][:6]
+    hgt = 80 + 25 * len(rows) + (28 if a.get('recur_note') else 0)
+    _dd_rect(s, R, y, RW, hgt, 'FFFFFF', DD_LINE)
+    _dd_text(s, R + 22, y + 16, RW - 44, 26, [((a.get('recur_head') or '').upper(), DD_ORANGE, True)],
+             size=20, font='Barlow Condensed')
+    if a.get('recur_sub'):
+        _dd_text(s, R + 22, y + 40, RW - 44, 18, [(a['recur_sub'], DD_MUTED, False)], size=13)
+    for i, r in enumerate(rows):
+        _dd_text(s, R + 22, y + 66 + 25 * i, 90, 24, [(r[0], DD_DARK, True)], size=16)
+        _dd_text(s, R + 112, y + 66 + 25 * i, RW - 134, 24, [(r[1] if len(r) > 1 else '', DD_MUTED, False)], size=16)
+    if a.get('recur_note'):
+        _dd_text(s, R + 22, y + hgt - 32, RW - 44, 24, [(a['recur_note'], DD_GREY, False)], size=14)
+    # Right: what nobody can see
+    y = max(y + hgt + 24, 520)
+    _dd_head(s, R, y, RW, a.get('zoom_head') or '')
+    z = [p for p in (a.get('zoom') or []) if p and p[0]][:2]
+    ztot = sum(_dd_pct(p[1]) for p in z) or 1
+    x = R
+    for i, p in enumerate(z):
+        w = RW * _dd_pct(p[1]) / ztot
+        _dd_rect(s, x, y + 40, w, 40, DD_BLUE if i == 0 else DD_GREY)
+        _dd_text(s, x, y + 40, w, 40, [(p[0].upper(), 'FFFFFF', True)], size=17, align='c', anchor='middle',
+                 font='Barlow Condensed', spacing=1)
+        x += w
+    if a.get('zoom_body'):
+        _dd_text(s, R, y + 92, RW, 110, _bold_split(a['zoom_body'], DD_TEXT), size=15)
+    # The takeaway band
+    band = a.get('band') or ['', '']
+    _dd_rect(s, R, 730, RW, 56, DD_DARK)
+    _dd_text(s, R + 18, 730, RW - 36, 56, [(band[0] + ' ', 'FFFFFF', True), (band[1] if len(band) > 1 else '', 'F5A25D', True)],
+             size=18, anchor='middle', font='Barlow Condensed')
+    return s
+
+
 def _added_slide(prs, a):
     """Build one added slide from its layout. Returns the new slide. Every
     layout fills the content area; nothing is left as empty page."""
     from pptx.util import Pt
+    if a.get('layout') == 'deep_dive':
+        return _deep_dive(prs, a)
     layout = a.get('layout') if a.get('layout') in LAYOUTS else 'points'
     s = _clone(prs, prs.slides[LAYOUTS[layout] - 1])
     eyebrow = (a.get('eyebrow') or '').strip().upper()

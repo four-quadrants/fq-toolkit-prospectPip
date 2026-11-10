@@ -64,7 +64,7 @@ Never overwrite the lead advisor's work. Re-seed, then:
 - ArtifactData `get` plan/figures (note its version).
 - `update` plan/figures with ONLY the computed fields: `figures`, `findings`,
   `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`,
-  `carried`, `note_done`, `verdicts`, `library`, `schedule`, `slide_list`,
+  `carried`, `note_done`, `verdicts`, `library`, `slide_library_saved`, `schedule`, `slide_list`,
   `slides_auto_dropped`
   (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,

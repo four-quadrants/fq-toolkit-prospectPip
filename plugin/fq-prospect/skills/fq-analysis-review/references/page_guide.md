@@ -96,7 +96,13 @@ inputs. **Back to the plan inputs** undoes his tries.
 **Slides.** The whole deck as it would be built now, slide by slide, each
 box that comes from this client outlined and numbered. He can change any
 box's wording, **Use** or **Drop** what Claude drafted, take a slide out, add
-his own after any slide (nine layouts), or include a slide that was left out.
+his own after any slide, or include a slide that was left out. **+ Add a
+slide after** opens the **slide library** first: occasional slides the team
+has used before (practice model options, transition options, worst case
+planning, sole prop vs S-corp, a deeper investments look, and others), with
+[brackets] Claude fills with the client's figures; then nine blank layouts.
+**Save to the slide library** on a slide he made keeps it for every client
+after.
 The filter shows Still needed / Check / Sure. **Build the deck** copies the
 line to paste into Claude; the deck lands in the client folder and opens in
 Keynote. It can be rebuilt any time.

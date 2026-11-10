@@ -165,6 +165,43 @@ When the page's `stage` is `lead` and he has pressed Done:
 5. Tell him in a few lines what came in, which answers settle their question
    and which do not, and what changed in the plan.
 
+## The slide library
+
+On the Slides tab, **+ Add a slide after** opens the slide library first:
+occasional slides the team has used (practice model options, transition
+options and timeline, a fork in the road, future trending, worst case
+planning, sole prop vs S-corp, the hierarchy of managing cash, practice
+concerns, permanent life insurance, a deeper investments look, corporate
+debt structuring), then the blank layouts. The built-in ones are
+`fq_auditor/slide_library.json` (generic wording, never a client's); the
+ones the team saves are `Prospects/FQ_Toolkit/Slide library (team).json` on
+the share. Pictures of the built-in ones are in the page; after changing
+the library run `python3 fq_auditor/slide_layouts.py` and republish the page.
+
+At pull-in each library slide prints LIBRARY SLIDE with what it needs:
+
+- Fill every `[bracket]` with this client's figures (from the plan, the
+  projections, the documents) in `review_decisions.json` `deck_slides.added`
+  and on the page's `slide_add` (ArtifactData `update`, pinned), before the
+  deck is built. A figure you cannot find stays in brackets; say which.
+- **Investments: deeper dive** first needs a deeper analysis of the
+  statements: holdings and allocation, fund and advisory fees, cash drag,
+  concentration, and returns against Four Quadrants' over the same dates
+  (the fq-investments prospect-portfolio-review method, if installed). Fill
+  its fields (layout `deep_dive`): `title` (the finding, a few words;
+  `title_accent` the words to colour orange), `note`/`sub` (top right),
+  `bars` (up to 8 sectors, position weighted, with ~%), `mix` (cash, equity,
+  bonds of the steerable money), `mix_note`, `card_head`/`card_body` (the
+  biggest concentration and which funds build it; `**bold**` allowed),
+  `recur_head`/`recur_rows` (stocks in more than one fund's top 10, ticker
+  and fund weights), `recur_note`, `zoom_head`/`zoom` (the share with no
+  published holdings), `zoom_body`, `band` (the takeaway, two parts, the
+  second in orange). Tell the lead advisor the main findings.
+- A slide marked **Save to the slide library** prints SAVE TO THE SLIDE
+  LIBRARY: make it generic in `review_decisions.json` (names and figures to
+  `[brackets]`), then run `review_page.py savelib`. It shows in every
+  client's library from the next refresh.
+
 ## Pull in and build the deck ("pull in and build [client]'s consult deck")
 
 1. Pull in (mechanics: Pulling in). The recommendations he left ticked become

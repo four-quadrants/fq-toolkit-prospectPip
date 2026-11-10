@@ -239,6 +239,20 @@ def apply(folder, plan_json):
         print('   deck: %d slide(s) removed, %d added, %d left-out slide(s) included anyway'
               % (len(out['deck_slides']['removed']), len(out['deck_slides']['added']),
                  len(out['deck_slides']['forced'])))
+    # Slides taken from the slide library: their [brackets] get the client's
+    # figures before the deck is built; any he asked to save go to the team's
+    # library on the share (made generic first).
+    lib = {e['key']: e for e in slide_library()}
+    for a in out['deck_slides']['added']:
+        if a.get('lib'):
+            e = lib.get(a['lib'], {})
+            print('   LIBRARY SLIDE "%s" (id %s): fill every [bracket] with this client\'s figures%s. Fill: %s'
+                  % (e.get('label', a['lib']), a.get('id'),
+                     ', after the deeper analysis it needs' if a.get('analysis') else '', e.get('fill', '')))
+        if a.get('save_lib'):
+            print('   SAVE TO THE SLIDE LIBRARY (id %s, "%s"): make it generic (client names and figures to [brackets]),'
+                  ' then: python3 review_page.py savelib "<client folder>" %s "<label>" "<what it is for>"'
+                  % (a.get('id'), a.get('title', ''), a.get('id')))
     # Drafted questions' wording, for the log (the page keeps only edits).
     try:
         with open(_store.json_path(folder, 'review_questions.json')) as fh:
@@ -471,6 +485,46 @@ def log_items(rec):
                           'about': 'Follow-up questions', 'text': (qt.get(qid) or '').strip(),
                           'decision': d, 'answer': (qa.get(qid) or '').strip(), 'page': page})
     return items
+
+
+TEAM_LIBRARY = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'Slide library (team).json')
+
+
+def slide_library():
+    """The built-in occasional slides plus any the team saved (the saved ones
+    live on the share, outside git, since they started as a client's slide)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        built = json.load(open(os.path.join(here, 'slide_library.json')))['slides']
+    except (OSError, ValueError):
+        built = []
+    try:
+        saved = json.load(open(TEAM_LIBRARY))['slides']
+    except (OSError, ValueError):
+        saved = []
+    return built + saved
+
+
+def savelib(folder, slide_id, label, use):
+    """Save one added slide (already made generic in review_decisions.json)
+    to the team's slide library on the share."""
+    with open(_store.json_path(folder, 'review_decisions.json')) as fh:
+        dec = json.load(fh)
+    a = next((x for x in (dec.get('deck_slides') or {}).get('added') or () if x.get('id') == slide_id), None)
+    if not a:
+        sys.exit('No added slide %s in review_decisions.json' % slide_id)
+    preset = {k: v for k, v in a.items() if k not in ('id', 'after', 'lib', 'save_lib', 'analysis')}
+    try:
+        lib = json.load(open(TEAM_LIBRARY))
+    except (OSError, ValueError):
+        lib = {'about': 'Slides the team saved from a review page, made generic. Read by the review page with the built-in library.', 'slides': []}
+    key = re.sub(r'[^a-z0-9]+', '_', label.lower()).strip('_')[:40]
+    lib['slides'] = [e for e in lib['slides'] if e.get('key') != key] + [
+        {'key': key, 'label': label, 'use': use, 'saved': datetime.date.today().isoformat(),
+         'fill': 'Words in [brackets]: the client\'s own figures.', 'preset': preset}]
+    with open(TEAM_LIBRARY, 'w') as fh:
+        json.dump(lib, fh, indent=1)
+    print('saved to the slide library: %s' % label)
 
 
 def judge(folder, item_id, verdict, why):
@@ -832,6 +886,7 @@ def seed(folder, outdir, mode='review'):
             'library': _library() if mode != 'analysis' else [],
             'schedule': [[int(y), v] for y, v in (p.get('schedule') or [])] if mode != 'analysis' else [],
             'slide_list': _slide_list() if mode != 'analysis' else [],
+            'slide_library_saved': [e for e in slide_library() if e.get('saved')] if mode != 'analysis' else [],
             'slides_auto_dropped': sorted(dt.dropped(D)) if mode != 'analysis' else [],
             'pics': {str(k): v for k, v in pics.items()},
             'slide_titles': {str(k): v for k, v in titles.items()},
@@ -1180,6 +1235,11 @@ def main():
     a_ = sub.add_parser('apply')
     a_.add_argument('folder')
     a_.add_argument('plan_json')
+    l_ = sub.add_parser('savelib', help='save an added slide (made generic) to the team slide library')
+    l_.add_argument('folder')
+    l_.add_argument('id')
+    l_.add_argument('label')
+    l_.add_argument('use')
     j_ = sub.add_parser('judge', help="record whether a client answer settles a carried question")
     j_.add_argument('folder')
     j_.add_argument('id')
@@ -1192,6 +1252,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == 'seed':
         seed(a.folder, a.out, a.mode)
+    elif a.cmd == 'savelib':
+        savelib(a.folder, a.id, a.label, a.use)
     elif a.cmd == 'judge':
         judge(a.folder, a.id, a.verdict, a.why)
     elif a.cmd == 'noted':

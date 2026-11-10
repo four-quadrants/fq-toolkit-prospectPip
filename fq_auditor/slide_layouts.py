@@ -84,7 +84,52 @@ def build(out_dir):
     return pics
 
 
+def build_library(out_dir):
+    """Pictures of the occasional slides in slide_library.json, each built
+    from its preset (generic wording, brackets where the client's figures
+    go). A library slide that is a template slide uses that slide's picture."""
+    from pptx import Presentation
+    lib = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'slide_library.json')))['slides']
+    made = [e for e in lib if e.get('preset')]
+    prs = Presentation(dt.TEMPLATE)
+    added = [dict(e['preset'], after=99) for e in made]
+    tmpl = [e for e in lib if e.get('template_slide')]
+    dt.apply_deck_edits(prs, {'removed': [n for n in range(1, len(prs.slides) + 1)
+                                          if n not in {e['template_slide'] for e in tmpl}],
+                              'added': added}, [])
+    path = os.path.join(out_dir, 'library.pptx')
+    prs.save(path)
+    subprocess.run(['soffice', '--headless', '--convert-to', 'pdf', '--outdir', out_dir, path],
+                   capture_output=True, timeout=300)
+    import pymupdf
+    from PIL import Image
+    doc = pymupdf.open(os.path.join(out_dir, 'library.pdf'))
+    pages = list(doc)
+    order = tmpl + made              # the kept template slides come first
+    out = []
+    for e, page in zip(order, pages):
+        pix = page.get_pixmap(dpi=36)
+        img = Image.open(io.BytesIO(pix.tobytes('png'))).convert('RGB')
+        buf = io.BytesIO()
+        img.save(buf, 'JPEG', quality=72)
+        d = {k: v for k, v in e.items()}
+        d['pic'] = 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
+        out.append(d)
+    keys = [e['key'] for e in lib]
+    return sorted(out, key=lambda d: keys.index(d['key']))
+
+
 def main():
+    lib = build_library(tempfile.mkdtemp())
+    page = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'review_page.html')
+    html = open(page).read()
+    block = '/*SLIDE_LIB*/var SLIDELIB=%s;/*END_SLIDE_LIB*/' % json.dumps(lib)
+    if '/*SLIDE_LIB*/' in html:
+        html = re.sub(r'/\*SLIDE_LIB\*/.*?/\*END_SLIDE_LIB\*/', lambda m: block, html, flags=re.S)
+    else:
+        html = html.replace('/*LAYOUT_PICS*/', block + '\n  /*LAYOUT_PICS*/', 1)
+    open(page, 'w').write(html)
+    print('%d library slides written into the page' % len(lib))
     pics = build(tempfile.mkdtemp())
     info = [{'key': k, 'label': l, 'desc': d, 'pic': pics.get(k, '')} for k, l, d in dt.LAYOUT_INFO]
     page = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'review_page.html')
