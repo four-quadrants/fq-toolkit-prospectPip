@@ -215,3 +215,21 @@ At pull-in each library slide prints LIBRARY SLIDE with what it needs:
    It saves `Consult deck - <Surname>.pptx` in the client folder; it opens in
    Keynote. Say how many places are still marked [ADVISOR] for him to write,
    and that the deck can be rebuilt any time after he changes the page.
+4. Things the deck now does on its own; check them in what you report:
+   - **Two earners.** When the spouse draws a W-2 from the practice, record
+     the plan in the deck entry before building (`inputs.py` or the pull in):
+     `income_w2_spouse_proposed` (a year), and if known `income_w2_spouse`
+     (today), `income_distributions_proposed` (a month), `rent_home` (a month),
+     `roth_to_traditional` (yes), `savings_increase` (a month), `spouse_name`.
+     The pay slide then shows both W-2s, distributions and rent taken home.
+   - **The current path** slide (today's savings and spending carried
+     forward, when it runs out, how much rides on the sale) goes in before
+     the annual savings. `no_current_path: yes` in the deck entry leaves it out.
+   - **Levers on the year to date**: patients a day, production per patient
+     and new patients are sized "back to last year's" when this year has
+     slipped.
+   - **Names from other clients**: the build prints NAMES FROM OTHER CLIENTS
+     if the deck holds one. Say each to the lead advisor before it goes out.
+     The same check runs on any deck: `python3 fq_auditor/deck_check.py
+     "<deck.pptx>" "<client folder>"`. Names the team's master deck carries
+     are listed in `Prospects/FQ_Toolkit/Deck name check (team).txt`.

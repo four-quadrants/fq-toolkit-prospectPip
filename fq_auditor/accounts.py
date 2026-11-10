@@ -42,6 +42,7 @@ KIND = re.compile(r'investments?\b|401\s?\(?k|403\s?\(?b|457|\bira\b|roth|\bsep\
                   r'drivewealth|morgan stanley|merrill|raymond james|lpl|annuit|'
                   r'security national|policy statement|cash value', re.I)
 EXCLUDED = re.compile(r'\bhsa\b|529|health savings', re.I)
+HSA = re.compile(r'\bhsa\b|health savings', re.I)
 
 
 def _sha(path):
@@ -206,7 +207,13 @@ def ensure(folder, log=print):
                    a.get('custodian') or 'account', a.get('as_of') or '?',
                    (a.get('holds') or '').rstrip('.')) +
                ('' if a.get('checked') else ' (value not found in the statement text: check)')}
-        if EXCLUDED.search(a.get('type') or ''):
+        if HSA.search(a.get('type') or '') or HSA.search(a.get('label') or ''):
+            # An HSA is a qualified (tax-advantaged) account: it belongs with
+            # the retirement accounts. It stays out of the starting portfolio,
+            # as on the firm's decks ("excl. HSAs").
+            row['excluded'] = True
+            q.append(row)
+        elif EXCLUDED.search(a.get('type') or ''):
             row['excluded'] = True
             n.append(row)
         elif QUALIFIED.search(a.get('type') or ''):

@@ -385,6 +385,24 @@ def build(bundle, folder):
                   '(%s), so no transfers were found on them and only the '
                   'balance is shown.'
                   % (len(unread), ', '.join(unread))) if unread else None)
+    # An HSA is a qualified account wherever it was read from (the bank
+    # statements, a typed entry, the investment statements): it is listed in
+    # section 4 with the retirement accounts, never in section 5.
+    hsa_re = re.compile(r'\bhsa\b|health savings', re.I)
+    sec4 = next((x for x in out if x.number == 4), None)
+    moved = [r for r in (rows.rows or []) if hsa_re.search(str(r.get('label') or ''))]
+    if moved and sec4 is not None:
+        rows.rows = [r for r in rows.rows if r not in moved]
+        have4 = {str(r.get('label')) for r in sec4.rows}
+        new = [r for r in moved if str(r.get('label')) not in have4]
+        if new:
+            if not sec4.rows:
+                sec4.text = ('Below is a list of all QUALIFIED investable assets that %s currently '
+                             'owns, along with their respective market values.'
+                             % (bundle.forename or 'the client'))
+                sec4.needed = sec4.why = None
+                sec4.source = sec4.source or 'account statements'
+            sec4.rows = sec4.rows + new
     out.append(rows)
 
     # 6 ---------------------------------------------------------------------

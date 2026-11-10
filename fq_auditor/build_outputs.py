@@ -188,6 +188,14 @@ def step_deck(folder, client, outdir):
     print('   %d slides, %d places marked for the advisor%s'
           % (n, prompts, ('; left out slides %s of the template'
                           % ', '.join(map(str, dropped))) if dropped else ''))
+    try:
+        import deck_check as _dc
+        hits = _dc.check(path, folder)
+        if hits:
+            print('   NAMES FROM OTHER CLIENTS in the deck (check before it goes out): '
+                  + '; '.join('slide %d "%s"' % (i, w) for i, w, _who, _t in hits))
+    except Exception as exc:                                 # noqa: BLE001
+        print('   name check skipped: %s' % exc)
     return path
 
 

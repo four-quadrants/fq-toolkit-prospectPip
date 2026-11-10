@@ -216,18 +216,24 @@ def _series_inputs(bundle, folder):
     this_year = str(datetime.date.today().year)
     ser = {name: vals for name, vals, _f in bundle.series}
 
-    def last_two(name):
+    def last_two(name, ytd=False):
         vals = ser.get(name) or {}
         ys = [y for y in sorted(vals) if vals.get(y) is not None and y < this_year]
+        # A rate the year to date has slipped on (patients a day, production
+        # per patient, new patients): the lever is getting it back to last
+        # year's, as the lead advisor sized Tanksley ("patients a day back
+        # to 10.7", 2025, from 10.2 in 2026 so far).
+        if ytd and ys and vals.get(this_year) is not None and vals[this_year] < vals[ys[-1]]:
+            return [vals[ys[-1]], vals[this_year]]
         return [vals[y] for y in ys[-2:]] if len(ys) >= 2 else None
     pats = ser.get('patient visits') or {}
     full = [y for y in sorted(pats) if pats.get(y) and y < this_year]
     if full:
         out['patients'] = pats[full[-1]]
-    np2 = last_two('new patients % of total')
+    np2 = last_two('new patients % of total', ytd=True)
     if np2:
         out['np_pct_prior'], out['np_pct'] = np2
-    pp2 = last_two('net production / patient')
+    pp2 = last_two('net production / patient', ytd=True)
     if pp2:
         out['net_per_patient_prior'], out['net_per_patient'] = pp2
     else:
@@ -246,7 +252,7 @@ def _series_inputs(bundle, folder):
     # Patients per doctor day, last year against the year before (the lead
     # advisor's "pat/day" block), with the days and gross per patient that
     # size it.
-    ppd = last_two('patients / doctor day')
+    ppd = last_two('patients / doctor day', ytd=True)
     if ppd:
         out['pats_per_day_prior'], out['pats_per_day'] = ppd
     for key, name in (('doctor_days_year', 'days worked, all doctors'),
@@ -347,9 +353,17 @@ def _figures(folder, client):
     D = {'adv': adv, 'facts': f, 'folder': folder,
          'first': b.forename or 'the client',
          'surname': b.surname or ''}
-    D['names'] = adv.get('names') or client or b.client
+    # Without the advisor's own wording: "Dr. First Surname" from the
+    # documents, never the folder name (which can carry "- TEST" or a due date).
+    D['names'] = adv.get('names') or (
+        'Dr. %s %s' % (b.forename, b.surname) if b.forename and b.surname else (b.client or client))
+    _cd = None
+    try:
+        _cd = datetime.date.fromisoformat(str(adv.get('consult_date'))[:10]) if adv.get('consult_date') else None
+    except ValueError:
+        _cd = None
     D['date'] = adv.get('consult_date_text') or \
-        datetime.date.today().strftime('%B %-d, %Y')
+        (_cd or datetime.date.today()).strftime('%B %-d, %Y')
 
     cash = None
     if _deck._cash:
@@ -362,6 +376,10 @@ def _figures(folder, client):
     spend = (cash['monthly_including'] * 12) if read else None
     if adv.get('current_expenses'):
         spend = N(adv['current_expenses'])
+        # Teams write household spending as a month ($27,645) as often as a
+        # year; no practice owner's household spends under $60,000 a year.
+        if spend and spend < 60000:
+            spend = spend * 12
     D['cash'] = cash if read else None
     D['spend'] = spend
 
@@ -493,7 +511,8 @@ def _figures(folder, client):
     # The table as the advisor left it in the app replaces the proposal
     # outright: rows they deleted stay deleted.
     if adv.get('gains_table'):
-        D['gains'] = [dict(g, gain=N(g.get('gain')) or 0,
+        D['gains'] = [dict(g, label=g['label'][:1].upper() + g['label'][1:],
+                           gain=N(g.get('gain')) or 0,
                            key=g.get('key') or g.get('label'),
                            kind=g.get('kind') or 'cash',
                            invested=[N(x) or 0 for x in
@@ -506,7 +525,9 @@ def _figures(folder, client):
     first_plan_year = int(consult[:4]) + (1 if f0 == 0 else 0)
     # A table edited on the Consult plan card is the advisor's newest word,
     # so it rebuilds the schedule even over an older typed one.
-    if adv.get('gains_table'):
+    # A schedule he typed year by year (savings_schedule) still wins: the
+    # review page only keeps one when he typed savings years himself.
+    if adv.get('gains_table') and not adv.get('savings_schedule'):
         D['schedule'] = []
     D['schedule_derived'] = not D['schedule']
     if not D['schedule'] and D['current_savings']:
@@ -721,7 +742,12 @@ def slide_fills(D):
             # Against what the household spends today, as the lead advisor computes
             # it (Oyler: $599,000 over $404,592 = +48%), not against the
             # income the current path could sustain.
-            'income_up': (_signed(D['income'] / D['spend'] - 1) if D.get('spend')
+            # When today's path cannot fund today's lifestyle (it runs out),
+            # the lead advisor measures against what that path is on pace
+            # for instead (Tanksley: $517,000 over $228,000 = +127%).
+            'income_up': (_signed(D['income'] / pace - 1)
+                          if pace and D.get('spend') and pace < D['spend'] else
+                          _signed(D['income'] / D['spend'] - 1) if D.get('spend')
                           else (_signed(D['income'] / pace - 1) if pace else ask('%'))),
             'save2': '%s/yr' % _k(y2),
             'save_up': _signed(y2 / cur - 1) if cur else ask('%'),
@@ -913,7 +939,8 @@ def slide_fills(D):
             continue
         v = N(g.get('gain'))
         if v:
-            rows.append((g.get('label') or k, '\u2013', '\u2013', v / owner, v))
+            lab = g.get('label') or k
+            rows.append((lab[:1].upper() + lab[1:], '\u2013', '\u2013', v / owner, v))
     rows.sort(key=lambda r: -r[4])
     # Five rows, as the lead advisor shows them. A lever already at goal is still a
     # finding worth a row ("adjustments 5.3%, below where dropping carriers
@@ -1079,6 +1106,49 @@ def slide_fills(D):
             'Text 40': 'Taxes (%d%%)' % round(100 * inc['p_rate']),
             'Text 41': neg(inc['p_tax']), 'Text 44': M(inc['p_net']),
             'Text 47': '%s/mo' % M(inc['p_dist'])})
+
+    # 11, with two earners: the lead advisor's Tanksley slide. When the plan
+    # sets the spouse's W-2 (income_w2_spouse_proposed), the slide shows the
+    # owner's proposed pay on the left and the spouse's on the right, with
+    # distributions under the owner and rent taken home under the spouse.
+    two = two_earner(D, inc)
+    if two:
+        def neg2(v):
+            return '(%s)' % M(v)
+        k2 = lambda v: '$%.1fk' % (abs(v) / 1000.0)        # noqa: E731
+        sg2 = lambda v: '+' if v >= 0 else '\u2212'        # noqa: E731
+        bullets = [
+            'Decrease %s\u2019s W-2 (%s%s/yr), %s %s\u2019s W-2 (%s%s/yr) and raise the tax '
+            'withholding: fewer tax surprises and lower quarterlies, if any.'
+            % (D['first'], sg2(-two['o_cut']), _k(abs(two['o_cut']) * 12),
+               'increase' if two['s_up'] >= 0 else 'decrease', two['spouse'],
+               sg2(two['s_up']), _k(abs(two['s_up']) * 12)),
+            'Consistent %s/mo distributions%s.' % (_k(two['dist']),
+                ('; take %s/mo of the rent home' % _k(two['rent'])) if two['rent'] else ''),
+            ('Flip contributions from Roth to traditional 401(k) to maximize tax savings now; '
+             'revisit each year with the financial plan.') if two['roth_flip'] else
+            'Increase the 401(k) to max with the same match.',
+            'Evaluate the 401(k) for a better structure with a new TPA.']
+        out[11].update({
+            'Text 3': '%s%s/mo personal cashflow' % (sg2(two['gain']), k2(two['gain'])),
+            'Text 4': 'with a new 401(k) in %d' % two['plan_year'],
+            'Text 6': bullets[0], 'Text 8': bullets[1], 'Text 10': bullets[2], 'Text 12': bullets[3],
+            'Text 14': 'MORE AT HOME, SAME IN THE PRACTICE' if two['gain'] >= 0 else 'LESS AT HOME, MORE IN THE PRACTICE',
+            'Text 15': 'Personal cashflow %s%s/mo; business cashflow unchanged.%s'
+                       % (sg2(two['gain']), k2(two['gain']),
+                          (' Save %s/mo of the increase.' % _k(two['save_more']))
+                          if two['save_more'] and two['gain'] > 0 else ''),
+            'Text 18': '%s GROSS W-2' % D['first'].upper(),
+            'Text 19': '%s/mo' % M(two['o_w2']), 'Text 20': '%s per year' % _k(two['o_w2'] * 12),
+            'Text 23': neg2(two['o_def']), 'Text 24': 'Taxes (%d%%)' % round(100 * two['rate']),
+            'Text 25': neg2(two['o_tax']), 'Text 28': M(two['o_net']),
+            'Text 30': 'Distributions', 'Text 31': '%s/mo' % M(two['dist']),
+            'Text 34': '%s GROSS W-2' % two['spouse'].upper(),
+            'Text 35': '%s/mo' % M(two['s_w2']), 'Text 36': '%s per year' % _k(two['s_w2'] * 12),
+            'Text 39': neg2(two['s_def']), 'Text 40': 'Taxes (%d%%)' % round(100 * two['rate']),
+            'Text 41': neg2(two['s_tax']), 'Text 44': M(two['s_net']),
+            'Text 46': 'Rent taken home' if two['rent'] else ' ',
+            'Text 47': ('%s/mo' % M(two['rent'])) if two['rent'] else ' '})
 
     # 14 and 15 investments: how much is locked up, and in what. The lead advisor’s
     # Oyler slides: "94% of retirement savings sits in relatively illiquid
@@ -1417,6 +1487,44 @@ NOT_DRAFTED = {7, 9, 19}   # 7: accounting writes the tax red flags; 9: levers a
 K401_BASE, K401_CATCHUP, K401_CATCHUP_60 = 24500, 8000, 11250
 PROPOSED_TAX_RATE = 0.40      # the lead advisor's Oyler slide: "Taxes (40%)"
 EXTRA_DEFERRAL_TAX = 0.30     # tax saved on the added deferral, his 30%
+
+
+def two_earner(D, inc):
+    """The pay slide for a household where both spouses draw a W-2 from the
+    practice, from the plan's entries: income_w2_spouse_proposed (a year),
+    and optionally income_w2_spouse (today), income_deferral_spouse_proposed,
+    income_distributions_proposed (a month), rent_home (a month),
+    roth_to_traditional (yes), spouse_name, savings_increase (a month).
+    None unless the spouse's proposed W-2 is set and the owner's pay worked
+    out."""
+    adv = D['adv']
+    sw = N(adv.get('income_w2_spouse_proposed'))
+    if not (inc and sw):
+        return None
+    rate = inc['p_rate']
+    s_w2 = sw / 12.0
+    s_def = (N(adv.get('income_deferral_spouse_proposed')) or 0) / 12.0
+    s_tax = (s_w2 - s_def) * rate
+    s_net = s_w2 - s_def - s_tax
+    s_now = (N(adv.get('income_w2_spouse')) or 0) / 12.0
+    s_now_net = s_now * (1 - rate)
+    dist = N(adv.get('income_distributions_proposed'))
+    dist = (dist / 12.0 if dist and dist > 60000 else dist) or inc['p_dist']
+    rent = N(adv.get('rent_home')) or 0
+    rent = rent / 12.0 if rent > 60000 else rent
+    now = inc['net'] + inc['dist'] + s_now_net
+    new = inc['p_net'] + dist + s_net + rent
+    spouse = adv.get('spouse_name') or ''
+    if not spouse:
+        nm = str(adv.get('names') or '')
+        m = re.search(r'&\s*([A-Z][a-z]+)', nm)
+        spouse = m.group(1) if m else 'Spouse'
+    return dict(spouse=spouse, rate=rate, o_w2=inc['p_w2'], o_def=inc['p_def'],
+                o_tax=inc['p_tax'], o_net=inc['p_net'], o_cut=inc['w2'] - inc['p_w2'],
+                s_w2=s_w2, s_def=s_def, s_tax=s_tax, s_net=s_net, s_up=s_w2 - s_now,
+                dist=dist, rent=rent, gain=new - now,
+                roth_flip=str(adv.get('roth_to_traditional') or '').lower() in ('yes', 'true', '1', 'y'),
+                save_more=N(adv.get('savings_increase')) or 0, plan_year=inc['plan_year'])
 
 
 def income_structure(D):
@@ -1911,6 +2019,118 @@ def _bold_split(text, col, boldcol=None):
     return out or [(' ', col, False)]
 
 
+def current_path_data(D):
+    """The current-path slide, as the lead advisor added it to Tanksley
+    (and 15 of the 34 decks the team made in 2024 to 2026): today's savings
+    and spending carried forward, when the money runs out, and how much of
+    retirement rests on the practice sale. None without a projection."""
+    p = D.get('proj')
+    if not p or not D.get('spend'):
+        return None
+    cur, dep = p['current'], p['current_deposits']
+    y0, ry, ey = p['first_year'], p['retire_year'], p['end_year']
+    run = p.get('runout_year')
+    cy = int(str(D['adv'].get('consult_date') or datetime.date.today().isoformat())[:4])
+    age = (lambda y: int(D['age']) + (y - cy)) if D.get('age') else (lambda y: '')
+    spend = D['spend']
+    exp = lambda y: spend * (1 + _sav.INFLATION) ** (y - y0)    # noqa: E731
+    last = run if run else ey
+    sale = D.get('sale') or 0
+    share = p.get('sale_share_of_portfolio')
+    rows = [[str(age(y0)), str(y0), M(dep.get(y0, 0)), M(cur[y0]), M(exp(y0)), ''],
+            [str(age(ry)), str(ry), M(dep.get(ry, 0)), M(cur[ry]), M(exp(ry)),
+             ('*practice%s sell %s net%s' % (' & bldg' if D.get('building') else '', _k(sale),
+                                             (' (%d%% of the portfolio)' % round(share * 100)) if share else ''))
+             if sale else ''],
+            [str(age(last)), str(last), '$0', M(cur.get(last, 0)), M(exp(last)), '']]
+    pace, first = p.get('on_pace_for'), D['first']
+    if run:
+        band = 'Funds run out at %s (%d) at today’s lifestyle%s' % (
+            age(run), run, (': on pace for %s/yr, %d%% of today.' % (M(pace), round(100 * pace / spend)))
+            if pace else '.')
+    else:
+        band = 'Today’s path lasts to %s at today’s lifestyle.' % age(ey)
+    keys = ['Current portfolio %s, investing %s/yr until retirement at %s'
+            % (M(D.get('start')), M(D.get('current_savings')),
+               int(D['retire_age']) if D.get('retire_age') else 'retirement'),
+            ('Practice%s sale in %d: %s net after taxes and debt payoff%s'
+             % (' and building' if D.get('building') else '', ry, _k(sale),
+                (' (%d%% of the portfolio then)' % round(share * 100)) if share else '')) if sale else None,
+            'Retirement expenses held at today’s lifestyle (%s/yr), grown with inflation' % M(spend),
+            ('At %s, %d years before the funds run out at the current lifestyle' % (age(ry), run - ry))
+            if run else None]
+    return {'layout': 'current_path', 'after': 15, 'id': 'current_path',
+            'eyebrow': 'Current retirement strategy', 'title': 'Where today’s path leads',
+            'note': '%s/yr' % M(spend), 'sub': 'today’s expenses, saving %s/yr' % M(D.get('current_savings')),
+            'who': '%s AGE' % first.upper(), 'rows': rows, 'keys': [k for k in keys if k], 'band': band}
+
+
+def _current_path(prs, a):
+    """Built from the savings-future slide: three rows (now, retirement, when
+    the money runs out), a key factors panel, the band."""
+    from pptx.util import Pt
+    src = prs.slides[17 - 1]
+    s = _clone(prs, src)
+    by = {sh.name: sh for sh in s.shapes}
+    E = 12700
+    set_text(by['Text 1'], a['eyebrow'].upper())
+    set_text(by['Text 2'], a['title'].upper())
+    if 'Text 3' in by:
+        set_text(by['Text 3'], a['note'])
+    if 'Text 4' in by:
+        set_text(by['Text 4'], a['sub'])
+    set_text(by['Text 7'], a['who'])
+    if 'Text 10' in by:
+        set_text(by['Text 10'], 'YEAR-END PORTFOLIO (%s NET)' % ('8.5%'))
+    if 'Text 11' in by:
+        set_text(by['Text 11'], 'RETIREMENT EXPENSES')
+    # rows: the first grid row, the retirement row, the last row
+    r0 = ('Text 14', 'Text 16', 'Text 18', 'Text 20', 'Text 22')
+    r1 = ('Text 59', 'Text 62', 'Text 65', 'Text 68', 'Text 71')
+    r2 = ('Text 75', 'Text 76', 'Text 77', 'Text 78', 'Text 79')
+    for names, vals in zip((r0, r1, r2), a['rows']):
+        for n, v in zip(names, vals):
+            if n in by:
+                set_text(by[n], v)
+    if 'Text 74' in by:
+        set_text(by['Text 74'], a['rows'][1][5] or ' ')
+    for n in [f'Shape {i}' for i in range(24, 57)] + [f'Text {i}' for i in range(24, 57)] + ['Text 82']:
+        if n in by:
+            by[n]._element.getparent().remove(by[n]._element)
+    for i in list(range(57, 80)):
+        for pre in ('Shape ', 'Text '):
+            sh = by.get(pre + str(i))
+            if sh is not None:
+                sh.top = sh.top - Pt(270)
+    by['Shape 5'].height = Pt(433 - 118)
+    if 'Text 81' in by:
+        by['Text 81'].width = Pt(1300)
+        set_text(by['Text 81'], a['band'])
+    # key factors panel
+    els = [copy.deepcopy(by[n]._element) for n in ('Shape 5', 'Shape 6', 'Text 7', 'Text 74')]
+    for el in els:
+        s.shapes._spTree.append(el)
+    fr, bd, hd, bo = list(s.shapes)[-4:]
+    fr.top, fr.height = Pt(448), Pt(708 - 448)
+    bd.top = Pt(448)
+    hd.top, hd.width = Pt(459), Pt(600)
+    set_text(hd, 'KEY FACTORS')
+    bo.left, bo.top, bo.width, bo.height = Pt(63), Pt(502), Pt(1310), Pt(200)
+    set_text(bo, '\n'.join('•  ' + k for k in a['keys']))
+    bp = bo.text_frame._txBody.bodyPr
+    for el in list(bp):
+        if el.tag.endswith('normAutofit'):
+            bp.remove(el)
+    bp.set('anchor', 't')
+    from pptx.dml.color import RGBColor
+    for para in bo.text_frame.paragraphs:
+        para.space_after = Pt(10)
+        for r in para.runs:
+            r.font.size = Pt(20)
+            r.font.color.rgb = RGBColor.from_string('4A5056')
+    return s
+
+
 def _deep_dive(prs, a):
     """The deeper investments slide: what the money is actually in. Left: the
     invested equity by sector (bars) and how the steerable sleeve splits
@@ -2023,6 +2243,8 @@ def _added_slide(prs, a):
     from pptx.util import Pt
     if a.get('layout') == 'deep_dive':
         return _deep_dive(prs, a)
+    if a.get('layout') == 'current_path':
+        return _current_path(prs, a)
     layout = a.get('layout') if a.get('layout') in LAYOUTS else 'points'
     s = _clone(prs, prs.slides[LAYOUTS[layout] - 1])
     eyebrow = (a.get('eyebrow') or '').strip().upper()
@@ -2259,7 +2481,10 @@ def apply_deck_edits(prs, edits, auto_drop):
     for a in edits.get('added') or ():
         s = _added_slide(prs, a)
         try:
-            s.notes_slide.notes_text_frame.text = 'Added on the consult review.'
+            s.notes_slide.notes_text_frame.text = (
+                'Today\u2019s path carried forward: what they save and spend now, when it runs out, '
+                'and how much rides on the practice sale.' if a.get('id') == 'current_path'
+                else 'Added on the consult review.')
         except Exception:                                    # noqa: BLE001
             pass
         added.setdefault(int(a.get('after') or len(orig)), []).append(lst[-1])
@@ -2329,6 +2554,44 @@ def _house_style(prs):
                     run.font.color.rgb = RGBColor.from_string(
                         'B03A1A' if part.upper().startswith('IRS RED FLAG') else
                         'E8730C' if part.startswith('$') else '3A3F45')
+        if 'GET PAID' in title and 'Text 19' in names:
+            # As the lead advisor fixed it on Tanksley: the four points one
+            # size, the take-home figure beside its label in the middle of its
+            # band, and the bottom rows one size, nothing shrinking itself.
+            from pptx.util import Pt as _P
+            E = 12700
+
+            def _size(sh, pt):
+                bp = sh.text_frame._txBody.bodyPr
+                for el in list(bp):
+                    if el.tag.endswith('normAutofit'):
+                        bp.remove(el)
+                for para in sh.text_frame.paragraphs:
+                    for r in para.runs:
+                        r.font.size = _P(pt)
+            for n in ('Text 6', 'Text 8', 'Text 10', 'Text 12'):
+                if n in names and not names[n].text_frame.text.startswith('['):
+                    _size(names[n], 18)
+                    names[n].width = _P(555)
+            byn = {sh.name: sh for sh in slide.shapes}
+            for lab, val, band in (('Text 27', 'Text 28', 'Shape 26'), ('Text 43', 'Text 44', 'Shape 42')):
+                if lab in byn and val in byn and band in byn:
+                    b = byn[band]
+                    for sh in (byn[lab], byn[val]):
+                        sh.top, sh.height = b.top, b.height
+                        sh.text_frame._txBody.bodyPr.set('anchor', 'ctr')
+                    byn[lab].left, byn[lab].width = b.left + _P(19), _P(192)
+                    byn[val].left, byn[val].width = b.left + _P(201), _P(116)
+            for lab, val in (('Text 30', 'Text 31'), ('Text 46', 'Text 47')):
+                if lab in byn and val in byn:
+                    for sh in (byn[lab], byn[val]):
+                        sh.top, sh.height = _P(700), _P(64)
+                        sh.text_frame._txBody.bodyPr.set('anchor', 'ctr')
+                    _size(byn[lab], 16)
+                    _size(byn[val], 20)
+                    x = byn[lab].left
+                    byn[lab].width = _P(175)
+                    byn[val].left, byn[val].width = x + _P(160), _P(152)
         if 'SAVINGS FUTURE' in title and 'Text 78' in names:
             sh = names['Text 78']
             v = sh.text_frame.text.strip()
@@ -2463,6 +2726,16 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
     except Exception as exc:                                 # noqa: BLE001
         print('   concerns layout left as the template: %s' % exc)
     ed = deck_edits(folder) if edits else {}
+    # The current path, before the annual savings: standard since Tanksley.
+    try:
+        cp = current_path_data(D)
+    except Exception as exc:                                 # noqa: BLE001
+        cp = None
+        print('   current-path slide skipped: %s' % exc)
+    if cp and 'current_path' not in {x.get('id') for x in (ed.get('added') or ())} \
+            and not (D['adv'].get('no_current_path')):
+        ed = dict(ed or {})
+        ed['added'] = [cp] + list(ed.get('added') or [])
     if ed.get('removed') or ed.get('added') or ed.get('forced'):
         drop = apply_deck_edits(prs, ed, drop)
     else:

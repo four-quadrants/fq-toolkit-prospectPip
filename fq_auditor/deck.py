@@ -103,9 +103,24 @@ class Slide(object):
         return dict(self.__dict__)
 
 
+# Figures recorded one by one (inputs.py, or the plan entries Claude makes
+# from answers) count as the advisor's entry too, unless the deck entry
+# itself sets them: a 58% overhead target typed on its own must not fall back
+# to the toolkit's 60%.
+ADVISOR_KEYS = ('names', 'consult_date', 'consult_date_text', 'retire_age', 'target_income',
+                'current_savings', 'current_expenses', 'start_portfolio', 'ideal_bank_balance',
+                'target_overhead', 'building_value', 'owners_plural', 'loc_amount')
+
+
 def _advisor(folder):
     got = _inputs.get(folder, 'deck') or {}
-    return got.get('value') or {}
+    adv = dict(got.get('value') or {})
+    for k in ADVISOR_KEYS:
+        if adv.get(k) in (None, ''):
+            v = _inputs.value(folder, k)
+            if v not in (None, ''):
+                adv[k] = v
+    return adv
 
 
 def _start_portfolio(folder):
@@ -280,7 +295,8 @@ def gather(folder, client=None, today=None):
     # the note. Rebol's deck ran on $383,088 a year where his own
     # Assumptions published $198,058.
     if adv.get('current_expenses'):
-        spend_m = _num(adv['current_expenses']) / 12.0
+        _ce = _num(adv['current_expenses'])
+        spend_m = _ce if _ce and _ce < 60000 else _ce / 12.0   # a month or a year
 
     proj = None
     need_proj = [n for n, v in (

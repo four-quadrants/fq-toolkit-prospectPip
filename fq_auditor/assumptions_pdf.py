@@ -126,6 +126,15 @@ rowD = ParagraphStyle('rowD', fontName='Helvetica', fontSize=7.5, leading=10,
 
 
 
+
+def _amt(v):
+    """An amount as the document prints it: a number gets $ and commas."""
+    if v is None:
+        return ''
+    if isinstance(v, (int, float)):
+        return '${:,.0f}'.format(v) if v >= 0 else '(${:,.0f})'.format(-v)
+    return str(v)
+
 def _x(text):
     """Escape a bare ampersand for reportlab: "M&T" printed as "M&T;"."""
     return re.sub(r'&(?!(?:[a-zA-Z]+|#\d+);)', '&amp;', str(text or ''))
@@ -240,7 +249,7 @@ def _block_list(rows, width):
     data, styles = [], []
     for i, row in enumerate(rows):
         data.append([_entry(row, itemL, itemD),
-                     Paragraph(row['amount'] or '', itemV)])
+                     Paragraph(_amt(row['amount']), itemV)])
         if i % 2:
             styles.append(('BACKGROUND', (0, i), (-1, i), BAND_BG))
         if row.get('rule'):
@@ -290,7 +299,7 @@ def _table(rows, heads, width):
         cells = [_entry(row, rowL, rowD)]
         if wide:
             cells.append(Paragraph(row.get('mid') or '', rowM))
-        cells.append(Paragraph(row['amount'] or '', rowR))
+        cells.append(Paragraph(_amt(row['amount']), rowR))
         data.append(cells)
         if (n % 2 == 1) and not row.get('rule'):
             styles.append(('BACKGROUND', (0, i), (-1, i), BAND_BG))
