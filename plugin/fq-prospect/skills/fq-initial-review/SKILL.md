@@ -40,12 +40,14 @@ section "A short request means the whole step". The short version:
    images (the sales lead writes priorities, payer details, family and
    background in the margins). `notes.py` passes the text of every file it
    can read; the handwriting is on you.
-   **Check the two inputs the notes cannot do without** before building
-   them: `python3 fq_auditor/notes_inputs.py "<client folder>"`. It looks for
-   the IC form and the initial call notes (the sales lead's notes, or the
-   call's transcript or Otter summary). If either is missing, stop and tell
-   the analyst plainly which is still needed and that the initial notes wait
-   for it; build only if they say to go ahead without it, and then say in the
+   **Check the inputs the notes cannot do without** before building them:
+   `python3 fq_auditor/notes_inputs.py "<client folder>"`. It looks for the IC
+   form, the initial call notes (the sales lead's notes, or the call's
+   transcript or Otter summary) and the fee study (its results file in
+   Documents/Business/Fees, from the fee-comparison step on the practice's
+   fee schedule). If any is missing, stop and tell the analyst plainly which
+   is still needed and that the initial notes wait for it (for the fee study,
+   offer to run the fee comparison when the fee schedule is on file); build only if they say to go ahead without it, and then say in the
    notes which input was missing. The intake (steps 3 and 4) can still run.
 3. **Run what is missing, in order.** No `launchbay_manifest.json`, or older
    than 3 days: run the fq-launchbay-pull skill. Documents not downloaded:

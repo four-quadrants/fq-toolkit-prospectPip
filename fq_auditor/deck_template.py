@@ -910,7 +910,9 @@ def slide_fills(D):
     now_goal = {
         'new_patients': (_pct(lx.get('np_pct')), _pct(lx.get('np_pct_prior'))),
         'per_patient': (M(lx.get('net_per_patient')), M(lx.get('net_per_patient_prior'))),
-        'hygiene': ('%g days' % lx['hygiene_days'] if lx.get('hygiene_days') else 'TBD', 'TBD'),
+        'hygiene': ('%g days' % lx['hygiene_days'] if lx.get('hygiene_days') else 'TBD',
+                    (lambda m: ('%s days' % m.group(1)) if m else 'TBD')(
+                        re.search(r'to ([\d.]+) chair-days', str((D.get('levers') or {}).get('hygiene', {}).get('basis') or '')))),
         'fees': ('%.1f%% below' % (100 * lx['fees_off']) if lx.get('fees_off') else 'TBD',
                  'benchmark'),
         'pats_per_day': ('%.1f' % lx['pats_per_day'] if lx.get('pats_per_day') else 'TBD',
@@ -1489,41 +1491,97 @@ PROPOSED_TAX_RATE = 0.40      # the lead advisor's Oyler slide: "Taxes (40%)"
 EXTRA_DEFERRAL_TAX = 0.30     # tax saved on the added deferral, his 30%
 
 
+def _rent_home(D):
+    """What the building's rent could send home a month: the rent the
+    practice pays the owner's building entity, less the building loans, less
+    a cushion of a tenth of the rent, rounded down to $1,000 (the lead
+    advisor's Tanksley slide: $8,500 rent, about $5,040 of building loans,
+    $2,000 taken home). 0 without both figures."""
+    f = D.get('facts') or {}
+    rent = None
+    for key in ('Entity structure', 'Office location'):
+        m = re.search(r'\$([\d,]{4,})\s*(?:a month|/mo)', str(f.get(key) or ''))
+        if m:
+            rent = float(m.group(1).replace(',', ''))
+            break
+    if not rent:
+        return 0, None, None
+    pay = 0.0
+    try:
+        with open(_store.json_path(D['folder'], 'doc_readings.json')) as fh:
+            dr = json.load(fh)
+        bld = ((dr.get('debts') or {}).get('building')) or []
+        got = [N(b.get('payment')) for b in bld if N(b.get('payment'))]
+        if got:
+            pay = sum(got)
+        else:
+            for b in bld:
+                m = re.findall(r'\$([\d,]+\.\d{2})', str(b.get('description') or ''))
+                if m and re.search(r'a month', str(b.get('description') or '')):
+                    pay = sum(float(x.replace(',', '')) for x in m)
+                    break
+    except (OSError, ValueError):
+        pass
+    if not pay:
+        return 0, rent, None
+    home = math.floor(max(0.0, rent - pay - 0.1 * rent) / 1000.0) * 1000
+    return home, rent, pay
+
+
 def two_earner(D, inc):
     """The pay slide for a household where both spouses draw a W-2 from the
-    practice, from the plan's entries: income_w2_spouse_proposed (a year),
-    and optionally income_w2_spouse (today), income_deferral_spouse_proposed,
-    income_distributions_proposed (a month), rent_home (a month),
-    roth_to_traditional (yes), spouse_name, savings_increase (a month).
-    None unless the spouse's proposed W-2 is set and the owner's pay worked
-    out."""
-    adv = D['adv']
+    practice, worked out from the documents: the spouse's W-2 and deferral
+    from the W-2s (income_facts), a proposed spouse W-2 just large enough to
+    max the 401(k) after payroll tax (rounded up to $5,000), contributions
+    flipped from Roth to traditional when they are Roth today, the rent the
+    building can send home, and distributions set so the household takes
+    home what it does today before the rent. Every figure can be overridden
+    in the deck entry (income_w2_spouse_proposed, income_w2_spouse,
+    income_deferral_spouse_proposed, income_distributions_proposed, rent_home,
+    roth_to_traditional, savings_increase, spouse_name). None without a
+    spouse W-2 or the owner's pay."""
+    adv, f = D['adv'], D.get('income_facts') or {}
+    s_now_y = N(adv.get('income_w2_spouse')) or N(f.get('spouse_w2'))
     sw = N(adv.get('income_w2_spouse_proposed'))
-    if not (inc and sw):
+    if not inc or not (sw or s_now_y):
         return None
     rate = inc['p_rate']
+    age = (D.get('age') or 0) + 1
+    cap = K401_BASE + (K401_CATCHUP_60 if 60 <= age <= 63 else K401_CATCHUP if age >= 50 else 0)
+    if not sw:
+        sw = math.ceil(cap * 1.0765 / 5000.0) * 5000 if s_now_y < cap * 1.0765 else s_now_y
     s_w2 = sw / 12.0
-    s_def = (N(adv.get('income_deferral_spouse_proposed')) or 0) / 12.0
-    s_tax = (s_w2 - s_def) * rate
+    s_def = (N(adv.get('income_deferral_spouse_proposed')) or min(cap, sw)) / 12.0
+    s_tax = max(0.0, s_w2 - s_def) * rate
     s_net = s_w2 - s_def - s_tax
-    s_now = (N(adv.get('income_w2_spouse')) or 0) / 12.0
-    s_now_net = s_now * (1 - rate)
-    dist = N(adv.get('income_distributions_proposed'))
-    dist = (dist / 12.0 if dist and dist > 60000 else dist) or inc['p_dist']
-    rent = N(adv.get('rent_home')) or 0
-    rent = rent / 12.0 if rent > 60000 else rent
+    s_now = (s_now_y or 0) / 12.0
+    s_now_def = (N(f.get('spouse_deferral')) or 0) / 12.0
+    s_now_net = s_now - s_now_def - max(0.0, s_now - s_now_def) * rate
+    rent = N(adv.get('rent_home'))
+    rent_src = 'entered'
+    if rent is None:
+        rent, _r, _p = _rent_home(D)
+        rent_src = 'derived'
+    rent = rent / 12.0 if rent and rent > 60000 else (rent or 0)
     now = inc['net'] + inc['dist'] + s_now_net
+    dist = N(adv.get('income_distributions_proposed'))
+    if dist:
+        dist = dist / 12.0 if dist > 60000 else dist
+    else:
+        # the household keeps what it takes home today; only the rent is new
+        dist = math.ceil(max(0.0, now - inc['p_net'] - s_net) / 500.0) * 500
     new = inc['p_net'] + dist + s_net + rent
-    spouse = adv.get('spouse_name') or ''
+    spouse = adv.get('spouse_name') or f.get('spouse_name') or ''
     if not spouse:
-        nm = str(adv.get('names') or '')
-        m = re.search(r'&\s*([A-Z][a-z]+)', nm)
+        m = re.search(r'&\s*([A-Z][a-z]+)', str(adv.get('names') or ''))
         spouse = m.group(1) if m else 'Spouse'
+    flip = adv.get('roth_to_traditional')
+    flip = (str(flip).lower() in ('yes', 'true', '1', 'y')) if flip is not None else \
+        (str(f.get('deferral_kind') or '').lower() == 'roth')
     return dict(spouse=spouse, rate=rate, o_w2=inc['p_w2'], o_def=inc['p_def'],
                 o_tax=inc['p_tax'], o_net=inc['p_net'], o_cut=inc['w2'] - inc['p_w2'],
                 s_w2=s_w2, s_def=s_def, s_tax=s_tax, s_net=s_net, s_up=s_w2 - s_now,
-                dist=dist, rent=rent, gain=new - now,
-                roth_flip=str(adv.get('roth_to_traditional') or '').lower() in ('yes', 'true', '1', 'y'),
+                dist=dist, rent=rent, rent_src=rent_src, gain=new - now, roth_flip=flip,
                 save_more=N(adv.get('savings_increase')) or 0, plan_year=inc['plan_year'])
 
 
@@ -1545,6 +1603,15 @@ def income_structure(D):
         return None
     w2, dfr = f['w2'] / 12.0, (f.get('deferral') or 0) / 12.0
     tax, dist = f['total_tax'] / 12.0, f['distributions'] / 12.0
+    # A spouse on the practice payroll shares the household's tax bill: the
+    # owner's part is the owner's share of the two W-2s, so neither is
+    # charged the whole return.
+    sw_y = N(adv.get('income_w2_spouse')) or N(f.get('spouse_w2'))
+    if sw_y:
+        own_t = max(0.0, f['w2'] - (f.get('deferral') or 0) if str(f.get('deferral_kind') or '').lower() == 'roth'
+                    else f['w2'])
+        sp_t = max(0.0, sw_y)
+        tax = tax * own_t / (own_t + sp_t) if (own_t + sp_t) else tax
     net = w2 - dfr - tax
     p_w2 = N(adv.get('income_w2_proposed'))
     p_w2 = p_w2 / 12.0 if p_w2 else None

@@ -47,6 +47,8 @@ ATTRITION = 0.50
 ADJ_THRESHOLD = 0.25
 ADJ_IDEAL_HIGH = 0.16
 HYG_RATIO_TARGET = 2
+HYG_SHARE_TYPICAL = 0.25   # hygiene's share of production when the practice's split is not on file
+HYG_STEP = 1.5             # hygiene days added a week, the lead advisor's usual step
 
 
 def _need(*names):
@@ -102,13 +104,26 @@ def compute(x):
     # Extra hygiene chair-days, and the doctor work they pull through.
     days, dds = g('hygiene_days'), g('doctor_days')
     gross, hyg = g('gross_production'), g('hygiene_share')
-    if None not in (days, dds, gross, hyg, adj) and days:
+    # Without the practice's own hygiene split, a typical share stands in
+    # (said so on the lever); without word on free rooms and a booked-out
+    # schedule, the lead advisor's usual step of a day and a half more a week
+    # (Tanksley: 7 to 8.5).
+    hyg_assumed = hyg is None
+    if hyg_assumed:
+        hyg = HYG_SHARE_TYPICAL
+    if None not in (days, dds, gross, adj) and days:
         room = g('hygiene_rooms_free') and g('hygiene_booked_6mo')
-        ideal = max(HYG_RATIO_TARGET * dds, days + 2) if room else days
+        if room:
+            ideal = max(HYG_RATIO_TARGET * dds, days + 2)
+        elif g('hygiene_rooms_free') is False:
+            ideal = days
+        else:
+            ideal = days + HYG_STEP
         add_gross = gross * hyg * (ideal / float(days) - 1)
         v = add_gross * (1 - adj) * COLLECT_IDEAL * owner
-        out['hygiene'] = _ok(v, 'Hygiene %g to %g chair-days a week.'
-                             % (days, ideal))
+        out['hygiene'] = _ok(v, 'Hygiene %g to %g chair-days a week%s.'
+                             % (days, ideal, (', at a typical %d%% hygiene share (the practice\u2019s own '
+                                              'split is not on file)' % round(100 * hyg)) if hyg_assumed else ''))
         ratio = g('doctor_per_hygiene_dollar')
         if ratio:
             v2 = add_gross * ratio * (1 - adj) * COLLECT_IDEAL * owner

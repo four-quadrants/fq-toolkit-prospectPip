@@ -1,7 +1,9 @@
-"""The two things the initial notes cannot be built well without: the IC
-form and the notes from the initial call (the sales lead's notes, or the
-call's transcript or Otter summary). Checked before the notes are built, so
-Claude can say what is still needed instead of building around a gap.
+"""What the initial notes cannot be built well without: the IC form, the
+notes from the initial call (the sales lead's notes, or the call's
+transcript or Otter summary), and the fee study (its results in
+Documents/Business/Fees, from the fee-comparison step). Checked before the
+notes are built, so Claude can say what is still needed instead of building
+around a gap.
 
     python3 notes_inputs.py "<client folder>"
 
@@ -40,13 +42,24 @@ def check(folder):
         missing.append('the IC form')
     if not call:
         missing.append("the initial call notes (the sales lead's notes, or the call's transcript or Otter summary)")
-    return {'ic_form': ic, 'call_notes': call, 'missing': missing}
+    fee = None
+    try:
+        import compose as _compose
+        pct, txt = _compose.fee_study(folder)
+        fee = txt if pct is not None else None
+    except Exception:                                        # noqa: BLE001
+        fee = None
+    if not fee:
+        missing.append('the fee study (results in Documents/Business/Fees; run the fee comparison '
+                       'on the practice fee schedule if it has not been)')
+    return {'ic_form': ic, 'call_notes': call, 'fee_study': fee, 'missing': missing}
 
 
 def main():
     r = check(sys.argv[1])
     print('IC form: %s' % (', '.join(r['ic_form']) or 'NOT FOUND'))
     print('Initial call notes: %s' % (', '.join(r['call_notes']) or 'NOT FOUND'))
+    print('Fee study: %s' % (r['fee_study'] or 'NOT FOUND'))
     if r['missing']:
         print('STILL NEEDED before the initial notes: ' + '; '.join(r['missing']))
         sys.exit(1)

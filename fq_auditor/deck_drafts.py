@@ -346,8 +346,15 @@ Return JSON only:
          income tax from the state return, for the same year>,
   "distributions": <distributions to the owner from the S corporation for the
          year (Schedule K-1 line 16 D, or Schedule M-2)>,
+  "deferral_kind": <"roth" when the owner's deferral is W-2 box 12 code AA
+         (Roth 401(k)), "traditional" for code D, else null>,
+  "spouse_name": <the spouse's first name when the spouse also has a W-2 from
+         the practice, else null>,
+  "spouse_w2": <that spouse's W-2 wages from the practice for the same year
+         (box 1, or box 3 when box 1 is reduced by a traditional deferral)>,
+  "spouse_deferral": <the spouse's 401(k) deferral that year, box 12 D or AA>,
   "sources": {{"w2": "file and line", "deferral": "...", "total_tax": "...",
-              "distributions": "..."}}}}
+              "distributions": "...", "spouse_w2": "..."}}}}
 Use null for any figure you cannot find. Never estimate."""
 
 
@@ -377,7 +384,10 @@ def income_facts(folder, first=''):
     got = got or {}
     known = _pack_numbers('\n'.join(x for _n, _t, x in docs))
     out = {'year': got.get('year'), 'sources': got.get('sources') or {}}
-    for k in ('w2', 'deferral', 'total_tax', 'distributions'):
+    for k in ('deferral_kind', 'spouse_name'):
+        if isinstance(got.get(k), str) and got[k].strip():
+            out[k] = got[k].strip()
+    for k in ('w2', 'deferral', 'total_tax', 'distributions', 'spouse_w2', 'spouse_deferral'):
         v = got.get(k)
         if isinstance(v, str):
             try:
