@@ -72,6 +72,13 @@ def _surname(folder, client):
 def step_workbook(folder, client, outdir):
     import facts as _facts
     import workbook as _wb
+    try:
+        import notes_inputs as _ni
+        _gap = _ni.check(folder)['missing']
+        if _gap:
+            print('   STILL NEEDED for the initial notes: ' + '; '.join(_gap))
+    except Exception:                                        # noqa: BLE001
+        pass
     bundle = _facts.gather(folder, client=client)
     out = os.path.join(outdir, 'Initial notes - %s.xlsx'
                        % (bundle.client or _surname(folder, client)))
