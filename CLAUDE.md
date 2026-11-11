@@ -136,7 +136,7 @@ added on the consult review's Slides tab):
 
 The hand-off guide for people (stages, roles, where things live, kitchen vs
 recipe card, setup, rules, troubleshooting) is a Claude doc:
-https://claude.ai/artifact/6spYJJsCvZ6ad3tLGrAuS8 . Keep it current when a
+https://claude.ai/artifact/EZUmAgehYJhzUYz9aaB1Mm . Keep it current when a
 step, a page or the setup changes. The Markdown copy on the share (`Prospects/HAND-OFF GUIDE - FQ Prospect Pipeline.md`) is the source; a
 Claude doc belongs to the account that published it, so when that person leaves, someone staying republishes it from the share and reshares the link.
 
