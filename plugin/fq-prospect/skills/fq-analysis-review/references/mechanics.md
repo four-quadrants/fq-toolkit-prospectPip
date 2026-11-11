@@ -58,6 +58,25 @@ FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 review_page.py seed "<client fol
 5. Tell the analyst in one sentence what the page is and that the lead advisor
    cannot open it until they share it from the page's Share menu (edit access).
 
+## The training page (a lead advisor's first look)
+
+During setup (START HERE step 8), or when someone asks for "the training
+page", publish the person's OWN copy of the test client's review page from
+their account, exactly as a new page:
+
+1. Seed the test client: `2026/_TEST/Tanksley, Paige - TEST` (the line in
+   Seeding, unchanged).
+2. Publish as in "Publishing a NEW page", with the title
+   "Tanksley Review TEST" and the description "Training copy of a review
+   page (test client)".
+3. In the `batch`, add to `plan/figures`: `"training": true` (each tab opens
+   with its "What this tab is for" box) and `"stage": "lead"` (it opens as
+   the lead advisor sees a page).
+4. Do NOT record it in the test folder's `review_pages.json`: every new
+   person makes their own, and none of them is the test client's page.
+5. Give them the page, then walk them through it with the page guide. It is
+   theirs to type in; nothing on it reaches a real client.
+
 ## Refreshing an EXISTING page (new documents or answers came in)
 
 Never overwrite the lead advisor's work. Re-seed, then:

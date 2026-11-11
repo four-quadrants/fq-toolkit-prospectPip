@@ -2799,7 +2799,9 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
     except Exception as exc:                                 # noqa: BLE001
         cp = None
         print('   current-path slide skipped: %s' % exc)
-    if cp and 'current_path' not in {x.get('id') for x in (ed.get('added') or ())} \
+    # edits=False is the review page reading the template's own slides box by
+    # box, so no added slide (it would shift the slide numbers).
+    if edits and cp and 'current_path' not in {x.get('id') for x in (ed.get('added') or ())} \
             and not (D['adv'].get('no_current_path')):
         ed = dict(ed or {})
         ed['added'] = [cp] + list(ed.get('added') or [])

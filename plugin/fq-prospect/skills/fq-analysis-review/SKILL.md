@@ -45,7 +45,9 @@ keep working whichever page it has).
    <Surname>'s consult deck".
 
 When someone asks how to use the page or wants to be walked through it,
-read `references/page_guide.md` and follow it.
+read `references/page_guide.md` and follow it. For a first look (setup, or
+"make me a training page"), publish their own training page first
+(mechanics: The training page), then walk them through it.
 
 Read `references/mechanics.md` for how pages are found, seeded, published,
 refreshed and pulled in. Seed with `--mode review` (the default). In
