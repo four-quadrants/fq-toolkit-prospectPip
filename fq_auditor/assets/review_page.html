@@ -209,7 +209,15 @@ body.stage-analyst #donebtn{background:var(--accent)}
 #donebar.is-done #donebtn{background:transparent;border:2px solid #fff;font-size:14px;padding:9px 18px}
 body{padding-bottom:96px}
 .grp td{background:var(--soft,#f4f1ec);font-weight:700;padding-top:14px}
-.slidegroup{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start;margin:0 0 28px}
+.slidecard{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:0 0 28px;overflow:hidden}
+.slidebar{display:flex;gap:12px;align-items:baseline;background:var(--ink);color:#fff;padding:9px 16px;font:600 15px var(--display);letter-spacing:.03em}
+.slidebar .sn{color:var(--accent);font-weight:700}
+.slidebar .sh{font-weight:500;font-size:13px;color:#C9CDD1;margin-left:auto}
+.slidecard:nth-child(even) .slidegroup{background:#FAF8F5}
+.slidegroup{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start;padding:16px}
+.tabhelp{background:#EAF3F9;border:1px solid #C9DDEC;border-radius:8px;padding:8px 12px;margin:0 0 6px;font-size:14px;color:var(--text)}
+.tabhelp summary{cursor:pointer;font:600 14px var(--display);color:#1F6FB2;letter-spacing:.02em}
+.tabhelp div{margin-top:6px;line-height:1.5}
 .slidepicwrap{position:sticky;top:12px}
 @media (max-width:820px){.rn{width:96px;text-align:right}
 .rmeta{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
@@ -249,6 +257,7 @@ tr.off td{opacity:.55}
   <div id="provis" class="abox" style="display:none;margin:-8px 0 14px"></div>
 
   <section data-tab="assume">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>The base plan, section by section, built from the documents. Comment on any section (<b>+ Add another comment</b> for more): a <b>Note</b> is for the team, a <b>Question to the client</b> goes on the Questions tab and into the email. Once answers come in, each question shows the answer and Claude's verdict, and you mark it Answered, Still open or Team to revisit.<br><b>Where it ends up:</b> these are the figures every projection and slide is built on (portfolio, debts, spending, income), and they are what <b>Print the assumptions</b> prints.</div></details>
     <h2>Assumptions <small id="as-count"></small></h2>
     <div class="note"><button type="button" id="printasm">Print the assumptions</button> <span id="printmsg">Click, then paste the line into Claude: it saves the Assumptions as a PDF in the client folder, ready to print.</span></div>
     <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own. On the consult review, the notes and questions from the analysis review sit on their section, with the client's answer and Claude's read of whether it settles the point: mark each <b>Answered</b> / <b>Done</b>, <b>Still open</b> (asked again) or <b>Team to revisit</b>.</p>
@@ -256,6 +265,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="found">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>What Claude read from the statements, returns and credit reports, each with where it came from. Nothing to fill in here. If something is wrong, say so in a comment on the matching Assumptions section.<br><b>Where it ends up:</b> behind the Assumptions; not on a slide by itself.</div></details>
     <h2>What the documents show <small>Check these before the plan is built on them</small></h2>
     <p class="note">Read from the statements, returns and credit reports, each with where it came from. Anything wrong or missing: say so in a note or a question to the client.</p>
     <div id="found"><div class="card empty">Appears once the analyst loads this client.</div></div>
@@ -265,6 +275,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="email">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>The email to the client, written from the questions marked Send. Edit freely, then <b>Copy the email</b> into Outlook.<br><b>Where it ends up:</b> the client's inbox. Not on any slide.</div></details>
     <h2>The email to the client <small>Written from the questions marked Send</small></h2>
     <p class="note">Written as you mark the questions: only those marked <b>Send</b>, in your wording, the high-priority ones named. Edit it freely; your edits are kept. If you change the questions after editing it, a yellow note offers to rebuild it from them.</p>
     <div class="card pad"><textarea id="emailtext" rows="22" style="width:100%" aria-label="Email to the client"></textarea>
@@ -273,6 +284,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="plan">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>Single figures the plan runs on. The middle column is the toolkit's starting figure; type your own to replace it, or leave it blank to keep it.<br><b>Where it ends up:</b> retirement age and income on <b>The Four Quadrants difference</b> (the opening and closing slides) and <b>Your savings future</b>; the ideal bank balance on <b>Cash gets a system</b>; the overhead target on <b>Practice levers</b>; savings by year on <b>Your savings future</b>. <b>Biggest concerns</b> (further down) is the concerns slide. <b>Notes for the team</b> is read by Claude before the deck is built.</div></details>
     <h2>Notes for the team <small>Read before the deck is built</small></h2>
     <div class="card pad"><textarea id="gnote" rows="3" placeholder="Anything that should shape the plan or the deck: what to hold back, what to lead with, conditions, timing. Claude reads this when it pulls in the review." aria-label="Notes for the team" style="width:100%"></textarea></div>
   </section>
@@ -288,6 +300,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section id="recsec" data-tab="recs">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>Where the new savings come from: each recommendation, what it frees up a year, and how much is invested in years 1 and 2. Untick what does not fit, change amounts, add from the library.<br><b>Where it ends up:</b> what stays ticked is the <b>Annual savings projection</b> slide, and the savings schedule behind <b>Your savings future</b> and the opening and closing slides.</div></details>
     <h2>Recommendations <small id="reccount"></small></h2>
     <p class="note">The recommendations this client's documents point to are ticked, with the figure and the reason, alongside the firm's most common ones. Untick what does not fit, tick anything else that does and fill in its figures. <b>Add from the library</b> brings in any other recommendation the firm has used; <b>Add a recommendation</b> writes a new one, and it joins the library for every client after this one. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
     <div class="wi-results" id="recimpact" style="margin-bottom:14px"></div>
@@ -303,6 +316,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section id="workings" data-tab="proj">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>A sandbox. Try a different retirement age, income, sale or overhead and see the result at once. Nothing changes until <b>Use these figures</b>, which puts them on Plan inputs.<br><b>Where it ends up:</b> only through Plan inputs.</div></details>
     <h2>How the numbers are built <small>The worksheet behind the figures above</small></h2>
     <div class="grid2">
       <div class="card pad"><h3>Starting portfolio</h3><div id="w-start" class="empty">Appears once the analyst loads the workings.</div></div>
@@ -336,6 +350,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="slides">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>The whole deck as it will be built, slide by slide. Each slide is its own card: the picture on the left, its boxes on the right, numbered to match the outlined boxes in the picture. Change any wording, <b>Use</b> or <b>Drop</b> what Claude drafted, take a slide out or add one from the slide library in the outline at the top.<br><b>Where it ends up:</b> the consult deck, when you press <b>Build the deck</b>.</div></details>
     <h2>Slide by slide <small id="scount"></small></h2>
     <p class="note">The whole deck, slide by slide: each picture is the deck as it is built now, with every box that comes from this client outlined in orange and numbered to match the list beside it. Change any box and it goes on the slide at the next build; ask Claude to rebuild the deck and refresh this page to see the new pictures. Boxes Claude drafted have <b>Use</b> / <b>Drop</b>. The deck is an ordinary PowerPoint file, so anything can still be changed after it is built.</p>
     <div id="soutline" class="card pad" style="margin-bottom:16px"></div>
@@ -344,6 +359,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="qs">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>Every question for the client: the ones Claude drafted, comments marked as questions, and any you add. <b>Send</b> puts it in the email; <b>Answered</b> or <b>Strike</b> keep it out. When answers come back they appear under each question with Claude's verdict.<br><b>Where it ends up:</b> the client email (next tab). Not on any slide.</div></details>
     <h2>Follow-up questions <small id="qcount"></small></h2>
     <p class="note"><b>First, before the plan.</b> Mark each question; once you are done, the analyst asks Claude to pull in the questions and the email goes to the client. When answers come back (portal, email or new documents), record them here or the team files the documents; the analyst then asks Claude to refresh this page, and the plan, recommendations and slides are worked out again with the answers in, keeping everything you already decided.<br><b>Send</b>: goes in the email to the client. <b>Answered</b>: the team settled it from the file, so it is not asked. <b>Strike</b>: not needed, drop it. <b>Check first</b>: look before deciding. Edit the wording freely.</p>
     <div id="answered" class="card pad" style="display:none;margin-bottom:14px"></div>
@@ -351,6 +367,7 @@ tr.off td{opacity:.55}
   </section>
 
   <section data-tab="notes">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>Everything written on this page in one list, with who wrote it and where it stands. Nothing to fill in.<br><b>Where it ends up:</b> Claude reads every note when the review is pulled in.</div></details>
     <h2>Notes &amp; questions <small id="ncount"></small></h2>
     <p class="note">Everything written on this review, in one place: every note for the team and every question to the client, who wrote it, what it is about, and where it stands. A <b>note</b> is acted on by Claude when the review is pulled in; what was done shows here after the next refresh. A <b>question</b> shows whether it was sent, the client's answer, or that documents settled it. On the consult review, what the analysis review said about each assumption sits on that section of the Assumptions tab, to be marked there.</p>
     <div id="notesbox"><div class="card empty">Nothing written on this review yet.</div></div>
@@ -887,9 +904,11 @@ function fqModel(P){
           '<textarea id="s-'+esc(x.id)+'" data-sid="'+esc(x.id)+'" rows="2" aria-label="Box '+esc(x.n||'')+' wording">'+esc(t)+'</textarea>'+
           '<div class="why">What goes here: '+esc(x.hint||'')+'</div></div>';
       }).join('')+(hidden?'<div class="why">'+hidden+' more box'+(hidden===1?'':'es')+' on this slide hidden by the filter above.</div>':'');
-      return '<div class="slidegroup"><div class="slidepicwrap"><h3 class="slidehead">'+esc(head)+'</h3>'+
+      var nb=its.length+fs.length;
+      return '<div class="slidecard"><div class="slidebar"><span class="sn">SLIDE</span><span>'+esc(head)+'</span><span class="sh">'+nb+' box'+(nb===1?'':'es')+' below, numbered as in the picture</span></div>'+
+        '<div class="slidegroup"><div class="slidepicwrap">'+
         (pic?'<img class="slidepic" src="'+esc(pic)+'" alt="The slide, with each box to check outlined and numbered">':'<div class="empty">Picture appears after the deck is built.</div>')+
-        '</div><div class="slideitems">'+right+'</div></div>';
+        '</div><div class="slideitems">'+right+'</div></div></div>';
     }).join('');
   }
   document.addEventListener('click',function(e){
@@ -1348,6 +1367,7 @@ function fqModel(P){
   function isAnalyst(){ return !!(plan && plan.stage==='analyst'); }
   function applyMode(){
     var mode=(plan&&plan.mode)||'consult';
+    document.querySelectorAll('details.tabhelp').forEach(function(d){ if(plan&&plan.training) d.open=true; });
     document.body.classList.toggle('mode-analysis',mode==='analysis');
     // The analyst's check is the Assumptions and What we found (so the
     // analyst can see what the documents already settle and not ask it
@@ -1409,7 +1429,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v56';
+  var BUILD='v57';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
