@@ -73,6 +73,10 @@ h3{font:700 16px/1.2 var(--display);color:var(--ink);margin:0}
 .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-variant-numeric:tabular-nums}
 .kv .v{text-align:right;font-weight:600;color:var(--ink)}
 .kv .t{border-top:1px solid var(--line);padding-top:6px;font-weight:700;color:var(--ink)}
+.kv3{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 14px;font-variant-numeric:tabular-nums}
+.kv3 .v{text-align:right;font-weight:600;color:var(--ink)} .kv3 .h{text-align:right;font:600 11px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kv3 .t{border-top:1px solid var(--line);padding-top:6px;font-weight:700;color:var(--ink)}
+.kv3 input{width:110px;text-align:right}
 .formula{font-size:13px;color:var(--muted)}
 td.r,th.r{text-align:right;white-space:nowrap}
 tr.ret td{background:var(--accent-soft);font-weight:700}
@@ -328,7 +332,7 @@ tr.off td{opacity:.55}
       <div class="wi-grid">
         <label>Retirement age<input type="text" id="wi-retire" class="wi"></label>
         <label>Target retirement income, a year<input type="text" id="wi-income" class="wi"></label>
-        <label>Sale at retirement, net<input type="text" id="wi-sale" class="wi"></label>
+        <label>Sale at retirement, net, current path<input type="text" id="wi-sale" class="wi"></label>
         <label>Saved a year today (current path)<input type="text" id="wi-cur" class="wi"></label>
         <label>Overhead target<input type="text" id="wi-oh" class="wi"></label>
       </div>
@@ -460,16 +464,8 @@ tr.off td{opacity:.55}
     if(!w) return;
     var s=(w.start_parts||[]).map(function(p){return '<div>'+esc(p[0])+'</div><div class="v">'+$m(p[1])+'</div>'}).join('');
     $('w-start').className='kv'; $('w-start').innerHTML=s+'<div class="t">Starting portfolio</div><div class="v t">'+$m(w.start)+'</div>';
-    var a=w.sale||{};
-    var sale='<div>Collections</div><div class="v">'+$m(a.collections)+'</div>'+
-      '<div>Practice value at '+Math.round((a.multiple||0.65)*100)+'%</div><div class="v">'+$m(a.collections*(a.multiple||0.65))+'</div>'+
-      '<div>Grown '+pct(a.growth)+' a year for '+a.years+' years</div><div class="v">'+$m(a.collections*(a.multiple||0.65)*Math.pow(1+a.growth,a.years))+'</div>'+
-      (a.building?'<div>Building, grown '+pct(a.building_growth)+'</div><div class="v">'+$m(a.building*Math.pow(1+a.building_growth,a.years))+'</div>':'<div class="needs">Building value</div><div class="v">needed</div>')+
-      '<div>Gross at retirement</div><div class="v">'+$m(a.gross)+'</div>'+
-      '<div class="t">Net after tax ('+Math.round(a.net_factor*100)+'%)</div><div class="v t">'+$m(a.net)+'</div>'+
-      (a.advisor?'<div>Figure in the plan entry</div><div class="v">'+$m(a.advisor)+'</div>':'');
-    $('w-sale').className='kv'; $('w-sale').innerHTML=sale;
-    $('w-levers').innerHTML='<table><thead><tr><th>Lever</th><th class="r">A year</th><th>Basis</th></tr></thead><tbody>'+
+    WK=w; saleItems();
+    $('w-levers').innerHTML='<table><thead><tr><th>Lever</th><th class="r">Cashflow created</th><th>Basis</th></tr></thead><tbody>'+
       (w.levers||[]).map(function(l){return '<tr><td><b>'+esc(l.label)+'</b></td><td class="r">'+(l.value==null?'—':$m(l.value))+'</td><td class="'+(l.value==null?'needs':'')+'">'+esc(l.basis)+'</td></tr>'}).join('')+'</tbody></table>';
     WK=w; if(!WI||!WI.dirty) wiReset(); wiRender(); recImpact();
   }
@@ -499,13 +495,34 @@ function fqModel(P){
   var WK=null, WI=null;
   function n(v){ var t=String(v==null?'':v).replace(/[$,\s]/g,''); var k=/k$/i.test(t), m=/m$/i.test(t), p=/%$/.test(t);
     var x=parseFloat(t.replace(/[kKmM%]$/,'')); if(isNaN(x)) return null; if(k)x*=1e3; if(m)x*=1e6; if(p)x/=100; return x; }
+  // The practice and building sale at retirement on each path: the
+  // practice grows at its own rate per path (3% current, 4% 4Q unless typed
+  // on Plan inputs), the building 2%, 70% kept after tax, less the practice
+  // and building debt still owed at the sale. A typed net sale wins.
+  function saleNets(retire){
+    var S=(WK&&WK.sale)||{}, M=(WK&&WK.model)||{}, D=(plan&&plan.decided)||{};
+    var num=function(k){ var v=n(D[k]); return (D[k]!==undefined&&D[k]!==''&&v!=null)?v:null; };
+    var rate=function(k,d){ var v=num(k); if(v==null) return d; return v>1?v/100:v; };
+    var gc=rate('practice_growth',S.growth!=null?S.growth:0.03), gq=rate('practice_growth_fq',S.growth_fq!=null?S.growth_fq:0.04);
+    var y=(S.years||0)+((retire||M.retire_age)-(M.retire_age||0));
+    var pv=(S.collections||0)*(S.multiple||0.65), b=S.building||0, gb=S.building_growth!=null?S.building_growth:0.02, nf=S.net_factor||0.7;
+    var gross=function(g){ return pv*Math.pow(1+g,y)+b*Math.pow(1+gb,y); };
+    var dc=num('debt_at_sale'); if(dc==null) dc=S.debt||0;
+    var dq=num('debt_at_sale_fq'); if(dq==null) dq=(num('debt_at_sale')!=null?dc:(S.debt_fq!=null?S.debt_fq:dc));
+    var tc=num('sale_net'), tq=num('sale_net_fq');
+    return {years:y, gc:gc, gq:gq, gross_cur:gross(gc), gross_fq:gross(gq), debt_cur:dc, debt_fq:dq,
+            cur:tc!=null?tc:gross(gc)*nf-dc, fq:tq!=null?tq:(tc!=null?tc:gross(gq)*nf-dq),
+            typed_cur:tc!=null, typed_fq:tq!=null, nf:nf, building:b};
+  }
   function wiReset(){
     if(!WK||!WK.model) return; var M=WK.model;
     // Start from the plan as it stands: his Plan inputs where he typed one,
     // the toolkit's starting figure where he did not.
     var D=(plan&&plan.decided)||{}, g=function(k,d){ var v=n(D[k]); return (D[k]!==undefined&&D[k]!==''&&v!=null)?v:d; };
     var oh=g('target_overhead',M.target_overhead); if(oh>1) oh=oh/100;
-    WI={retire:Math.round(g('retire_age',M.retire_age)), income:g('target_income',M.income), sale:g('sale_net',M.sale_net),
+    var SN=WK.sale?saleNets(Math.round(g('retire_age',M.retire_age))):null;
+    WI={retire:Math.round(g('retire_age',M.retire_age)), income:g('target_income',M.income), sale:SN?SN.cur:g('sale_net',M.sale_net),
+        saleFq:SN?SN.fq:g('sale_net_fq',M.sale_net_fq!=null?M.sale_net_fq:M.sale_net),
         cur:g('current_savings',M.current_savings), oh:oh,
         sched:((typeof recsSchedule==='function'&&plan&&plan.recommendations&&plan.recommendations.length&&recsSchedule())||M.schedule||[]).map(function(r){ return [r[0], g('save_'+r[0], r[1])]; }), dirty:false};
     $('wi-retire').value=WI.retire; $('wi-income').value=$m(WI.income); $('wi-sale').value=$m(WI.sale);
@@ -522,7 +539,7 @@ function fqModel(P){
     var rows=g.map(function(x){ (x.invested||[]).forEach(function(v,i){tot[i]+=v||0});
       return '<tr><td><b>'+esc(x.label)+'</b><div class="basis">'+esc(x.basis||'')+'</div></td><td class="r">'+$m(x.gain)+'</td>'+
       (x.invested||[]).map(function(v){return '<td class="r">'+$m(v)+'</td>'}).join('')+'</tr>'; }).join('');
-    $('w-gains').innerHTML='<table><thead><tr><th>Source</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr></thead><tbody>'+rows+
+    $('w-gains').innerHTML='<table><thead><tr><th>Source</th><th class="r">Cashflow created</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr></thead><tbody>'+rows+
       '<tr class="ret"><td>Toolkit\u2019s starting split to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
     var a2=document.activeElement, typing=a2&&a2.classList&&a2.classList.contains('wcell');
     if(!typing) $('wi-later').innerHTML='<table><thead><tr><th>4Q savings schedule (what the plan uses)</th><th class="r">From</th><th class="r">Saved a year</th></tr></thead><tbody>'+
@@ -532,7 +549,7 @@ function fqModel(P){
     $('wi-oh-note').textContent='Overhead is '+pct(M.overhead)+' today. At '+pct(WI.oh)+' that is '+$m(ohGain)+' a year to the owner; each point lower is '+$m(0.01*M.net_collections)+'.';
     // projection
     var P={rates:M.rates, consult_date:M.consult_date, age:M.age, retire_age:WI.retire, start:M.start, current_savings:WI.cur,
-           spend:M.spend, schedule:wiSchedule(), income:WI.income, sale_net:WI.sale, horizon:M.horizon||90};
+           spend:M.spend, schedule:wiSchedule(), income:WI.income, sale_net:WI.sale, sale_net_fq:WI.saleFq, horizon:M.horizon||90};
     var r=fqModel(P), base=WK.base||{};
     var lasts=r.fq_end>=-1000;
     $('wi-results').innerHTML=
@@ -545,6 +562,36 @@ function fqModel(P){
     $('w-proj').innerHTML='<table><thead><tr><th>Year</th><th class="r">Current: saved</th><th class="r">Current: portfolio</th><th class="r">4Q: saved</th><th class="r">4Q: portfolio</th></tr></thead><tbody>'+
       yrs.map(function(y){return '<tr class="'+(y===r.retire?'ret':'')+'"><td>'+y+'</td><td class="r">'+$m(r.cur_dep[y]||0)+'</td><td class="r">'+$m(r.current[y])+'</td><td class="r">'+$m(r.fq_dep[y]||0)+'</td><td class="r">'+$m(r.fq[y])+'</td></tr>'}).join('')+'</tbody></table>';
     WI.last=r;
+    saleItems();
+  }
+  // The sale at retirement, line by line, on both paths: the practice at
+  // its own growth per path, the building at 2%, 70% kept after tax, less
+  // the practice and building debt still owed then (editable on the 4Q path).
+  function saleItems(){
+    var el=$('w-sale'); if(!el||!WK||!WK.sale) return;
+    var a=WK.sale, M=WK.model||{}, SN=saleNets(WI?WI.retire:M.retire_age);
+    var pv=(a.collections||0)*(a.multiple||0.65), y=SN.years, gb=a.building_growth!=null?a.building_growth:0.02;
+    var row=function(label,c,q,cls){ return '<div'+(cls?' class="'+cls+'"':'')+'>'+label+'</div><div class="v'+(cls?' '+cls:'')+'">'+c+'</div><div class="v'+(cls?' '+cls:'')+'">'+q+'</div>'; };
+    var h='<div></div><div class="h">Current path</div><div class="h">4Q path</div>'+
+      row('Collections',$m(a.collections),$m(a.collections))+
+      row('Practice value at '+Math.round((a.multiple||0.65)*100)+'%',$m(pv),$m(pv))+
+      row('Practice growth a year',pct(SN.gc),pct(SN.gq))+
+      row('Practice grown for '+y+' years',$m(pv*Math.pow(1+SN.gc,y)),$m(pv*Math.pow(1+SN.gq,y)))+
+      (a.building?row('Building, grown '+pct(gb)+' a year',$m(a.building*Math.pow(1+gb,y)),$m(a.building*Math.pow(1+gb,y)))
+                 :'<div class="needs">Building value</div><div class="v">needed</div><div class="v">needed</div>')+
+      row('Gross at retirement',$m(SN.gross_cur),$m(SN.gross_fq),'t')+
+      row('Kept after tax ('+Math.round(SN.nf*100)+'%)',$m(SN.gross_cur*SN.nf),$m(SN.gross_fq*SN.nf))+
+      row('Less practice and building debt still owed then','−'+$m(SN.debt_cur),
+          '−<input type="text" id="rc-debt-fq" class="rn" value="'+$m(SN.debt_fq)+'" aria-label="Debt still owed at the sale, 4Q path">')+
+      row('Net sale at retirement',$m(SN.cur),$m(SN.fq),'t')+
+      ((SN.typed_cur||SN.typed_fq)?'<div class="basis" style="grid-column:1/-1">A net sale typed on Plan inputs is used as typed.</div>':'')+
+      (a.advisor?row('Figure in the plan entry',$m(a.advisor),''):'');
+    var items=(a.debt_items||[]).filter(function(d){return d.today});
+    if(items.length) h+='<details style="grid-column:1/-1;margin-top:4px"><summary class="basis">The loans, today and at the sale</summary><table style="font-size:12px;width:100%">'+
+      items.map(function(d){return '<tr><td>'+esc(d.label)+(d.basis?'<div class="basis">'+esc(d.basis)+'</div>':'')+'</td><td class="r">'+$m(d.today)+'</td><td class="r">'+$m(d.at_sale)+'</td></tr>'}).join('')+
+      '</table><div class="basis">At the planned retirement age. Type over the debt if the client has a payoff plan.</div></details>';
+    if(document.activeElement&&document.activeElement.id==='rc-debt-fq') return;
+    el.className='kv3'; el.innerHTML=h;
   }
   document.addEventListener('input',function(e){
     var t=e.target; if(!WI||!t) return;
@@ -553,11 +600,8 @@ function fqModel(P){
         // As in the lead advisor's worksheet, the sale grows each year to retirement
         // (practice 3%, building 2%), so it moves with the retirement age
         // unless a sale figure has been typed.
-        if(!WI.saleTyped && WK.model){ var M=WK.model, k=WI.retire-M.retire_age;
-          var pr=M.sale_practice||0, bu=M.sale_building||0, tot=(pr+bu)||0;
-          var RT=M.rates||{}, gp=1+(RT.practice_growth!=null?RT.practice_growth:0.03), gb=1+(RT.building_growth!=null?RT.building_growth:0.02);
-          var g=tot?(pr*Math.pow(gp,k)+bu*Math.pow(gb,k))/tot:Math.pow(gp,k);
-          WI.sale=M.sale_net*g; var se=$('wi-sale'); if(se) se.value=$m(WI.sale); } } }
+        if(!WI.saleTyped && WK.model && WK.sale){ var SN=saleNets(WI.retire);
+          WI.sale=SN.cur; WI.saleFq=SN.fq; var se=$('wi-sale'); if(se) se.value=$m(WI.sale); } } }
     else if(t.id==='wi-income'){ v=n(t.value); if(v!=null) WI.income=v; }
     else if(t.id==='wi-sale'){ WI.saleTyped=true; v=n(t.value); if(v!=null) WI.sale=v; }
     else if(t.id==='wi-cur'){ v=n(t.value); if(v!=null) WI.cur=v; }
@@ -647,6 +691,17 @@ function fqModel(P){
     el.classList.toggle('set',!!el.value.trim());
     plan.decided=plan.decided||{}; plan.decided[el.dataset.key]=el.value.trim(); pending.figs=true;
     debounce('figs',function(){ write('plan/figures',{decided:plan.decided},function(){pending.figs=false;}); });
+    // The sale cards and the projection follow the growth, debt and sale inputs.
+    if(/^(practice_growth|practice_growth_fq|debt_at_sale|debt_at_sale_fq|sale_net|sale_net_fq|retire_age)$/.test(el.dataset.key))
+      debounce('salecards',function(){ if(WI) WI.dirty=false; recImpact(); });
+  });
+  // The 4Q sale card's debt: what is still owed at the sale on the 4Q path.
+  document.addEventListener('change',function(e){
+    var el=e.target; if(!el||el.id!=='rc-debt-fq'||!plan) return;
+    var v=n(el.value); plan.decided=plan.decided||{};
+    plan.decided.debt_at_sale_fq=(v==null?'':$m(v)); pending.figs=true;
+    write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'debt still owed at the sale on the 4Q path');
+    if(WI){ WI.dirty=false; wiReset(); } recImpact(); wiRender(); if(typeof renderPlan==='function') renderPlan();
   });
   // ---- recommendations ----------------------------------------------
   function m0(v){ return (v==null||v==='')?'':$m(v); }
@@ -675,7 +730,7 @@ function fqModel(P){
     var M=WK.model;
     var P={rates:M.rates, consult_date:M.consult_date, age:M.age, retire_age:WI?WI.retire:M.retire_age, start:M.start,
            current_savings:WI?WI.cur:M.current_savings, spend:M.spend, schedule:sch, income:WI?WI.income:M.income,
-           sale_net:WI?WI.sale:M.sale_net, horizon:M.horizon||90};
+           sale_net:WI?WI.sale:M.sale_net, sale_net_fq:WI?WI.saleFq:M.sale_net_fq, horizon:M.horizon||90};
     var r=fqModel(P), base=WK.base||{}, lasts=r.fq_end>=-1000;
     el.innerHTML=
       '<div class="tile"><span class="k">Invested, years 1 · 2 · 3</span><span class="v">'+$m(sch[0][1])+'</span><span class="s">'+$m(sch[1][1])+' · '+$m(sch[2][1])+'</span></div>'+
@@ -1429,7 +1484,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v58';
+  var BUILD='v61';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

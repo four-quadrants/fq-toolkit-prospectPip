@@ -440,9 +440,36 @@ def _figures(folder, client):
         D['owns_building'] or adv.get('building_value')) else None
     years_to = (D['retire_age'] - D['age']) if (D['age'] and
                                                  D['retire_age']) else None
+    # Two paths (the lead advisor's rule): the practice grows 3% a year on
+    # the current path and 4% on the 4Q path, both editable on the review
+    # page; the building 2% on both. The practice and building debt still
+    # owed at the sale comes off, amortized from today's balances
+    # (sale_debt.py) unless typed.
+    def _rate(key, default):
+        v = N(adv.get(key))
+        if v is None:
+            return default
+        return v / 100.0 if v > 1 else v
+    D['practice_growth'] = _rate('practice_growth', _plan.PRACTICE_GROWTH)
+    D['practice_growth_fq'] = _rate('practice_growth_fq', _plan.PRACTICE_GROWTH_FQ)
+    owed, owed_items = None, []
+    if years_to:
+        try:
+            import sale_debt as _sd
+            owed, owed_items = _sd.at_sale(folder, int(years_to))
+        except Exception:                                    # noqa: BLE001
+            owed, owed_items = None, []
+    debt_cur = N(adv.get('debt_at_sale'))
+    debt_cur = (owed or 0) if debt_cur is None else debt_cur
+    debt_fq = N(adv.get('debt_at_sale_fq'))
+    debt_fq = debt_cur if debt_fq is None else debt_fq
+    D['sale_debt'], D['sale_debt_fq'], D['sale_debt_items'] = debt_cur, debt_fq, owed_items
     gross, net = _plan.sale(D['collections'], years_to, D['building'],
-                            N(adv.get('debt_at_sale')) or 0)
+                            debt_cur, growth=D['practice_growth'])
+    gross_fq, net_fq = _plan.sale(D['collections'], years_to, D['building'],
+                                  debt_fq, growth=D['practice_growth_fq'])
     D['sale_gross'], D['sale_derived'] = gross, net
+    D['sale_gross_fq'], D['sale_derived_fq'] = gross_fq, net_fq
     D['sale_needs_building'] = D['owns_building'] and not D['building']
     bal = N(adv.get('ideal_bank_balance'))
     if not bal and D.get('overhead_dollars'):
@@ -564,7 +591,10 @@ def _figures(folder, client):
         if sale is None:
             sale = net or 0
         sale_fq = N(adv.get('sale_net_fq'))
-        sale_fq = sale if sale_fq is None else sale_fq
+        if sale_fq is None:
+            # A typed current-path sale with no 4Q one keeps the two equal,
+            # as before; otherwise the 4Q path's own derived sale.
+            sale_fq = sale if adv.get('sale_net') is not None else (net_fq or sale)
 
         def run(income, sale_net):
             return _sav.project(fq_income=income, sale_net=sale_net, **kw)
@@ -589,6 +619,7 @@ def _figures(folder, client):
                       'current_at_retirement'):
                 D['proj'][k] = cur[k]
         D['sale'] = sale_fq
+        D['proj_sale_cur'] = sale
         big = adv.get('larger_scenario') or {}
         if big.get('sale_net'):
             p2 = run(1.0, N(big['sale_net']))

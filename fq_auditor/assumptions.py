@@ -243,6 +243,79 @@ def _w2_rows(folder, wages):
     return rows
 
 
+def _net_distributions(folder):
+    """Money the owner actually takes home from the practice, a year: every
+    transfer from a practice account to a personal one, less every transfer
+    the other way (money put back in). Shown under Income but never added to
+    Total earnings, which already counts the net profit it comes out of.
+
+    Read from the bank statements' transactions, counted once: on the
+    personal side where that account's statements were read, else on the
+    practice side. Annualized over the months the statements cover. Returns
+    (annual or None, detail).
+    """
+    try:
+        import transactions as _tx
+        sides, banks = _tx.sides_of(folder), _tx.banks_of(folder)
+        moves = _tx.gather(folder)
+        for k in moves:
+            _tx.apply_rules(moves[k], sides, banks)
+        _tx.match_across(moves)
+    except Exception:                                        # noqa: BLE001
+        moves, sides = {}, {}
+    read = {_tx_digits(k[1]) for k, rows in moves.items() if rows}
+    dist = back = 0.0
+    dates = []
+    for (side, key), rows in moves.items():
+        for r in rows:
+            if r.get('date'):
+                dates.append(r['date'])
+            if r.get('kind') != 'transfer' or not r.get('amount'):
+                continue
+            here = sides.get(_tx_digits(r.get('account')) or _tx_digits(key))
+            cp = _tx_digits(r.get('counterparty') or '')
+            there = sides.get(cp)
+            if {here, there} != {'Personal', 'Business'}:
+                continue
+            if here == 'Business' and cp in read:
+                continue        # counted on the personal statement instead
+            out_of_practice = (here == 'Personal' and r['direction'] == 'credit') or \
+                              (here == 'Business' and r['direction'] == 'debit')
+            if out_of_practice:
+                dist += r['amount']
+            else:
+                back += r['amount']
+    months = None
+    if dates:
+        months = max(1.0, ((max(dates) - min(dates)).days + 1) / 30.44)
+    try:
+        with open(_store.json_path(folder, 'income_facts.json')) as fh:
+            f = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        f = {}
+    ret = f.get('distributions')
+    ret_txt = (' The %s return shows distributions of %s.' % (f.get('year') or 'latest',
+                                                             _money(ret))) if ret else ''
+    if (dist or back) and months:
+        annual = (dist - back) * 12.0 / months
+        return annual, ('Practice to personal %s, less %s put back into the '
+                        'practice, over %.0f months of statements, annualized.%s '
+                        'Not added to the total: it comes out of the net profit.'
+                        % (_money(dist), _money(back), months, ret_txt))
+    if ret:
+        return ret, ('No transfers between the practice and personal accounts '
+                     'found on the statements, so this is the return\'s figure.%s '
+                     'Not added to the total: it comes out of the net profit.'
+                     % ret_txt)
+    return None, ('No transfers between the practice and personal accounts were '
+                  'found on the statements, and the return shows none. Ask how '
+                  'the owner takes money out of the practice.')
+
+
+def _tx_digits(v):
+    return ''.join(c for c in str(v or '') if c.isdigit())[-4:]
+
+
 def _flag(folder, number):
     """An analyst-recorded caveat for one section, if there is one.
 
@@ -388,15 +461,44 @@ def build(bundle, folder):
         rows = (got or {}).get('value') or []
         if not rows:
             return Section(number, needed=missing_need, why=missing_why)
+        # Every row says where its value came from and what the account
+        # holds. A value typed from a screenshot or an advisor's summary
+        # carries no holdings, and the row says so rather than sitting
+        # blank, so the gap is chased instead of missed.
+        src_by = (got or {}).get('by') or ''
+        as_of = (got or {}).get('as_of') or ''
+        bare = 0
+
+        def _detail(r):
+            nonlocal bare
+            if (r.get('basis') or '').strip():
+                return r['basis']
+            bare += 1
+            return ('Value only%s%s; what the account holds is not on file '
+                    '(the statement with its holdings is needed).'
+                    % (', from %s' % src_by if src_by else '',
+                       ' as of %s' % as_of if as_of else ''))
+        def _amt(r):
+            v = r.get('amount')
+            if isinstance(v, (int, float)):
+                return _money(v)
+            return v or _money(r.get('value'))
+        listed = [{'label': r.get('label'), 'amount': _amt(r),
+                   'detail': _detail(r)} for r in rows]
+        flag = (got or {}).get('flag')
+        if bare:
+            flag = ((flag + '  ') if flag else '') + (
+                '%d account%s %s a value but no holdings: ask for the latest '
+                'full statement%s.' % (bare, '' if bare == 1 else 's',
+                                      'has' if bare == 1 else 'have',
+                                      '' if bare == 1 else 's'))
         return Section(number,
             'Below is a list of all %s investable assets that %s currently '
             'owns, along with their respective market values.'
             % (heading, bundle.forename or 'the client'),
-            rows=[{'label': r.get('label'),
-                   'amount': r.get('amount') or _money(r.get('value')),
-                   'detail': r.get('basis')} for r in rows],
-            source=(got or {}).get('note') or 'account statements',
-            flag=(got or {}).get('flag'))
+            rows=listed,
+            source=(got or {}).get('note') or src_by or 'account statements',
+            flag=flag)
 
     out.append(_listing(
         'qualified_accounts', 4, 'QUALIFIED',
@@ -459,9 +561,17 @@ def build(bundle, folder):
             m = re.search(r'x(\d{4})', str(r.get('label') or ''))
             if m and m.group(1) in have:
                 continue
-            listed.append({'label': r.get('label'),
-                           'amount': r.get('amount') or _money(r.get('value')),
-                           'basis': r.get('basis')})
+            # Same rule as sections 4: a figure as money, and a row with no
+            # holdings says so rather than sitting blank.
+            amt = r.get('amount')
+            amt = _money(amt) if isinstance(amt, (int, float)) else (amt or _money(r.get('value')))
+            got5 = _inputs.get(folder, 'nonqualified_accounts') or {}
+            basis = (r.get('basis') or '').strip() or (
+                'Value only%s%s; what the account holds is not on file (the '
+                'statement with its holdings is needed).'
+                % (', from %s' % got5['by'] if got5.get('by') else '',
+                   ' as of %s' % got5['as_of'] if got5.get('as_of') else ''))
+            listed.append({'label': r.get('label'), 'amount': amt, 'basis': basis})
         rows = Section(5,
             'Below is a list of all NON-QUALIFIED investable assets that %s '
             'currently owns, along with their respective market values.'
@@ -518,6 +628,39 @@ def build(bundle, folder):
             source='%s Profit and Loss, revenue of %s, at the firm multiple.'
                    % (basis_year, _money(revenue))))
         out[-1].value = value
+        # Two growth rates, one per path (the lead advisor's rule): 3% on
+        # the current path, 4% on the 4Q path, as typed on the review page's
+        # Plan inputs where he changed them.
+        try:
+            import deck as _deck
+            adv = _deck._advisor(folder)
+        except Exception:                                    # noqa: BLE001
+            adv = {}
+
+        def _g(key, default):
+            try:
+                v = float(str(adv.get(key)).replace('%', ''))
+            except (TypeError, ValueError):
+                return default
+            return v / 100.0 if v > 1 else v
+        gc, gq = _g('practice_growth', 0.03), _g('practice_growth_fq', 0.04)
+        try:
+            years_to = int(float(retire_at) - float(age)) if (age and retire_at) else None
+        except (TypeError, ValueError):
+            years_to = None
+        out[-1].rows = [
+            {'label': 'Growth a year, current path', 'amount': '%.1f%%' % (gc * 100),
+             'detail': 'Grown to %s at retirement.' % _money(value * (1 + gc) ** max(0, years_to))
+             if years_to else None},
+            {'label': 'Growth a year, 4Q path', 'amount': '%.1f%%' % (gq * 100),
+             'detail': 'Grown to %s at retirement.' % _money(value * (1 + gq) ** max(0, years_to))
+             if years_to else None}]
+        out[-1].heads = ('Practice value', 'Rate')
+        out[-1].text = re.sub(r'scheduled to grow at [\d.]+% annually',
+                              'scheduled to grow at %s annually on the current path and '
+                              '%s with 4Q,' % (('%.1f' % (gc * 100)).rstrip('0').rstrip('.') + '%',
+                                              ('%.1f' % (gq * 100)).rstrip('0').rstrip('.') + '%'),
+                              out[-1].text)
     else:
         out.append(Section(6, needed='a full year of practice revenue',
                            why='practice value is a multiple of it'))
@@ -701,6 +844,12 @@ def build(bundle, folder):
             rows.append({'label': 'Total earnings',
                          'amount': _money(w2_total + net_shown),
                          'detail': None, 'rule': True})
+        # Below the total, never in it: what actually reaches the household
+        # from the practice, net of money put back in.
+        nd, nd_detail = _net_distributions(folder)
+        rows.append({'label': 'Net distributions (take-home, not in the total)',
+                     'amount': _money(nd) if nd is not None else 'none found',
+                     'detail': nd_detail})
         officer = _series(bundle, 'officer compensation (tax return)',
                           basis_year)
         src = '%s Profit and Loss' % basis_year
@@ -806,7 +955,66 @@ def build(bundle, folder):
                                       'match',
                            why='it is the one lever the client controls '
                                'immediately'))
+
+    # 15 --------------------------------------------------------------------
+    # Insurance in force. Always printed, so a plan with nothing on file
+    # says so rather than leaving the reader to wonder whether it was looked
+    # at: the policies Claude read, and any premiums the bank statements
+    # show, else what is still needed.
+    out.append(_insurance(folder, cash))
     return out
+
+
+def _insurance(folder, cash):
+    try:
+        import doc_readings as _dr
+        pols = (_dr.check(folder)[0] or {}).get('insurance') or []
+    except Exception:                                        # noqa: BLE001
+        pols = []
+    per = {'month': 12, 'quarter': 4, 'year': 1}
+    rows = []
+    for p in pols:
+        label = ' '.join(x for x in ((p.get('carrier') or '').strip(),
+                                     (p.get('kind') or 'policy').strip()) if x)
+        if p.get('insured'):
+            label += ', on %s' % p['insured']
+        bits = []
+        if p.get('coverage'):
+            bits.append('%s %s' % (_money(p['coverage']),
+                                   p.get('coverage_note') or 'coverage'))
+        if p.get('cash_value'):
+            bits.append('cash value %s' % _money(p['cash_value']))
+        if p.get('premium'):
+            bits.append('premium %s a %s' % (_money(p['premium']),
+                                             p.get('premium_period') or 'month'))
+        if p.get('source'):
+            bits.append('from %s' % p['source'])
+        yearly = (p.get('premium') or 0) * per.get(p.get('premium_period') or 'month', 12)
+        rows.append({'label': label, 'amount': _money(yearly) if yearly else None,
+                     'detail': '; '.join(bits) + '.' if bits else None})
+    seen = [(n, a) for n, a, k in ((cash or {}).get('fixed_rows') or ())
+            if k == 'Insurance']
+    if seen and not pols:
+        for name, monthly in seen:
+            rows.append({'label': '%s (premium on the bank statements)' % name,
+                         'amount': _money(monthly * 12),
+                         'detail': '%s a month; the policy itself is not on file.'
+                                   % _money(monthly)})
+    if not rows:
+        return Section(15, needed='the life, disability and business overhead '
+                                  'insurance policies in force (none found in '
+                                  'the documents, and no premiums on the bank '
+                                  'statements)',
+                       why='the plan has to show what protects the income and '
+                           'the debts if something happens to the owner')
+    sec = Section(15, '%s the following insurance in force.'
+                  % ('We show' if pols else 'The bank statements show premiums for')
+                  + ('' if pols else ' The policies themselves are still needed.'),
+                  rows=rows,
+                  source='Policy documents.' if pols else 'Bank statements.',
+                  flag=_flag(folder, 15))
+    sec.heads = ('Policy', 'Premium a year')
+    return sec
 
 
 _MATURITY = {}

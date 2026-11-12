@@ -437,6 +437,7 @@ TITLES = {
     12: 'Personal spending',
     13: 'Surplus',
     14: 'Contributions',
+    15: 'Insurance',
 }
 
 

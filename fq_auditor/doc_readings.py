@@ -77,7 +77,15 @@ THE FILE (written by Claude, read here; years are strings)
      (one entry per stub or journal; every household member on the
       practice's payroll, the owner first. The Income assumption lists each
       person's gross for the period times periods_per_year. The newest
-      pay_date for a person wins. periods_per_year must be 12, 24, 26 or 52)
+      pay_date for a person wins. periods_per_year must be 12, 24, 26 or 52),
+ "insurance": [{"source": "<policy statement or illustration>",
+                "kind": "life | disability | overhead | long-term care | umbrella | other",
+                "carrier": "", "insured": "<who is covered>",
+                "coverage": 0, "coverage_note": "<face amount, or monthly benefit>",
+                "premium": 0, "premium_period": "month | quarter | year",
+                "cash_value": 0}]
+     (one entry per policy in force; coverage and premium must be printed
+      on the document; leave a figure out rather than guess it)
 }
 """
 import argparse
@@ -503,6 +511,21 @@ def check(folder):
                         'pay_date': r.get('pay_date'), 'source': src,
                         'basis': r.get('basis')}
     good['pay'] = list(pay.values())
+
+    # ------------------------------------------------- insurance in force
+    # The Assumptions' Insurance section lists each policy. Figures must be
+    # on the policy document; a policy with none is still listed by name.
+    ins = []
+    for r in raw.get('insurance') or ():
+        src = r.get('source') or ''
+        figs = [v for v in (r.get('coverage'), r.get('premium'),
+                            r.get('cash_value')) if v]
+        if figs and not need(src, 'insurance (%s)' % (r.get('carrier') or 'policy'), *figs):
+            continue
+        ins.append({k: r.get(k) for k in ('source', 'kind', 'carrier', 'insured',
+                                          'coverage', 'coverage_note', 'premium',
+                                          'premium_period', 'cash_value')})
+    good['insurance'] = ins
     return good, problems
 
 

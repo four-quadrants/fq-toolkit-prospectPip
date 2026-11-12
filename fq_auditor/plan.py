@@ -22,7 +22,8 @@ import math
 import re
 
 PRACTICE_MULTIPLE = 0.65     # of collections, as in every worksheet read
-PRACTICE_GROWTH = 0.03       # his K column
+PRACTICE_GROWTH = 0.03       # his K column; the current path
+PRACTICE_GROWTH_FQ = 0.04    # the 4Q path: a better-run practice grows faster
 BUILDING_GROWTH = 0.02       # his L column
 SALE_NET = 0.70              # after taxes, on every deck and worksheet read
 OVERHEAD_STEP = 0.03         # "3% lower overhead = 122.4k"

@@ -231,6 +231,12 @@ why). The Income assumption lists every W-2 by person, annualized from them,
 with the W-2 beside it (the lead advisor's rule). Never guess the period
 count: say what shows it (a pay frequency line, two dated journals).
 
+**Insurance, always.** Read every insurance policy statement or illustration
+in the folder (life, disability, overhead, long-term care, umbrella) into
+`doc_readings.json` under `insurance`. The Assumptions' Insurance section
+(15) lists them; with none it says what is still needed, never leaves the
+section out.
+
 ## How to check a change
 
 - `python3 -m pyflakes <file>` on what you touched.

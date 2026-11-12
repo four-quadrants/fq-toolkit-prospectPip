@@ -113,7 +113,14 @@ def apply(folder, plan_json):
                 entry[key] = v
                 changed.append(key)
             continue
+        if key in ('practice_growth', 'practice_growth_fq'):
+            v = _num(raw)
+            if v is not None:
+                entry[key] = v / 100.0 if v > 1 else v
+                changed.append(key)
+            continue
         if key in ('retire_age', 'target_income', 'sale_net', 'sale_net_fq',
+                   'debt_at_sale', 'debt_at_sale_fq',
                    'start_portfolio',
                    'current_savings', 'ideal_bank_balance', 'target_overhead',
                    'income_w2_proposed', 'income_tax_rate_proposed',
@@ -679,16 +686,28 @@ def seed(folder, outdir, mode='review'):
              basis='IC form: retirement age goal.'),
         dict(key='target_income', label='Target retirement income, a year',
              proposed=money(p['income']), basis='Today’s dollars.'),
-        dict(key='sale_net', label='Practice and building sale, net',
-             proposed=money(p['sale_net']),
-             basis='65% of collections grown to retirement, plus the building, after tax.'),
-        # The sale on the 4Q path: a better-run practice sells for more. The
-        # lead advisor's Spaulding deck used $0.937M on the current path and
-        # $1.791M with 4Q; without this figure the page could only set one.
-        dict(key='sale_net_fq', label='Practice sale, net, on the 4Q path',
-             proposed=money(D['adv'].get('sale_net_fq') or p['sale_net']),
-             basis='Same as the current path unless you set it: the practice '
-                   'the plan builds should sell for more.'),
+        # The sale on each path (the lead advisor's rule): the practice grows
+        # 3% a year on the current path and 4% with 4Q, the building 2%, and
+        # the practice and building debt still owed at the sale comes off.
+        dict(key='practice_growth', label='Practice growth a year, current path',
+             proposed='%.1f%%' % (D['practice_growth'] * 100),
+             basis='Firm standard 3%. The building grows 2% on both paths.'),
+        dict(key='practice_growth_fq', label='Practice growth a year, 4Q path',
+             proposed='%.1f%%' % (D['practice_growth_fq'] * 100),
+             basis='Firm standard 4%: the practice the plan builds grows faster.'),
+        dict(key='debt_at_sale', label='Practice and building debt still owed at the sale',
+             proposed=money(D.get('sale_debt')),
+             basis='Today\u2019s practice and building loans run forward to the sale '
+                   'with their payments (rate assumed where none is on file). '
+                   'Personal debt stays out.'),
+        dict(key='sale_net', label='Practice and building sale, net, current path',
+             proposed=money(D.get('sale_derived')),
+             basis='65% of collections grown at the current-path rate, plus the '
+                   'building, 70% kept after tax, less the debt still owed.'),
+        dict(key='sale_net_fq', label='Practice and building sale, net, 4Q path',
+             proposed=money(D.get('sale_derived_fq')),
+             basis='The same at the 4Q growth rate, less the debt at the sale on '
+                   'the 4Q path (the Recommendations card, editable there).'),
         dict(key='start_portfolio', label='Starting portfolio', proposed=money(p['start']),
              basis='Qualified plus non-qualified investable assets on file.'),
         dict(key='current_savings', label='Saved a year today',
@@ -1014,9 +1033,15 @@ def seed(folder, outdir, mode='review'):
                    for k, v in (D['levers'] or {}).items()],
         'sale': {'collections': round(D['collections'] or 0), 'multiple': P.PRACTICE_MULTIPLE,
                  'years': int((D['retire_age'] or 0) - (D['age'] or 0)),
-                 'growth': P.PRACTICE_GROWTH, 'building': D['building'],
+                 'growth': D['practice_growth'], 'growth_fq': D['practice_growth_fq'],
+                 'building': D['building'],
                  'building_growth': P.BUILDING_GROWTH, 'net_factor': P.SALE_NET,
                  'gross': round(D['sale_gross'] or 0), 'net': round(D['sale_derived'] or 0),
+                 'gross_fq': round(D.get('sale_gross_fq') or 0),
+                 'net_fq': round(D.get('sale_derived_fq') or 0),
+                 'debt': round(D.get('sale_debt') or 0),
+                 'debt_fq': round(D.get('sale_debt_fq') or 0),
+                 'debt_items': D.get('sale_debt_items') or [],
                  'advisor': D['adv'].get('sale_net')},
         'projection': {'rows': proj_rows, 'current_rate': S.CURRENT_RETURN,
                        'fq_rate': S.FQ_RETURN, 'first_year_fq': S.FIRST_YEAR_FQ_RETURN,
@@ -1032,7 +1057,8 @@ def seed(folder, outdir, mode='review'):
         'age': D['age'], 'retire_age': D['retire_age'], 'start': D['start'],
         'current_savings': D['current_savings'], 'spend': D['spend'],
         'schedule': [list(x) for x in (D['schedule'] or [])], 'income': D['income'],
-        'sale_net': D.get('sale') or 0, 'horizon': adv.get('horizon_age') or 90,
+        'sale_net': (D['proj_sale_cur'] if D.get('proj_sale_cur') is not None else D.get('sale')) or 0,
+        'sale_net_fq': D.get('sale') or 0, 'horizon': adv.get('horizon_age') or 90,
         'first_year': pr.get('first_year'), 'overhead': lv.get('overhead'),
         'target_overhead': lv.get('target_overhead') or 0.6,
         'net_collections': lv.get('net_collections'),
@@ -1042,7 +1068,8 @@ def seed(folder, outdir, mode='review'):
         'sale_building': (D['building'] or 0) * (1 + P.BUILDING_GROWTH) ** max(0, int((D['retire_age'] or 0) - (D['age'] or 0)))}
     work['model']['rates'] = {'inflation': S.INFLATION, 'current': S.CURRENT_RETURN,
                               'fq': S.FQ_RETURN, 'first': S.FIRST_YEAR_FQ_RETURN,
-                              'practice_growth': P.PRACTICE_GROWTH,
+                              'practice_growth': D['practice_growth'],
+                              'practice_growth_fq': D['practice_growth_fq'],
                               'building_growth': P.BUILDING_GROWTH}
     work['base'] = {'fq_at': pr.get('fq_at_retirement'),
                     'cur_at': pr.get('current_at_retirement')}
