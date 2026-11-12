@@ -69,7 +69,15 @@ THE FILE (written by Claude, read here; years are strings)
       advisor counts them with the practice, because the practice's rent
       pays them: the sheet shows them as their own lines inside practice
       debt, with a combined total)
- "profile": {"owned_since": {"value": "", "source": "<file>"}}
+ "profile": {"owned_since": {"value": "", "source": "<file>"}},
+ "pay": [{"source": "<paystub or payroll journal>", "pay_date": "2026-10-08",
+          "periods_per_year": 26, "basis": "<why 26: e.g. two journals two
+          weeks apart, or the stub's own pay frequency line>",
+          "people": [{"name": "<as printed>", "gross": 0}]}]
+     (one entry per stub or journal; every household member on the
+      practice's payroll, the owner first. The Income assumption lists each
+      person's gross for the period times periods_per_year. The newest
+      pay_date for a person wins. periods_per_year must be 12, 24, 26 or 52)
 }
 """
 import argparse
@@ -469,6 +477,32 @@ def check(folder):
             cash.append({'account': a.get('account'), 'months': rows,
                          'note': a.get('note')})
     good['cash_light'] = cash
+
+    # ------------------------------------------------- pay, by person
+    # Each household member's gross pay for one period, from a paystub or
+    # payroll journal, so the Income assumption can show every W-2 by person
+    # annualized (the lead advisor's rule). The gross must be printed on the
+    # stub; the period count is stated, never guessed by the code.
+    pay = {}
+    for r in raw.get('pay') or ():
+        src = r.get('source') or ''
+        n = r.get('periods_per_year')
+        if n not in (12, 24, 26, 52):
+            problems.append('%s: periods_per_year %r is not 12, 24, 26 or 52'
+                            % (src, n))
+            continue
+        for person in r.get('people') or ():
+            name, gross = person.get('name'), person.get('gross')
+            if not name or not gross or not need(src, 'pay for %s' % name, gross):
+                continue
+            key = ' '.join(name.lower().replace(',', ' ').split())
+            if key in pay and (pay[key]['pay_date'] or '') > (r.get('pay_date') or ''):
+                continue
+            pay[key] = {'name': name, 'gross': float(gross), 'periods': n,
+                        'annual': round(float(gross) * n, 2),
+                        'pay_date': r.get('pay_date'), 'source': src,
+                        'basis': r.get('basis')}
+    good['pay'] = list(pay.values())
     return good, problems
 
 

@@ -302,10 +302,10 @@ tr.off td{opacity:.55}
   <section id="recsec" data-tab="recs">
     <details class="tabhelp"><summary>What this tab is for</summary><div>Where the new savings come from: each recommendation, what it frees up a year, and how much is invested in years 1 and 2. Untick what does not fit, change amounts, add from the library.<br><b>Where it ends up:</b> what stays ticked is the <b>Annual savings projection</b> slide, and the savings schedule behind <b>Your savings future</b> and the opening and closing slides.</div></details>
     <h2>Recommendations <small id="reccount"></small></h2>
-    <p class="note">The recommendations this client's documents point to are ticked, with the figure and the reason, alongside the firm's most common ones. Untick what does not fit, tick anything else that does and fill in its figures. <b>Add from the library</b> brings in any other recommendation the firm has used; <b>Add a recommendation</b> writes a new one, and it joins the library for every client after this one. What stays ticked becomes the savings slide and the savings schedule. Amounts are a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
+    <p class="note">The recommendations this client's documents point to are ticked, with the figure and the reason, alongside the firm's most common ones. Untick what does not fit, tick anything else that does and fill in its figures. <b>Add from the library</b> brings in any other recommendation the firm has used; <b>Add a recommendation</b> writes a new one, and it joins the library for every client after this one. What stays ticked becomes the savings slide and the savings schedule. <b>Cashflow created</b> is what each frees up a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
     <div class="wi-results" id="recimpact" style="margin-bottom:14px"></div>
     <div class="card ledger"><table>
-      <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">A year</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
+      <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">Cashflow created</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
       <tbody id="recs"><tr><td colspan="5" class="empty">The recommendations appear here once the analyst loads them.</td></tr></tbody>
     </table>
     <div class="row-actions"><button type="button" id="recfromlib" class="primary-btn">Add from the library</button> <button type="button" id="recadd" class="ghost-btn">Add a recommendation</button></div></div>
@@ -713,7 +713,7 @@ function fqModel(P){
       var note='<input type="text" class="rnote" data-rk="'+x.k+'" data-f="note" value="'+v('note','')+'" placeholder="Note (why, when, conditions)" aria-label="Note">';
       return '<tr class="'+(isOn?'':'off')+'"><td><input type="checkbox" data-rk="'+x.k+'" data-f="on" '+(isOn?'checked':'')+' aria-label="Include"></td>'+
         '<td>'+lab+'<div class="rmeta">Starts in '+ysel+note+'</div></td>'+
-        '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="gain" value="'+v('gain',m0(r.gain))+'" placeholder="amount" aria-label="A year"></td>'+
+        '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="gain" value="'+v('gain',m0(r.gain))+'" placeholder="amount" aria-label="Cashflow created"></td>'+
         '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="inv1" value="'+v('inv1',m0(inv[0]))+'" placeholder="0" aria-label="Year 1"></td>'+
         '<td class="r"><input type="text" class="rn" data-rk="'+x.k+'" data-f="inv2" value="'+v('inv2',m0(inv[1]))+'" placeholder="0" aria-label="Year 2"></td></tr>';
     }).join('');
@@ -1429,7 +1429,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v57';
+  var BUILD='v58';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){

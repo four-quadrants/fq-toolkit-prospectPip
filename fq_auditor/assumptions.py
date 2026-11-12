@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import facts as _facts                                       # noqa: E402
 import compose as _compose                                   # noqa: E402
 import inputs as _inputs                                     # noqa: E402
+import store as _store                                       # noqa: E402
 
 try:
     import cashflow as _cashflow                             # noqa: E402
@@ -153,6 +154,93 @@ def _series(bundle, name, year=None):
         got = {y: v for y, v in by_year.items() if v is not None}
         return got
     return None
+
+
+def _long_date(iso):
+    """2026-10-08 as October 8, 2026; anything else as given."""
+    try:
+        d = datetime.date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    return '%s %d, %d' % (d.strftime('%B'), d.day, d.year)
+
+
+def _w2_rows(folder, wages):
+    """The Income assumption's W-2 lines, one per household member.
+
+    Paystubs first (doc_readings "pay": gross for one period times the
+    periods a year, each gross checked on the stub), with that person's W-2
+    beside it when the returns were read (income_facts). Without paystubs,
+    one line per W-2 read (owner, then spouse). Without either, the P&L's
+    doctor wages as one line, as before. Each row carries '_v', the figure
+    the total adds.
+    """
+    grow = 'Grown at the %.1f%% inflation rate until retirement.' % FIRM['inflation']
+    try:
+        with open(_store.json_path(folder, 'income_facts.json')) as fh:
+            f = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        f = {}
+    owner = os.path.basename(folder.rstrip('/')).split(' - ')[0]
+    owner_first = (owner.split(',')[1].split() or [''])[0] if ',' in owner else ''
+    spouse = (f.get('spouse_name') or '').split(' ')[0]
+    w2_of = {}
+    if owner_first and f.get('w2'):
+        w2_of[owner_first.lower()] = f['w2']
+    if spouse and f.get('spouse_w2'):
+        w2_of[spouse.lower()] = f['spouse_w2']
+    yr = f.get('year')
+    try:
+        import doc_readings as _dr
+        pay = (_dr.check(folder)[0] or {}).get('pay') or []
+    except Exception:                                        # noqa: BLE001
+        pay = []
+
+    def first_of(name):
+        # "Example, Jane M" or "Jane Example"
+        if ',' in name:
+            bits = name.split(',', 1)[1].split()
+        else:
+            bits = name.split()
+        return bits[0] if bits else name
+
+    def display(name):
+        if ',' in name:
+            last, rest = name.split(',', 1)
+            return '%s %s' % (first_of(name), last.strip().title())
+        return name
+
+    rows = []
+    if pay:
+        # The owner first, then the rest as the stubs list them.
+        pay = sorted(pay, key=lambda p: first_of(p['name']).lower() != owner_first.lower())
+        for p in pay:
+            per = {12: 'month', 24: 'half-month', 26: 'two weeks', 52: 'week'}[p['periods']]
+            bits = ['%s a pay period (every %s) times %d, from the paystub of %s.'
+                    % (_money(p['gross'], pence=True), per, p['periods'],
+                       _long_date(p.get('pay_date')) or 'the latest stub')]
+            w2 = w2_of.get(first_of(p['name']).lower())
+            if w2:
+                bits.append('%s W-2: %s.' % (yr or 'Last year\'s', _money(w2)))
+            if first_of(p['name']).lower() == owner_first.lower():
+                bits.append(grow)
+            rows.append({'label': '%s, W-2 wages' % display(p['name']),
+                         'amount': _money(p['annual']), 'detail': ' '.join(bits),
+                         '_v': p['annual'], '_stub': True,
+                         '_owner': first_of(p['name']).lower() == owner_first.lower()})
+        return rows
+    # No paystubs: the owner's wages stay the P&L's (as before), named, and
+    # a spouse's W-2 read from the returns gets its own line.
+    surname = owner.split(',')[0].strip()
+    rows.append({'label': ('%s %s, W-2 wages' % (owner_first, surname)).strip()
+                 if owner_first else 'W-2 wages from the practice',
+                 'amount': _money(wages), 'detail': grow, '_v': wages})
+    if spouse and f.get('spouse_w2'):
+        rows.append({'label': '%s, W-2 wages' % spouse,
+                     'amount': _money(f['spouse_w2']),
+                     'detail': 'Read from the %s returns.' % (yr or 'latest'),
+                     '_v': f['spouse_w2']})
+    return rows
 
 
 def _flag(folder, number):
@@ -579,25 +667,45 @@ def build(bundle, folder):
         # reader to hold the W-2 in their head while the net profit arrives.
         # As a table the question "what does he actually take out, and what
         # happens to it" is answered by looking.
-        rows = []
-        if wages:
-            rows.append({'label': 'W-2 wages from the practice',
-                         'amount': _money(wages),
-                         'detail': 'Grown at the %.1f%% inflation rate until '
-                                   'retirement.' % FIRM['inflation']})
+        # Every W-2 by person (the lead advisor's rule): the owner, a spouse
+        # and any other family member on the payroll, each annualized from
+        # their paystubs where Claude read them, else from the W-2s. The
+        # P&L's doctor wages remain the fallback for a file with neither.
+        rows = _w2_rows(folder, wages) if wages else []
+        w2_total = sum(r['_v'] for r in rows) if rows else 0
+        stubs = any(r.get('_stub') for r in rows)
+        # The owner's W-2 at today's pay rate (from the paystubs) is not the
+        # P&L year's W-2. Net profit is restated with today's W-2 taken out,
+        # so the lines add up and the total is not counted twice: a raise
+        # moves money from profit to W-2, it does not add to the household.
+        owner_now = sum(r['_v'] for r in rows if r.get('_owner'))
+        net_shown = net
+        restated = bool(net and wages and owner_now and abs(owner_now - wages) >= 1)
+        if restated:
+            net_shown = net - (owner_now - wages)
+        for r in rows:
+            for k in ('_v', '_stub', '_owner'):
+                r.pop(k, None)
         if net:
+            detail = ('Revenue of %s less overhead of %s, the owner\'s W-2 and '
+                      'depreciation.' % (_money(rev), _money(exp)))
+            if restated:
+                detail = ('Revenue of %s less overhead of %s, the owner\'s W-2 at '
+                          'today\'s pay rate and depreciation (the %s P&L, with a '
+                          'W-2 of %s, shows %s).' % (_money(rev), _money(exp),
+                                                    basis_year, _money(wages), _money(net)))
             rows.append({'label': 'Net profit',
-                         'amount': _money(net),
-                         'detail': 'Revenue of %s less overhead of %s, the W-2 and '
-                                   'depreciation. Distributions grown at 5.0%% until '
-                                   'retirement.' % (_money(rev), _money(exp))})
+                         'amount': _money(net_shown),
+                         'detail': detail + ' Distributions grown at 5.0% until retirement.'})
         if wages and net:
             rows.append({'label': 'Total earnings',
-                         'amount': _money(wages + net),
+                         'amount': _money(w2_total + net_shown),
                          'detail': None, 'rule': True})
         officer = _series(bundle, 'officer compensation (tax return)',
                           basis_year)
         src = '%s Profit and Loss' % basis_year
+        if stubs:
+            src += '; W-2 wages from the paystubs, with the W-2s'
         if officer:
             src += ', confirmed against officer compensation of %s on the ' \
                    '1120-S' % _money(officer)

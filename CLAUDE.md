@@ -224,6 +224,13 @@ document and every total must tie, or it is left out. Run
 `python3 fq_auditor/doc_readings.py "<client>"` and fix anything it lists
 before building.
 
+**Paystubs, always.** Before building Assumptions, read every paystub or
+payroll journal in the folder into `doc_readings.json` under `pay` (each
+household member's gross for one period, and how many periods a year, with
+why). The Income assumption lists every W-2 by person, annualized from them,
+with the W-2 beside it (the lead advisor's rule). Never guess the period
+count: say what shows it (a pay frequency line, two dated journals).
+
 ## How to check a change
 
 - `python3 -m pyflakes <file>` on what you touched.
