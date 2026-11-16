@@ -509,11 +509,30 @@ def gather(folder, client=None):
             if r.get('fixed'):
                 bits.append(str(r['fixed']).lower())
             said = (r.get('description') or '').lower()
+            # The term, worked out when the start and maturity are written in
+            # the description ("orig 39,322 (Jan 2026), matures Jan 2027"):
+            # the lead advisor wrote "TERM=1 YR (see original/maturity date)"
+            # on every such loan the notes had marked as missing a term.
+            mon = r'(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.?\s+(\d{4})'
+            st = re.search(r'\(' + mon + r'\)', said)
+            mt = re.search(r'matur\w*\s+' + mon, said)
+            if not span and st and mt:
+                order = 'jan feb mar apr may jun jul aug sep oct nov dec'.split()
+                months_ = ((int(mt.group(2)) - int(st.group(2))) * 12
+                           + order.index(mt.group(1)[:3]) - order.index(st.group(1)[:3]))
+                if months_ > 0:
+                    yrs = months_ / 12.0
+                    bits.append('term %s (start to maturity)' % (
+                        ('%g yr' % round(yrs, 1)) if months_ % 12 == 0 or months_ >= 24
+                        else '%d months' % months_))
+                    said += ' term year'
             missing = [k for k, have in (
                 ('rate', r.get('rate') or '%' in said),
                 ('payment', r.get('payment')),
-                ('original amount', r.get('original') or 'origin' in said),
-                ('term', r.get('maturity') or ' yr' in said or 'year' in said or 'month' in said),
+                ('original amount', r.get('original') or 'origin' in said
+                 or re.search(r'\borig\s+\$?[\d,]{3,}', said)),
+                ('term', span or r.get('maturity') or 'year' in said or 'month' in said
+                 or re.search(r'\d[- ]?yrs?\b', said)),
                 ('fixed/variable', r.get('fixed') or 'fixed' in said or 'variable' in said
                  or 'arm' in said.split() or 'ibr' in said)) if not have]
             if missing:
@@ -581,7 +600,12 @@ def gather(folder, client=None):
 
     # ------------------------------------------------------------- personal
     personal = [
+        # The birthdate where the IC form, the call or the portal gave one;
+        # else read from the return (the lead advisor's Simpson note), and
+        # said where it came from.
         Fact('Age', _ic.money(form.get('age')), NUM, ic_name, 'age'),
+    ] + ([Fact('Birthdate', pv_('birthdate')[0], TEXT, pv_('birthdate')[1])]
+         if pv_('birthdate')[0] else []) + [
         Fact('Marital status', form.get('marital_status'), TEXT, ic_name),
         Fact('Residence', _compose.residence(folder), TEXT,
              'document letterheads', 'the address that is not the practice'),
@@ -608,6 +632,7 @@ def gather(folder, client=None):
              why='Half the retirement question is what is already there'),
         Fact('CPA rating', form.get('cpa_rating'), TEXT, ic_name,
              'how would you rate your CPA'),
+        _accounting_fee(folder),
         Fact('Tax surprises', form.get('tax_surprise'), TEXT, ic_name,
              'owe or being refunded'),
         Fact('Liquid if they walked away today', form.get('saved_liquid'),
@@ -700,6 +725,35 @@ def gather(folder, client=None):
         name = (role.get('name') or code).replace('Dr. ', '').split()[-1]
         series.append(('production, %s' % name,
                        {y: providers(y).get(code) for y in years}, MONEY))
+    # Doctor production as a total, then one row per doctor (the lead
+    # advisor's Simpson note: "break production down by doctor"). From the
+    # provider roles where the practice has them set up; else from the
+    # provider reports Claude read, by the name each report prints; else the
+    # total alone, as gross less hygiene.
+    docprod = {}
+    for y in years:
+        v = sum(providers(y).get(c) or 0 for c, _r in docs_list) or \
+            ((prod.get(y) or {}).get('by_role') or {}).get('doctor')
+        if not v and gross.get(y) and hyg.get(y):
+            v = round(gross[y] - hyg[y], 2)
+        docprod[y] = v or None
+    series.append(('doctor production, all doctors', docprod, MONEY))
+    if not docs_list:
+        names = []
+        for y in years:
+            for n_, v in ((prod.get(y) or {}).get('doctors') or {}).items():
+                if n_ not in names and abs(v or 0) >= 0.01 * (docprod.get(y) or 1):
+                    names.append(n_)
+        pdays = _pf.gather(folder).get('doctor_days', {}) or {}
+        for n_ in names:
+            vals = {y: ((prod.get(y) or {}).get('doctors') or {}).get(n_) for y in years}
+            series.append(('doctor production, %s' % n_, vals, MONEY))
+            key = n_.replace('Dr. ', '').split()[-1] if n_.split() else n_
+            dd = pdays.get(key) or {}
+            if dd:
+                series.append(('production / day, %s' % n_,
+                               {y: ratio(vals.get(y), dd.get(y), pct=False)
+                                for y in years}, MONEY2))
     series.append(('hygiene production', hyg, MONEY))
 
     for code, role in docs_list:
@@ -837,6 +891,59 @@ def gather(folder, client=None):
             'tax_source': (tax.get(y) or {}).get('source')}
         for y in oh_years}
     return attach_notes(bundle, folder)
+
+
+ACCOUNTING_PAYEE = re.compile(r'\b(?:cpas?|llp|pllc cpa|accounting|accountants?|'
+                              r'bookkeep\w*|tax\s+(?:service|pros?|group)|aprio|'
+                              r'cliftonlarson|rehmann|plante|wipfli)\b', re.I)
+NOT_ACCOUNTING = re.compile(r'intuit|payroll|irs\b|usataxpymt|state tax|dept of rev', re.I)
+
+
+def _accounting_fee(folder):
+    """What the practice pays its accountant now, from the practice bank
+    statements (the lead advisor's Simpson note: "currently paying Aprio
+    1225/mo from practice bank stmts"): the payee and a month's average,
+    so the firm's own fee has something to stand beside."""
+    label = 'Current accounting fee'
+    try:
+        import transactions as _tx
+        moves = _tx.gather(folder)
+    except Exception:                                        # noqa: BLE001
+        moves = {}
+    paid, dates = {}, []
+    for (side, _k), rows in moves.items():
+        if side != 'Business':
+            continue
+        for r in rows:
+            if r.get('date'):
+                dates.append(r['date'])
+            d = r.get('description') or ''
+            if r.get('direction') != 'debit' or not r.get('amount'):
+                continue
+            if not ACCOUNTING_PAYEE.search(d) or NOT_ACCOUNTING.search(d):
+                continue
+            m = re.search(r'\bto\s+(.+?)(?:\s+\d{5,}|\s*$)', d, re.I)
+            who = (m.group(1) if m else ACCOUNTING_PAYEE.search(d).group(0)).strip(' ,')
+            key = (r['date'], round(r['amount'], 2))
+            paid.setdefault(who, {})[key] = r['amount']
+    paid = {w: v for w, v in paid.items() if len(v) >= 2}
+    if not paid or not dates:
+        return Fact(label, None, MONEY, 'practice bank statements',
+                    'payments to the accountant', needed='Practice bank statements, '
+                    'or what they pay their CPA and bookkeeper a month',
+                    why='The firm\u2019s fee is weighed against what they pay now')
+    months = max(1, len({(d.year, d.month) for d in dates}))
+    total = sum(sum(v.values()) for v in paid.values())
+    bits = []
+    for w, v in paid.items():
+        amts = sorted(set(round(x) for x in v.values()))
+        when = sorted(d for d, _a in v)
+        bits.append('%s: %d payments of %s, %s to %s' % (
+            w, len(v), ' / '.join('${:,.0f}'.format(a) for a in amts),
+            when[0].strftime('%b %Y'), when[-1].strftime('%b %Y')))
+    return Fact(label, round(total / months), MONEY, 'practice bank statements',
+                'a month, averaged over the statements',
+                note='; '.join(bits) + '.')
 
 
 def _providers_for(prod, year):

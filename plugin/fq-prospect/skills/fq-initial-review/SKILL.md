@@ -165,10 +165,28 @@ What the lead advisor expects in every initial notes (format in
   year-end balance sheet, short terms, a pending mortgage net of the home
   sold, IBR resetting with income, collections projected against last year,
   late or possibly unfinal returns.
+- **Talking points: `talking_points` in summary.json** (a list of short
+  lines in the lead advisor's style: a topic in capitals, then the proof).
+  Build them from EVERY IC form question and answer (`_Audit/ic_form.json`:
+  the statements, challenges, what they tried, spouse on the same page), the
+  call notes and the figures. Weigh the answers that did NOT go the way we
+  would want as much as the pains admitted ("spends an appropriate amount on
+  the business side", "has a plan", "has someone dental-specific"): each is a
+  point to probe. Typical topics: entity structuring, a building decision
+  and its year, insurance plan strategy, practice efficiencies (overhead now
+  against the target, fees against the study, the adjustment rate), income
+  structuring (W-2 vs distributions vs cash flow vs taxes), tax management
+  (surprises, late filing), the $5K decisions, a comprehensive plan, the
+  business model. The Summary prints them first, then the IC form both ways
+  (the sheet sorts that itself), then the standard lines.
 - **Areas to improve: leave `areas` out of summary.json.** The sheet writes
-  the three standard lines (overhead against the 60% target, savings, debt)
-  and leaves room; the lead advisor writes the rest. Give
-  `"overhead_target"` only when he has said a different target.
+  the standard lines (overhead against the target the lead advisor types on
+  the first page, savings, debt). Give `"overhead_target"` only when he has
+  said one; otherwise the first page asks for it.
+- **Every return on file goes in `doc_readings.json` `tax`**, Schedule C
+  included and the purchase year too (a part-year return still shows what
+  the practice cost to run). Birthdates: from the IC form, the call or the
+  portal; only when none gives one, from the return (`profile.birthdate`).
 - **Tax notes:** entity type, refunds rolled forward, late filings, amended
   returns not sent, quarterly estimates.
 

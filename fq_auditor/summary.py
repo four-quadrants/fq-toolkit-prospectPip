@@ -113,11 +113,22 @@ def period_months(text):
     head = '\n'.join((text or '').split('\n')[:12]).lower()
     # "January-December, 2024", and QuickBooks Online's
     # "January 1-December 31, 2024", with a day after each month.
-    m = re.search(r'(%s)(?:\s+\d{1,2})?\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*(%s)'
+    m = re.search(r'(%s)(?:\s+(\d{1,2})(?!\d))?\s*(?:-|–|—|\s+through\s+|\s+to\s+)\s*(%s)(?:\s+(\d{1,2})(?!\d))?'
                   % ('|'.join(MONTHS), '|'.join(MONTHS)), head)
     if m:
-        a, b = MONTHS.index(m.group(1)), MONTHS.index(m.group(2))
-        return (b - a) % 12 + 1
+        a, b = MONTHS.index(m.group(1)), MONTHS.index(m.group(3))
+        whole = (b - a) % 12 + 1
+        # "January 1-November 5, 2026" is ten months and five days, not
+        # eleven: annualizing it as eleven understated the year by 9% (the
+        # lead advisor's Simpson note). A part month counts to the quarter.
+        if m.group(4):
+            import calendar
+            yr = re.search(r'20\d\d', head)
+            last = calendar.monthrange(int(yr.group()) if yr else 2001, b + 1)[1]
+            day = int(m.group(4))
+            if day < last:
+                whole = whole - 1 + round(day / float(last) * 4) / 4.0
+        return whole
     for mon in MONTHS:
         if re.search(r'\b%s\b[,\s]+20\d\d' % mon, head):
             return 1

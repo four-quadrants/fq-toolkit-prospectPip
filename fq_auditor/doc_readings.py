@@ -69,7 +69,11 @@ THE FILE (written by Claude, read here; years are strings)
       advisor counts them with the practice, because the practice's rent
       pays them: the sheet shows them as their own lines inside practice
       debt, with a combined total)
- "profile": {"owned_since": {"value": "", "source": "<file>"}},
+ "profile": {"owned_since": {"value": "", "source": "<file>"},
+             "birthdate": {"value": "<MM/DD/YYYY>", "source": "<file>"}},
+     (birthdate: from the IC form, the call notes or the portal first;
+      only when none of them gives it, from the tax return, with the return
+      as its source)
  "pay": [{"source": "<paystub or payroll journal>", "pay_date": "2026-10-08",
           "periods_per_year": 26, "basis": "<why 26: e.g. two journals two
           weeks apart, or the stub's own pay frequency line>",
@@ -227,6 +231,17 @@ def _close(a, b):
     return a is not None and b is not None and abs(float(a) - float(b)) <= TOL
 
 
+def _by_provider(reps):
+    out = {}
+    for x in reps:
+        # One doctor under several codes, or named differently from year to
+        # year ("Prior owner (two codes)", "Prior owner, code 1"): one row.
+        name = re.sub(r',?\s*\(?(?:code\s*\d+|two codes|\d+ codes)\)?', '',
+                      (x.get('provider') or 'Doctor')).strip() or 'Doctor'
+        out[name] = round(out.get(name, 0) + (x.get('production') or 0), 2)
+    return out
+
+
 def check(folder):
     """(verified readings, problems). Only verified figures are returned."""
     path = _store.json_path(folder, FILE)
@@ -354,7 +369,13 @@ def check(folder):
                 'adjustments_less': 0.0,
                 'total_credits': s('total_income'),
             },
-            'by_role': {'hygiene': hyg or None},
+            'by_role': {'hygiene': hyg or None,
+                        'doctor': round(sum(x['production'] for x in reps
+                                            if x.get('role') == 'doctor'), 2) or None},
+            # Each doctor's own production, by the name the report prints,
+            # so the by year sheet can show a total doctor row and one row
+            # per doctor (the lead advisor's Simpson note).
+            'doctors': _by_provider([x for x in reps if x.get('role') == 'doctor']),
             'read_by': 'Claude, checked',
         }
     good['production'] = prod

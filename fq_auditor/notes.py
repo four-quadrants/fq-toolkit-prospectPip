@@ -238,6 +238,29 @@ What the lead advisor always wants noted (when the documents show it):
 - Patients: the count the firm uses is patient VISITS in the period (day
   sheets: "patients seen"). A unique-patient or active-patient count is the
   wrong metric: say so on that row and ask for visits.
+- The IC form answers that did NOT go the way the firm would want matter as
+  much as the pains admitted ("spends too much time on the business side":
+  False, "I spend an appropriate amount"). Note each on its row, and what the
+  call said about it.
+- Scheduling: date what the client said ("as of 10/19").
+- Chairs that do not add up: ask about the layout again, and whether more
+  operatories fit in the existing footprint.
+- Taxes: the date each return was filed (e-file date, preparer letter), late
+  filings, and whether the earlier year was on time.
+- A retirement plan change mentioned (a new provider, a start date): ask
+  about the plan's structure and the match.
+- Children's accounts on the return (529, Trump accounts, custodial): list
+  them by child on the savings or dependents row.
+- What the call said about saving and retiring in his own words ("likely to
+  work to 75-80 only saving 20K") on the savings row.
+- Mindset from the call: how he sees his time, his team (a dental-specific
+  CPA or consultant already), marketing, practice management, whether he
+  thinks he has a plan, his urgency ("doesn't want to twiddle his thumbs").
+- Staff tenure, and the cash low point the client gave, on their rows.
+- Case by case, only when the file calls for it, ask for: transition
+  agreements and valuations (a recent purchase), the lease (rented space),
+  the office manager's ranking of insurance plans to trim and each plan's
+  fee schedule (heavy PPO adjustments).
 
 How to choose what to write on:
 - The narrative documents above are somebody's account of this client, written

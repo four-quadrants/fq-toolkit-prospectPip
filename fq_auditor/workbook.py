@@ -185,7 +185,7 @@ def _overhead_simple(block_facts, by_year):
             if v is None:
                 continue
             m = by_year[y].get('pnl_months') if basis == 'P&L' else None
-            label = '%s overhead, %s%s' % (basis, y, ' (%d months)' % m
+            label = '%s overhead, %s%s' % (basis, y, ' (%g months)' % m
                                            if m and m < 12 else '')
             f = _facts.Fact(label, v / 100.0, PCT, by_year[y].get(src_key),
                             'see the by year sheet for the figures')
@@ -197,7 +197,49 @@ def _overhead_simple(block_facts, by_year):
     return out
 
 
-def _overhead_table(ws, row, by_year, ytd=None, extra=()):
+def _owned(bundle):
+    """(year, month) the client bought the practice, from the Owned since
+    fact ("November 2025 (bought from the prior owner...)"), else (None, None)."""
+    import re
+    months = 'jan feb mar apr may jun jul aug sep oct nov dec'.split()
+    for f in bundle.all_facts():
+        if f.label == 'Owned since' and (f.value or f.note):
+            t = ('%s %s' % (f.value or '', f.note or '')).lower()
+            y = re.search(r'(19|20)\d\d', t)
+            if not y:
+                return None, None
+            m = re.search(r'\b(%s)\w*\s+%s' % ('|'.join(months), y.group()), t)
+            return int(y.group()), (months.index(m.group(1)) + 1 if m else None)
+    return None, None
+
+
+def _part_year(bundle, y):
+    """True for the year the client bought the practice, when it was not in
+    January: that year's return covers only part of a year of his own."""
+    oy, om = _owned(bundle)
+    try:
+        return bool(oy and int(str(y)[:4]) == oy and om and om > 1)
+    except ValueError:
+        return False
+
+
+def _year_head(bundle, y, base):
+    """A year's column heading, marked when the client did not own the
+    practice that year (the lead advisor wrote "did not own this yr" on
+    Simpson's 2024 column) or bought it part way through."""
+    oy, om = _owned(bundle)
+    try:
+        yi = int(str(y)[:4])
+    except ValueError:
+        return base
+    if oy and yi < oy:
+        return '%s (prior owner)' % base
+    if oy and yi == oy and om and om > 1:
+        return '%s (bought %s)' % (base, 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()[om - 1])
+    return base
+
+
+def _overhead_table(ws, row, by_year, ytd=None, extra=(), bundle=None):
     """Overhead year over year with every figure that goes into it.
 
     P&L against P&L and return against return, the way the firm's old sheet
@@ -228,8 +270,8 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
         ws.cell(row, c).fill = F_HEAD
     for i, y in enumerate(years):
         m = by_year[y].get('pnl_months')
-        c = ws.cell(row, ycol(i), y if not m or m >= 12
-                    else '%s (%d mo P&L)' % (y, m))
+        head = y if not m or m >= 12 else '%s (%g mo P&L)' % (y, m)
+        c = ws.cell(row, ycol(i), _year_head(bundle, y, head) if bundle else head)
         c.font = HEAD
         if i == ytd_i:
             ws.cell(row, ycol(i) + 1, '%s annualized' % y).font = HEAD
@@ -264,7 +306,7 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
                 if formula:
                     a.value = formula(get_column_letter(col + 1))
                 elif v is not None:
-                    a.value = '=%s%d/%d*12' % (here, row, ytd_m)
+                    a.value = '=%s%d/%g*12' % (here, row, ytd_m)
                 a.number_format = fmt
                 a.font = Font(name=FONT, size=12, italic=True, bold=bold)
                 here = get_column_letter(col + 1)
@@ -311,7 +353,7 @@ def _overhead_table(ws, row, by_year, ytd=None, extra=()):
                     c.fill = F_NEEDED
                 if i == ytd_i and v is not None:
                     a = ws.cell(row, col + 1, '=%s%d' % (get_column_letter(col), row) if balance
-                                else '=%s%d/%d*12' % (get_column_letter(col), row, months or ytd_m))
+                                else '=%s%d/%g*12' % (get_column_letter(col), row, months or ytd_m))
                     a.number_format = MONEY
                     a.font = Font(name=FONT, size=12, italic=True)
             if note:
@@ -494,14 +536,18 @@ def _standard_areas(bundle, oh, target=OVERHEAD_TARGET):
 
     out = []
     bits = []
-    ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')), default=None)
+    # A return for the year the practice was bought part way through is a
+    # few months' running costs against a few months' revenue: never the
+    # overhead to quote (Simpson's two-month 2025 Schedule C read 173%).
+    ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')
+              and not _part_year(bundle, y)), default=None)
     if ty:
         bits.append('%.1f%% on the %s return' % (oh[ty]['tax_pct'], ty))
     py = max((y for y in oh if (oh[y] or {}).get('pnl_pct')), default=None)
     if py:
         mo = oh[py].get('pnl_months') or 12
         bits.append('%.1f%% on the %s P&L%s' % (oh[py]['pnl_pct'], py,
-                                                ' (%d months)' % mo if mo < 12 else ''))
+                                                ' (%g months)' % mo if mo < 12 else ''))
     if bits:
         out.append('Overhead: %s.  Target %d%%.' % ('; '.join(bits), round(target * 100)))
     saved, liquid = val.get('Saved last year'), val.get('Liquid if they walked away today')
@@ -518,6 +564,42 @@ def _standard_areas(bundle, oh, target=OVERHEAD_TARGET):
     if d:
         out.append('Debt: %s.' % '; '.join(d))
     return out
+
+
+# IC form statements where "False" is the answer that shows the need for the
+# firm (the rest are worded so that "True" does).
+_IC_FALSE_IS_NEED = __import__('re').compile(
+    r'\bhave a plan\b|\bsaving enough\b|\bam (?:happy|satisfied|comfortable) with\b|'
+    r'\bhave (?:someone|a team|an advisor)\b', __import__('re').I)
+
+
+def ic_positions(folder):
+    """Every IC form statement, sorted the lead advisor's way: the pains they
+    admitted, and the answers that did NOT go the way we would want ("I spend
+    an appropriate amount on the business side"), which he wants to know
+    about just as much. [(statement, answer, ours: bool)]"""
+    import json
+    try:
+        with open(_store.json_path(folder, 'ic_form.json')) as fh:
+            d = json.load(fh)
+    except (OSError, ValueError, TypeError):
+        return [], {}
+    out = []
+    for st in d.get('_statements') or ():
+        if not isinstance(st, (list, tuple)) or len(st) < 2:
+            continue
+        q, a = str(st[0]), str(st[1])
+        said_true = a.strip().lower().startswith('true')
+        need_when_true = not _IC_FALSE_IS_NEED.search(q)
+        out.append((q, a, said_true == need_when_true))
+    extra = {'Top challenges': d.get('_challenges'), 'Already tried': d.get('_tried')}
+    oth = d.get('_other') or {}
+    for k, lab in (('spouse_same_page', 'Spouse on the same page'),
+                   ('team_approach', 'Open to a team approach'),
+                   ('accepts_criticism', 'Accepts criticism')):
+        if oth.get(k):
+            extra[lab] = oth[k]
+    return out, {k: v for k, v in extra.items() if v}
 
 
 def _summary_sheet(wb, bundle):
@@ -639,7 +721,11 @@ def _summary_sheet(wb, bundle):
     r += 4
     # Overhead today is the most recent completed tax return's (the lead
     # advisor's rule), not the year-to-date P&L.
-    ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')), default=None)
+    # A return for the year the practice was bought part way through is a
+    # few months' running costs against a few months' revenue: never the
+    # overhead to quote (Simpson's two-month 2025 Schedule C read 173%).
+    ty = max((y for y in oh if (oh[y] or {}).get('tax_pct')
+              and not _part_year(bundle, y)), default=None)
     # No return yet (a first-year owner): the latest P&L of six months or
     # more stands in, and says so. Left blank, the "with 4Q"
     # income came out as the whole practice income.
@@ -651,8 +737,8 @@ def _summary_sheet(wb, bundle):
     elif py_:
         mo = oh[py_].get('pnl_months') or 12
         oh_now, how = oh[py_]['pnl_pct'] / 100.0, \
-            'today: the %s P&L%s (no return on file yet); with 4Q: 10.9%% lower' % (
-                py_, ' (%d months)' % mo if mo < 12 else '')
+            'today: the %s P&L%s (no full-year return of his yet); with 4Q: 10.9%% lower' % (
+                py_, ' (%g months)' % mo if mo < 12 else '')
     else:
         oh_now, how = None, 'today: no return or P&L on file yet; type it in'
     oh_now = R.get('overhead_now', oh_now)
@@ -687,7 +773,47 @@ def _summary_sheet(wb, bundle):
     # Areas the advisor wrote (summary.json "areas") are used as they are.
     areas = list(S.get('areas') or ()) or list(
         _standard_areas(bundle, oh, S.get('overhead_target') or OVERHEAD_TARGET))
+    # His talking points first (summary.json "talking_points": drawn from
+    # every IC form answer, the ones that went our way and the ones that did
+    # not, the call and the figures), in his style: a topic, then the proof.
+    for tp in S.get('talking_points') or ():
+        c = ws.cell(r, 1, str(tp).upper())
+        c.font, c.alignment = B, WRAP
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        ws.row_dimensions[r].height = 17 * (1 + len(str(tp)) // 110)
+        r += 1
+    # Where they stand on the IC form, both ways: the pains they admitted,
+    # and the answers that did not go our way (to probe on the consult).
+    pos, extra = ic_positions(bundle.folder)
+    if pos:
+        for title, want in (('Not the answer we want (probe these)', False),
+                            ('Pains they admitted', True)):
+            rows_ = [(q, a_) for q, a_, ours in pos if ours == want]
+            if not rows_:
+                continue
+            c = ws.cell(r, 1, 'IC FORM: %s' % title.upper())
+            c.font = Font(name=FONT, size=11, bold=True, color=NAVY)
+            r += 1
+            for q, a_ in rows_:
+                c = ws.cell(r, 1, '%s  \u2192  %s' % (q, a_))
+                c.font, c.alignment = T, WRAP
+                if not want:
+                    c.fill = F_FLAG
+                ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+                ws.row_dimensions[r].height = 17 * (1 + (len(q) + len(a_)) // 110)
+                r += 1
+        for k, v in extra.items():
+            c = ws.cell(r, 1, '%s: %s' % (k, v))
+            c.font, c.alignment = NOTE, WRAP
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            r += 1
+        r += 1
+    cell_ref = getattr(bundle, '_oh_target_cell', None)
     for a in areas:
+        if cell_ref and a.startswith('Overhead:') and 'Target ' in a:
+            head = a.split('Target ')[0].replace('"', '""')
+            a = ('="%s"&IF(%s="","Target not set on the initial notes page.",'
+                 '"Target "&TEXT(%s,"0%%")&".")' % (head, cell_ref, cell_ref))
         c = ws.cell(r, 1, a)
         c.font, c.alignment = T, WRAP
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
@@ -762,6 +888,32 @@ def write(bundle, out):
         'Every row names where it came from. What the colours mean:',
         [30, 46, 60, 13, 30], legend=True)
 
+    # The lead advisor's own targets, first on the page, so the Summary
+    # follows what he types (overhead target: his Simpson note).
+    import json as _json
+    try:
+        with open(_store.json_path(bundle.folder, 'summary.json')) as fh:
+            _S = _json.load(fh)
+    except (OSError, ValueError, TypeError):
+        _S = {}
+    row = _section(ws, row, 'Advisor inputs', 5)
+    for i, h in enumerate(('', 'value', 'note', '', ''), 1):
+        ws.cell(row, i, h).font = HEAD
+        ws.cell(row, i).fill = F_HEAD
+    row += 1
+    ws.cell(row, 1, 'Overhead target').font = ROWNAME
+    ws.cell(row, 1).fill = F_ROWNAME
+    tgt = ws.cell(row, 2, _S.get('overhead_target'))
+    tgt.number_format = PCT
+    tgt.font = VALUE
+    if _S.get('overhead_target') is None:
+        tgt.fill = F_NEEDED
+    n_ = ws.cell(row, 3, 'Type the target for this client (e.g. 55%). The Summary\u2019s '
+                         'overhead line follows it.')
+    n_.font, n_.alignment = NOTE, WRAP
+    bundle._oh_target_cell = "'initial notes'!$B$%d" % row
+    row += 2
+
     for block in bundle.blocks:
         row = _section(ws, row, block.title, 5)
         head = ('', 'value', 'note', 'as of', 'source')
@@ -803,6 +955,7 @@ def write(bundle, out):
             head = y
             if y == ytd_year:
                 head = '%s YTD (%g mo)' % (y, ytd['months'])
+            head = _year_head(bundle, y, head)
             ws2.cell(r, col, head).font = HEAD
             ws2.cell(r, col).fill = F_HEAD
             col += 1
@@ -890,7 +1043,8 @@ def write(bundle, out):
 
         if getattr(bundle, 'overhead_by_year', None):
             _overhead_table(ws2, r + 1, bundle.overhead_by_year, ytd,
-                            getattr(bundle, 'overhead_extra', None) or ())
+                            getattr(bundle, 'overhead_extra', None) or (),
+                            bundle=bundle)
 
     # ---------------------------------------------------------- source map
     _cash_sheet(wb, bundle)
