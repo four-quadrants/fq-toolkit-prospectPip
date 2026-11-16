@@ -45,7 +45,7 @@ SAVED = 'credit_report.json'
 NAME = re.compile(r'credit\s*report|equifax|experian|transunion|annual\s*credit',
                   re.I)
 TIMEOUT = 900
-VERSION = 3      # bump when the merging or naming changes, to re-merge
+VERSION = 4      # bump when the merging or naming changes, to re-merge
 
 
 def _num(s):
@@ -413,6 +413,26 @@ def tidy_lender(name):
 CLOSED = re.compile(r'closed|paid|transferred|refinanced|charge', re.I)
 
 
+_MON = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()
+
+
+def _start(opened):
+    """"10/28/2025" as "Oct 2025"."""
+    m = re.match(r'\s*(\d{1,2})/(?:\d{1,2}/)?(\d{4})', str(opened or ''))
+    return '%s %s' % (_MON[int(m.group(1)) - 1], m.group(2)) if m and 1 <= int(m.group(1)) <= 12 else None
+
+
+def _maturity(opened, term):
+    """Opened 10/28/2025 with "30 Years" matures Oct 2055."""
+    m = re.match(r'\s*(\d{1,2})/(?:\d{1,2}/)?(\d{4})', str(opened or ''))
+    t = re.search(r'(\d+)\s*(year|yr|month|mo)', str(term or ''), re.I)
+    if not (m and t):
+        return None
+    months = int(t.group(1)) * (12 if t.group(2).lower().startswith('y') else 1)
+    total = int(m.group(2)) * 12 + int(m.group(1)) - 1 + months
+    return '%s %d' % (_MON[total % 12], total // 12)
+
+
 def owed(rows):
     """Open with a balance, as debt rows debt.py and the plan understand."""
     debts, nothing = [], []
@@ -443,6 +463,14 @@ def owed(rows):
             'what': what, 'account_last4': re.sub(r'\D', '', str(r.get('account') or ''))[-4:] or None,
             'balance': r.get('balance'), 'payment': r.get('payment'),
             'rate': None, 'owner': r.get('owner'), 'opened': r.get('opened'),
+            # The original amount (Equifax's "High Credit" on a loan), the
+            # date opened and the term, which the lead advisor copies onto
+            # every loan line ("30-year fixed, originally received in
+            # <month year>, expiration <month year>, original $<amount>").
+            'original': r.get('high') or None,
+            'start': _start(r.get('opened')),
+            'term_text': (r.get('term') or '').strip() or None,
+            'maturity': _maturity(r.get('opened'), r.get('term')),
             'source': 'credit report: ' + ', '.join(r.get('seen_on') or []),
         })
     return debts, nothing

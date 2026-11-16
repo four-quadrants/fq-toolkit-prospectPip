@@ -372,7 +372,6 @@ def build(bundle, folder):
             import inputs as _inp
             got = _inp.value(folder, 'retire_age')
             if not got:
-                import store as _store
                 with open(_store.json_path(folder, "summary.json")) as fh:
                     got = (_json.load(fh).get('projection') or {}).get('retire_age')
             if got:
@@ -935,7 +934,35 @@ def build(bundle, folder):
     # client's own words are carried into the ask so nobody asks twice.
     saved = _value(bundle, 'Saved last year')
     numeric = saved is not None and any(c.isdigit() for c in str(saved))
-    if numeric:
+    # What the W-2s show going into the retirement plan, per person (the
+    # lead advisor lists each: "<Name> 401k: Employee Roth deferral of
+    # $<amount>"). Read from income_facts; the IC form's answer stays beside.
+    try:
+        with open(_store.json_path(folder, 'income_facts.json')) as fh:
+            inf = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        inf = {}
+    kind = 'Roth 401(k)' if str(inf.get('deferral_kind') or '').lower() == 'roth' else '401(k)'
+    owner_first = (bundle.forename or 'Owner')
+    contrib_rows = []
+    for who, amt, src in ((owner_first, inf.get('deferral'), (inf.get('sources') or {}).get('deferral')),
+                          ((inf.get('spouse_name') or 'Spouse').split(' ')[0], inf.get('spouse_deferral'),
+                           (inf.get('sources') or {}).get('spouse_deferral'))):
+        if amt:
+            contrib_rows.append({'label': '%s %s: employee deferral' % (who, kind),
+                                 'amount': _money(amt),
+                                 'detail': '%s W-2%s.' % (inf.get('year') or 'Latest',
+                                                         (', ' + src) if src else '')})
+    if contrib_rows:
+        sec = Section(14,
+            'Investment amounts currently being put back into investable assets '
+            'include the following%s. These contribution assumptions matter a '
+            'great deal to the plan; please tell us if any of it is wrong.'
+            % ((' (the IC form says "%s")' % str(saved).strip()) if saved else ''),
+            rows=contrib_rows, source='W-2s, with the IC form beside them.')
+        sec.heads = ('Contribution', 'A year')
+        out.append(sec)
+    elif numeric:
         out.append(Section(14,
             'Investment amounts currently being put back into investable '
             'assets: %s. These contribution assumptions matter a great deal '
@@ -971,7 +998,6 @@ def _insurance(folder, cash):
         pols = (_dr.check(folder)[0] or {}).get('insurance') or []
     except Exception:                                        # noqa: BLE001
         pols = []
-    per = {'month': 12, 'quarter': 4, 'year': 1}
     rows = []
     for p in pols:
         label = ' '.join(x for x in ((p.get('carrier') or '').strip(),
@@ -989,17 +1015,19 @@ def _insurance(folder, cash):
                                              p.get('premium_period') or 'month'))
         if p.get('source'):
             bits.append('from %s' % p['source'])
-        yearly = (p.get('premium') or 0) * per.get(p.get('premium_period') or 'month', 12)
-        rows.append({'label': label, 'amount': _money(yearly) if yearly else None,
+        shown = p.get('coverage') or p.get('cash_value')
+        rows.append({'label': label, 'amount': _money(shown) if shown else None,
                      'detail': '; '.join(bits) + '.' if bits else None})
+    carriers = ' '.join((p.get('carrier') or '').lower() for p in pols)
     seen = [(n, a) for n, a, k in ((cash or {}).get('fixed_rows') or ())
-            if k == 'Insurance']
-    if seen and not pols:
+            if k == 'Insurance' and not any(w in carriers for w in
+                                             str(n).lower().split()[:1])]
+    if seen:
         for name, monthly in seen:
             rows.append({'label': '%s (premium on the bank statements)' % name,
-                         'amount': _money(monthly * 12),
-                         'detail': '%s a month; the policy itself is not on file.'
-                                   % _money(monthly)})
+                         'amount': None,
+                         'detail': '%s a month (%s a year); the policy itself is not on file.'
+                                   % (_money(monthly), _money(monthly * 12))})
     if not rows:
         return Section(15, needed='the life, disability and business overhead '
                                   'insurance policies in force (none found in '
@@ -1009,11 +1037,11 @@ def _insurance(folder, cash):
                            'the debts if something happens to the owner')
     sec = Section(15, '%s the following insurance in force.'
                   % ('We show' if pols else 'The bank statements show premiums for')
-                  + ('' if pols else ' The policies themselves are still needed.'),
+                  + ('' if pols and not seen else ' The policies behind the premiums are still needed.'),
                   rows=rows,
                   source='Policy documents.' if pols else 'Bank statements.',
                   flag=_flag(folder, 15))
-    sec.heads = ('Policy', 'Premium a year')
+    sec.heads = ('Policy', 'Coverage')
     return sec
 
 

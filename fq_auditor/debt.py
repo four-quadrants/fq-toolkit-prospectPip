@@ -368,7 +368,8 @@ def add_credit(folder, rows):
                 match = r
                 break
         if match:
-            for k in ('payment', 'account_last4', 'what', 'opened'):
+            for k in ('payment', 'account_last4', 'what', 'opened',
+                      'original', 'start', 'maturity', 'term_text'):
                 if not match.get(k) and c.get(k):
                     match[k] = c[k]
             match['source'] = '%s; on the credit report' % (match.get('source') or '')
@@ -376,6 +377,14 @@ def add_credit(folder, rows):
         rows.append(dict(c))
         added.append(c)
     return rows, added
+
+
+def fill_from_credit(folder, rows):
+    """Complete loans already listed (from the readings or a debt sheet)
+    with what the credit report adds: original amount, opened, term,
+    maturity, payment, last four. Adds no new loans."""
+    got, _added = add_credit(folder, rows)
+    return got[:len(rows)]        # the listed loans, in order; nothing added
 
 
 def gather(folder):

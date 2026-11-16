@@ -41,7 +41,7 @@ def _master_leftovers():
 def _names_from_folder(name):
     """'Tanksley, Paige due 9:9' -> {'Tanksley', 'Paige'}; 'Compton, William & Anna' adds 'Anna'."""
     base = re.sub(r'\b(due|Due)\b.*$', '', name)
-    base = re.sub(r'\(.*?\)|-\s*TEST|TEST|new|re-engage', ' ', base)
+    base = re.sub(r'\(.*?\)|-\s*TEST|TEST|-\s*PRACTICE|PRACTICE|new|re-engage', ' ', base)
     return {w for w in re.findall(r"[A-Z][a-z]{2,}(?:-[A-Z][a-z]+)?", base)}
 
 

@@ -52,7 +52,7 @@ def _surname(folder):
 def _first(folder):
     base = os.path.basename(folder.rstrip('/'))
     if ',' in base:
-        rest = base.split(',', 1)[1].replace('- TEST', '').strip()
+        rest = base.split(',', 1)[1].replace('- TEST', '').replace('- PRACTICE', '').strip()
         return rest.split()[0] if rest else 'there'
     return 'there'
 

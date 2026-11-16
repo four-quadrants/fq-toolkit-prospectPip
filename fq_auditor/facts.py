@@ -291,6 +291,13 @@ def gather(folder, client=None):
             # schedule) and read terms a template cannot (a quarterly payment).
             if (got.get('debts') or {}).get(side):
                 debts[side] = got['debts'][side]
+                if side == 'personal':
+                    # The credit report completes what the readings list
+                    # (original amount, opened, term, maturity).
+                    try:
+                        debts[side] = _debt.fill_from_credit(folder, debts[side])
+                    except Exception:                        # noqa: BLE001
+                        pass
         profile = got.get('profile') or {}
         # Any IC form field can come from the call notes instead (profile in
         # doc_readings, with the notes as its source) when the form is missing
@@ -499,8 +506,9 @@ def gather(folder, client=None):
                 bits.append('orig %s%s' % (_fmt(r['original']),
                                            ' (%s)' % r['start'] if r.get('start') else ''))
             try:
-                span = int(str(r.get('maturity'))[:4]) - int(str(r.get('start'))[:4])
-            except (TypeError, ValueError):
+                span = int(re.search(r'\d{4}', str(r.get('maturity'))).group()) - \
+                    int(re.search(r'\d{4}', str(r.get('start'))).group())
+            except (TypeError, ValueError, AttributeError):
                 span = None
             if span:
                 bits.append('%d-yr term to %s' % (span, r['maturity']))

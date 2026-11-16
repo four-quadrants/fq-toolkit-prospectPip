@@ -194,6 +194,26 @@ team has done it on past clients:
   Synchrony, Affirm, student loans), insurance premiums, savings
   contributions. A rental's mortgage belongs to the rental.
 
+## Walking someone through the cash flow workbook
+
+When someone asks how to read a cash flow workbook ("walk me through
+<client>'s cash flow"), follow `Prospects/HOW TO READ THE CASH FLOW WORKBOOK.md`
+on the share: Summary tab, then the Personal tab block by block, the totals,
+To review, and where each figure lands in the Assumptions. Use that client's
+own numbers, one tab at a time, and stop for questions.
+
+## Practice copies (training)
+
+`<year>/_Practice/<Surname>, <First> - PRACTICE` folders are past clients
+set up for training, run exactly like a live prospect (an analyst builds and
+hands off, the lead advisor reviews), with their own store
+(`<Surname> - PRACTICE`). The client's real answers and the documents that
+came with them wait in `_Practice/_answers (held back)/<Surname>/`. When the
+person says "the answers came in", copy that folder's `Documents` into the
+practice folder (same paths), put the answer email beside it, then run the
+normal refresh with answers (fq-analysis-review). Never touch the real
+client's folder.
+
 ## Emails to the client
 
 Claude never sends or drafts email in anyone's mailbox. The intake follow-up,

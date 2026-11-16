@@ -66,6 +66,10 @@ def _subfolder(folder):
     sub = re.split(r'[,\s(]', name.strip())[0] or name
     if re.search(r'-\s*TEST$', name, re.I):
         sub += ' - TEST'
+    elif re.search(r'-\s*PRACTICE$', name, re.I):
+        # A practice copy of a past client, for training: its own store,
+        # never the real client's or the TEST copy's.
+        sub += ' - PRACTICE'
     return sub
 
 
