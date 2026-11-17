@@ -100,7 +100,21 @@ def apply(folder, plan_json):
                 changed.append(key)
             continue
         if key == 'consult_date':
-            entry['consult_date_text'] = str(raw).strip()
+            text = str(raw).strip()
+            day = None
+            for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%m/%d/%y', '%B %d, %Y', '%b %d, %Y'):
+                try:
+                    day = datetime.datetime.strptime(text, fmt).date()
+                    break
+                except ValueError:
+                    pass
+            if day:
+                # The page's date box gives YYYY-MM-DD: keep it as the
+                # model's date and write the deck's wording from it.
+                entry['consult_date'] = day.isoformat()
+                entry['consult_date_text'] = day.strftime('%B %-d, %Y')
+            else:
+                entry['consult_date_text'] = text
             changed.append(key)
             continue
         if key == 'refinance':
@@ -162,7 +176,11 @@ def apply(folder, plan_json):
             for i, k in ((0, 'inv1'), (1, 'inv2')):
                 if st.get(k) not in (None, ''):
                     inv[i] = _num(st[k])
-            if st.get('inv2') not in (None, ''):
+            # Year 3 as typed; before the page had a year 3 column, a
+            # typed year 2 carried on into year 3.
+            if st.get('inv3') not in (None, ''):
+                inv[2] = _num(st['inv3'])
+            elif st.get('inv2') not in (None, ''):
                 inv[2] = _num(st['inv2'])
             year = str(st.get('year') or r.get('year') or 1)
             if year == 'later':
@@ -335,7 +353,7 @@ def apply(folder, plan_json):
         except (OSError, ValueError):
             _car = {}
         _car.update({i['id']: i for i in out.get('log') or []})
-        for want, head in (('revisit', 'FOR THE TEAM TO REVISIT (raise each with the analyst before building the deck):'),
+        for want, head in (('revisit', 'STILL TO DECIDE (list each back to the lead advisor to settle before building the deck):'),
                            ('follow', 'STILL OPEN (asked again on the Questions tab):')):
             got = [k for k, v in sorted(marks.items()) if v == want]
             if got:

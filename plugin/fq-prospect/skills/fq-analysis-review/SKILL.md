@@ -28,7 +28,7 @@ keep working whichever page it has).
    on a section as needed: **+ Add another comment**), each a Note or a
    Question to the client, and asks Claude to pull in the check. Claude fixes
    what the comments point to and refreshes the page. Repeat until clean, then
-   the analyst presses **Ready for the lead advisor** (twice) and shares the
+   the analyst fills in the **Consult date** at the top and presses **Ready for the lead advisor** (twice) and shares the
    page with him.
 2. **The lead advisor: every tab.** On the Assumptions he sorts each of the
    analyst's comments (Note or Question to the client) and adds his own. He
@@ -38,7 +38,7 @@ keep working whichever page it has).
    ahead or do it all in one sitting.
 3. **Answers come in.** Under each comment he sees the client's answer,
    Claude's verdict on whether it settles the point, and marks it Answered /
-   Done, Still open (asked again) or Team to revisit. The page's **Check for
+   Done, Still open (asked again) or Still to decide. The page's **Check for
    new answers and documents** button copies "Refresh <Surname>'s review with
    the new answers and documents" for him to paste here.
 4. **The deck.** The Slides tab's **Build the deck** copies "Pull in and build
@@ -103,7 +103,14 @@ unless asked.
 4. Before publishing, read `plan.json`'s `assumptions`, `findings` and the
    questions, and tell the analyst briefly what stands out: accounts or debts
    that look wrong or missing, statements that did not tie, questions that
-   look mistaken.
+   look mistaken. Always ask the analyst for the exact birthdates
+   (MM/DD/YYYY) of the doctor and, when married, the spouse, if Assumption 2
+   carries the "Birthdates needed" flag: they can tell you in the chat or add
+   them as a Note on section 2. Also ask for the **consult date** if the
+   page has none: they type it in the Consult date box at the top of the
+   Assumptions, or tell you and you write it to `decided.consult_date`
+   (YYYY-MM-DD, ArtifactData `update` plan/figures, keeping the rest of
+   `decided`).
 5. Publish a new page, or refresh the existing one's data. After a FIRST
    publish, record the URL in `_Audit/review_pages.json` and write it to the
    page as `page_url` (ArtifactData `update` plan/figures), so the hand-off
@@ -115,10 +122,13 @@ unless asked.
 When the analyst says they are done, happy with the assumptions, or asks how
 to get it to the lead advisor:
 
-1. Check the page's `stage`. If it is still `analyst`, tell them to press
+1. If `decided.consult_date` is blank, ask the analyst for it once more. If
+   they still do not have it, hand over anyway: the page asks the lead
+   advisor for it.
+2. Check the page's `stage`. If it is still `analyst`, tell them to press
    **Ready for the lead advisor** (twice) on the page, or, if they ask you to,
    set `stage` to `lead` and `handoff` to now yourself.
-2. Give them the page's link (from `_Audit/review_pages.json`) in the reply,
+3. Give them the page's link (from `_Audit/review_pages.json`) in the reply,
    and the two steps: open the page's **Share** menu and add the lead advisor
    with **Can edit** (view-only saves nothing), then send him the link by
    Teams or email. Claude cannot share the page itself.
@@ -129,14 +139,18 @@ When the analyst says "pull in my check" / "pull in [client]'s review" and the
 page's `stage` is `analyst`:
 
 1. Pull in (mechanics: Pulling in). Read THE ANALYST'S CHECK it prints.
-2. Act on every comment: re-read a document that was misread, correct a
+2. Birthdates given in a comment on section 2 (or in the chat) are recorded
+   with `python3 fq_auditor/inputs.py "<client folder>" --set birthdate
+   --value MM/DD/YYYY` (the doctor) and `--set spouse_birthdate` (the
+   spouse); Assumptions 1 and 2 then work the ages out from them.
+3. Act on every comment: re-read a document that was misread, correct a
    reading in `_Audit` (bank_statements.json, accounts.json,
    doc_readings.json, credit_report.json) only when the document shows it,
    record a typed figure with `inputs.py`, file a document, rebuild the step
    it changes. Say plainly what was done about each comment and what could
    not be done.
-3. Re-seed and refresh the page's data (never its stage or comments).
-4. Tell the analyst it is refreshed, and that when it is clean they press
+4. Re-seed and refresh the page's data (never its stage or comments).
+5. Tell the analyst it is refreshed, and that when it is clean they press
    **Ready for the lead advisor** and share the page with him (edit access).
 
 ## Pull in the lead advisor's review
@@ -183,7 +197,18 @@ line. From fq_auditor:
 `FQ_ASSUMPTIONS_PDF=1 FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 build_outputs.py "<client folder>" --what assumptions --outdir "<client folder>"`.
 It saves `Assumptions - <Surname>.pdf` in the client folder, the same
 sections as the page, ready to print. Present the file so it opens; it
-prints from Preview. Comments written on the page are not printed on it.
+prints from Preview.
+
+Every comment on the page prints with it, so BEFORE running the line above:
+ArtifactData `get` plan/figures from the client's review page
+(`review_pages.json`) and write these fields, as they are, to
+`page_comments.json` in the client's .json store (`store.py` gives the
+path): `an_notes`, `notes`, `an_assume_notes`, `an_assume_kind`,
+`assume_notes`, `assume_kind`, `qdecisions`, `qtext`. The analyst's and the
+lead advisor's overall notes print first; each section's comments (Note or
+Question to the client, with who wrote it and any Send / Strike decision)
+print under that section. A client with no review page yet prints without
+comments; say so.
 (Only if someone asks for room to write notes: `FQ_ASSUMPTIONS_PDF=notes`
 adds a ruled notes column.)
 
@@ -229,8 +254,8 @@ At pull-in each library slide prints LIBRARY SLIDE with what it needs:
 1. Pull in (mechanics: Pulling in). The recommendations he left ticked become
    the savings table; his figures and assumptions go into the plan inputs.
 2. Act on every note and client answer printed, before anything else, and say
-   what was done about each. Items he marked **Team to revisit** (printed FOR
-   THE TEAM TO REVISIT) are raised with the analyst before the deck is built;
+   what was done about each. Items he marked **Still to decide** (printed STILL
+   TO DECIDE) are listed back to him to settle before the deck is built;
    **Still open** items are already back on the Questions tab.
 3. Build the deck, in the same run: from fq_auditor,
    `FQ_NO_CLAUDE=1 FQ_ROOT_FILE=/tmp/fqroot python3 build_outputs.py "<client folder>" --what deck`.

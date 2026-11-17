@@ -155,6 +155,66 @@ def _block(rows, width, bg, bar):
 
 
 
+def page_comments(folder):
+    """The review page's comments, for the printed copy.
+
+    Read from page_comments.json (the toolkit's .json store), which Claude
+    writes from the page's plan/figures just before every print, so the
+    print carries what is on the page now. Returns (general, by_section):
+    general is [(who, text)] for the overall notes; by_section maps a section
+    number to [(who, kind, text)], kind 'Note' or 'Question to the client'.
+    """
+    import json as _json
+    try:
+        import store as _store
+        with open(_store.json_path(folder, 'page_comments.json')) as fh:
+            got = _json.load(fh)
+    except Exception:                                        # noqa: BLE001
+        return [], {}
+    general = []
+    for key, who in (('an_notes', 'Analyst'), ('notes', 'Lead advisor')):
+        text = str(got.get(key) or '').strip()
+        if text:
+            general.append((who, text))
+    by_section = {}
+    decisions = got.get('qdecisions') or {}
+    edited = got.get('qtext') or {}
+    for notes, kinds, who, pre in (('an_assume_notes', 'an_assume_kind', 'Analyst', 'aq_'),
+                                   ('assume_notes', 'assume_kind', 'Lead advisor', 'lq_')):
+        kind_of = got.get(kinds) or {}
+        for key, text in (got.get(notes) or {}).items():
+            text = str(text or '').strip()
+            if not text:
+                continue
+            q = kind_of.get(key) == 'q'
+            if q:
+                # the wording the lead advisor settled on, and what he decided
+                text = str(edited.get(pre + key) or text).strip()
+                dec = decisions.get(pre + key)
+                kind = 'Question to the client' + (' (%s)' % dec if dec else '')
+            else:
+                kind = 'Note'
+            try:
+                num = int(str(key).split('.')[0])
+                order = float(key)
+            except ValueError:
+                continue
+            by_section.setdefault(num, []).append((order, who, kind, text))
+    for num in by_section:
+        by_section[num] = [(w, k, t) for _o, w, k, t in sorted(by_section[num])]
+    return general, by_section
+
+
+def _comments_block(items, width):
+    """A section's comments from the review page, printed under it."""
+    rows = [[Paragraph('COMMENTS FROM THE REVIEW PAGE', label)]]
+    for who, kind, text in items:
+        rows.append([Paragraph(
+            '<font name="Helvetica-Bold">%s</font> &middot; %s<br/>%s'
+            % (_x(who), _x(kind), _x(text).replace('\n', '<br/>')), body)])
+    return _block(rows, width, BAND_BG, NAVY)
+
+
 def _titlebar(number, title, width):
     """The section heading: an orange number against a navy title.
 
@@ -323,7 +383,7 @@ def _table(rows, heads, width):
     return t
 
 
-def _section(sec, title, width):
+def _section(sec, title, width, comments=None):
     col = width
     right = [_titlebar(sec.number, title, col), Spacer(1, 5)]
 
@@ -373,6 +433,10 @@ def _section(sec, title, width):
         if sec.text:
             right.append(Spacer(1, 6))
         right.append(_block(lines, col, AMBER_BG, ORANGE))
+
+    if comments:
+        # Held together, so the heading never sits alone at a page foot.
+        right.append(KeepTogether([Spacer(1, 6), _comments_block(comments, col)]))
 
     # The section number now rides in the title bar, so the old margin
     # gutter has nothing left to hold and the content takes the full column.
@@ -468,7 +532,7 @@ def _notes_column(draw):
     return both
 
 
-def render(sections, client, out, practice=None, notes=False):
+def render(sections, client, out, practice=None, notes=False, comments=None):
     when = datetime.date.today().strftime('%d.%m.%Y')
     doc = BaseDocTemplate(
         out, pagesize=letter, leftMargin=LEFT, rightMargin=RIGHT,
@@ -492,8 +556,19 @@ def render(sections, client, out, practice=None, notes=False):
         'remaining %d are printed with what is needed and why, rather than '
         'omitted.' % (done, len(sections), len(sections) - done), intro))
     story.append(Spacer(1, 10))
+    # Every comment on the review page prints with the section it is on;
+    # the overall notes go first.
+    general, by_section = comments or ([], {})
+    if general:
+        rows = [[Paragraph('NOTES FROM THE REVIEW PAGE', label)]]
+        for who, text in general:
+            rows.append([Paragraph('<font name="Helvetica-Bold">%s</font><br/>%s'
+                                   % (_x(who), _x(text).replace('\n', '<br/>')), body)])
+        story.append(_block(rows, width, BAND_BG, NAVY))
+        story.append(Spacer(1, 12))
     for sec in sections:
-        story.extend(_section(sec, TITLES.get(sec.number, ''), width))
+        story.extend(_section(sec, getattr(sec, 'title', None) or TITLES.get(sec.number, ''), width,
+                              by_section.get(sec.number)))
     story.append(_summary(sections, width))
     doc.build(story)
     return out

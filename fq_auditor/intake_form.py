@@ -46,6 +46,7 @@ FIELDS = [
     ('email',             r'^email$'),
     ('age',               r'^age$'),
     ('marital_status',    r'^marital status'),
+    ('spouse_age',        r'how old is your spouse'),
     ('dependents',        r'number of dependents'),
     ('ownership',         r'sole owner or are there partners'),
     ('years_owned',       r'how many years have you owned'),

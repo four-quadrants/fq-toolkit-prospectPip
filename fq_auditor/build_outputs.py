@@ -153,7 +153,10 @@ def step_assumptions(folder, client, outdir):
         notes = os.environ.get('FQ_ASSUMPTIONS_PDF') == 'notes'
         out = os.path.join(outdir, 'Assumptions - %s%s.pdf'
                            % (bundle.surname or _surname(folder, client), ' (for notes)' if notes else ''))
-        _pdf.render(sections, bundle.client or client or 'Client', out, notes=notes)
+        # The review page's comments print too (page_comments.json, written
+        # by Claude from the page just before the print).
+        _pdf.render(sections, bundle.client or client or 'Client', out, notes=notes,
+                    comments=_pdf.page_comments(folder))
     done = sum(1 for s in sections if s.complete)
     print('   %d of %d sections written from documents' % (done, len(sections)))
     # What the lead advisor's review page needs from the documents, read now

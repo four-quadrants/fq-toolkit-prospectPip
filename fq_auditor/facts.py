@@ -318,7 +318,9 @@ def gather(folder, client=None):
         return v.get('value'), v.get('source')
 
     # What they own: a condo, when the debt or the analyst says so.
-    premises = (pv_('premises')[0] if profile.get('premises') else None) or next(
+    import inputs as _inputs_
+    premises = (_inputs_.value(folder, 'premises')
+                or (pv_('premises')[0] if profile.get('premises') else None)) or next(
         ('condo' for side in ('practice', 'personal') for r in (debts.get(side) or [])
          if 'condo' in ' '.join(str(r.get(k) or '') for k in ('description', 'what')).lower()
          and 'home' not in str(r.get('description') or '').lower()
@@ -615,6 +617,10 @@ def gather(folder, client=None):
     ] + ([Fact('Birthdate', pv_('birthdate')[0], TEXT, pv_('birthdate')[1])]
          if pv_('birthdate')[0] else []) + [
         Fact('Marital status', form.get('marital_status'), TEXT, ic_name),
+        # A plan for two people runs to the later of the two life
+        # expectancies, so the spouse's age is kept when the form asks it.
+        Fact('Spouse age', _ic.money(form.get('spouse_age')), NUM, ic_name,
+             'how old is your spouse'),
         Fact('Residence', _compose.residence(folder), TEXT,
              'document letterheads', 'the address that is not the practice'),
         Fact('Dependents', _ic.money(form.get('dependents')), NUM, ic_name),

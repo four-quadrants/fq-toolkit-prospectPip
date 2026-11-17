@@ -44,9 +44,15 @@ Under every section is his own comment box; **+ Add another comment** adds
 more, each with its own Note / Question switch. Once answers come in, each
 question shows the client's answer and Claude's verdict (green: settles it;
 red: does not, with why), and he marks it **Answered**, **Still open: ask
-again** (it goes back on the Questions tab), or **Team to revisit** (Claude
-raises it with the analyst before the deck is built). Notes get **Done** or
-**Team to revisit**.
+again** (it goes back on the Questions tab), or **Still to decide** (his to
+settle before the deck; Claude lists it when he pulls the review in). Notes
+get **Done** or **Still to decide**.
+
+**Consult date** sits at the top of the Assumptions. The analyst fills it in
+while building the assumptions (he always has it by the time the consult is
+offered). If it is still blank at hand-off, the box turns amber for the lead
+advisor and asks him for it. It is the same figure as Consult date on Plan
+inputs, and it sets plan year 1 and the date on the deck.
 
 **Print the assumptions** (button at the top of the Assumptions tab) copies a
 line for Claude, which saves the Assumptions as a PDF in the client folder,

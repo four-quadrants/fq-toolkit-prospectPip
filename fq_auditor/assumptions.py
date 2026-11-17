@@ -121,6 +121,10 @@ class Section(object):
         # Column headings, when the section renders as a table. Unlabelled
         # columns are most of what makes a block of figures hard to read.
         self.heads = None
+        # How the figures were worked out, one step a line, with this
+        # client's own numbers ("revenue x 65% = practice value"). Shown on
+        # the review page under the section, closed until opened.
+        self.workings = []
 
     @property
     def complete(self):
@@ -330,6 +334,83 @@ def _flag(folder, number):
     return got.get(str(number))
 
 
+
+def _born(text):
+    """A birthdate typed MM/DD/YYYY (or M-D-YY) as (MM/DD/YYYY, age today), else (None, None)."""
+    try:
+        mo, dd, yy = [int(x) for x in re.split(r'[/-]', str(text).strip())]
+    except (ValueError, TypeError, AttributeError):
+        return None, None
+    if yy < 100:
+        yy += 1900 if yy > 30 else 2000
+    today = datetime.date.today()
+    age = today.year - yy - ((today.month, today.day) < (mo, dd))
+    return '%02d/%02d/%d' % (mo, dd, yy), age
+
+
+def _partner(bundle, folder):
+    """The second person the plan covers, or None when the client is single.
+
+    {'name', 'age', 'retire_age', 'source'}. Age from the input store
+    ('spouse_age', typed by the team) first, then the IC form. Name from the
+    input store ('spouse_name'), then the W-2s read (income_facts). Retirement
+    age only when the team typed one ('spouse_retire_age').
+    """
+    status = str(_value(bundle, 'Marital status') or '').lower()
+    # A birthdate beats a stated age: typed by the team ('spouse_birthdate',
+    # MM/DD/YYYY), the age it gives today.
+    born, born_age = _born(_inputs.value(folder, 'spouse_birthdate'))
+    typed_age = born_age or _inputs.value(folder, 'spouse_age')
+    form_age = _value(bundle, 'Spouse age')
+    if not (typed_age or form_age or 'married' in status or 'partner' in status):
+        return None
+    if status and 'married' not in status and 'partner' not in status \
+            and not typed_age:
+        return None
+
+    def _n(v):
+        if v is None:
+            return None
+        m = re.search(r'\d{2}', str(v))
+        return float(m.group(0)) if m else None
+    age = _n(typed_age) or _n(form_age)
+    try:
+        with open(_store.json_path(folder, 'income_facts.json')) as fh:
+            inf = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        inf = {}
+    name = (_inputs.value(folder, 'spouse_name') or inf.get('spouse_name') or '')
+    name = str(name).split(' ')[0] or None
+    return {'name': name, 'age': age, 'born': born,
+            'retire_age': _n(_inputs.value(folder, 'spouse_retire_age')),
+            'source': ('born %s' % born) if born_age else
+                      ('typed by the team' if _n(typed_age) else 'IC form')}
+
+
+def _m(v):
+    """Money for a working line: whole dollars, a minus sign when negative."""
+    return ('-' if v < 0 else '') + _money(abs(v))
+
+
+def _payoff(balance, note):
+    """(rate %, payment, months) behind an estimated payoff, else None."""
+    import math
+    rate = re.search(r'(\d+(?:\.\d+)?)%', note or '')
+    pay = re.search(r'\$?([\d,]+(?:\.\d+)?)/mo', note or '')
+    if not (rate and pay and balance):
+        return None
+    r = float(rate.group(1)) / 100 / 12
+    P = float(pay.group(1).replace(',', ''))
+    B = float(balance)
+    if P <= 0:
+        return None
+    if r == 0:
+        return float(rate.group(1)), P, B / P
+    if r * B >= P:
+        return None
+    return float(rate.group(1)), P, -math.log(1 - r * B / P) / math.log(1 + r)
+
+
 def build(bundle, folder):
     years = bundle.years
     latest = years[-1] if years else None
@@ -344,10 +425,29 @@ def build(bundle, folder):
     # 1 ---------------------------------------------------------------------
     this_year = datetime.date.today().year
     age = _value(bundle, 'Age')
+    # A birthdate beats the stated age: typed by the team ('birthdate'), or
+    # read from the IC form, the call notes or the portal (the Birthdate fact).
+    owner_born, born_age = _born(_inputs.value(folder, 'birthdate')
+                                 or _value(bundle, 'Birthdate'))
+    if born_age:
+        age = float(born_age)
+    if isinstance(age, str):
+        m = re.search(r'\b(\d{2})\b', age)
+        age = float(m.group(1)) if m else None
     end = (this_year + int(FIRM['life_expectancy'] - age)) if age else None
+    # A plan for two people (the lead advisor's rule): the spouse's age and
+    # life expectancy are stated beside the owner's, and the plan runs to the
+    # later of the two. The age comes from the IC form ("How old is your
+    # spouse?") or, when the team typed one, the input store; the name from
+    # the W-2s read (income_facts) or the input store.
+    partner = _partner(bundle, folder)
+    end_partner = None
+    if partner and partner.get('age'):
+        end_partner = this_year + int(FIRM['life_expectancy'] - partner['age'])
+    plan_end = max([y for y in (end, end_partner) if y] or [None]) if (end or end_partner) else None
     out.append(Section(1,
         'We have employed an inflation rate of %.1f%% annually over the life '
-        'of the plan (%d-%s).' % (FIRM['inflation'], this_year, end or '----'),
+        'of the plan (%d-%s).' % (FIRM['inflation'], this_year, plan_end or '----'),
         source='firm standard'))
 
     # 2 ---------------------------------------------------------------------
@@ -359,9 +459,6 @@ def build(bundle, folder):
         # named is when they stop, so the largest one
         ages = [float(x) for x in re.findall(r'\b([4-8]\d)\b', retire_at)]
         retire_at = max(ages) if ages else None
-    if isinstance(age, str):
-        m = re.search(r'\b(\d{2})\b', age)
-        age = float(m.group(1)) if m else None
     said = 'IC form'
     if not retire_at:
         # "ASAP" on the form: the age agreed on a call wins, from the
@@ -384,13 +481,81 @@ def build(bundle, folder):
         # the age, then the life expectancy in brackets. Year only, because
         # the firm's plans assume a year-end exit and the IC form carries an
         # age rather than a birth date.
-        out.append(Section(2,
-            'We assume that %s is set to retire in %d, at an age of %d. Life '
-            'expectancy used for this plan is age %d (%s).'
-            % (bundle.forename or 'the client', year_of, retire_at,
-               FIRM['life_expectancy'], end),
-            source='%s: age %d, retirement age goal %d.'
-                   % (said, age, retire_at)))
+        who = bundle.forename or 'the client'
+        if partner and partner.get('age'):
+            # Two people: each one's retirement and life expectancy. Without
+            # a goal of their own, the spouse stops the same year as the
+            # owner, at whatever age that makes them.
+            p_name = partner.get('name') or 'their spouse'
+            p_retire = partner.get('retire_age')
+            p_said = 'retirement age %d typed by the team' % p_retire if p_retire else \
+                'no retirement age of their own, so the same year as %s' % who
+            p_year = (this_year + int(p_retire - partner['age'])) if p_retire else year_of
+            p_retire = p_retire or (partner['age'] + (year_of - this_year))
+            text = ('We assume that %s is set to retire in %d, at an age of %d, '
+                    'and %s in %d, at an age of %d. Life expectancy used for '
+                    'this plan is age %d for both (%s for %s and %s for %s).'
+                    % (who, year_of, retire_at, p_name, p_year, p_retire,
+                       FIRM['life_expectancy'], end, who, end_partner, p_name))
+            source = ('%s: age %d, retirement age goal %d. %s: age %d (%s), %s.'
+                      % (said, age, retire_at, p_name, partner['age'],
+                         partner.get('source') or 'IC form', p_said))
+            out.append(Section(2, text, source=source))
+        else:
+            out.append(Section(2,
+                'We assume that %s is set to retire in %d, at an age of %d. Life '
+                'expectancy used for this plan is age %d (%s).'
+                % (who, year_of, retire_at, FIRM['life_expectancy'], end),
+                source='%s: age %d, retirement age goal %d.'
+                       % (said, age, retire_at)))
+        if owner_born:
+            out[-1].source = out[-1].source.replace(
+                '%s: age %d,' % (said, age),
+                '%s: age %d (born %s),' % (said, age, owner_born), 1)
+        flags = []
+        if partner and not partner.get('age'):
+            flags.append('Married, but the spouse\u2019s age is not on file: '
+                         'add it so the plan covers both of them.')
+        # The lead advisor's rule: the analyst enters exact birthdates at the
+        # first check of the Assumptions, so every age is worked out from a
+        # date rather than an age typed on a form.
+        missing = []
+        if not owner_born:
+            missing.append(who)
+        if partner and not partner.get('born'):
+            missing.append(partner.get('name') or 'the spouse')
+        if missing:
+            flags.append('Birthdate%s needed for %s: add %s as a Note on this '
+                         'section (MM/DD/YYYY) and %s recorded when the check '
+                         'is pulled in. Until then the age comes from the IC '
+                         'form.' % (('s', ' and '.join(missing), 'them', 'they are')
+                                    if len(missing) > 1 else
+                                    ('', missing[0], 'it', 'it is')))
+        if flags:
+            out[-1].flag = '  '.join(flags)
+        # How sections 1 and 2 were worked out.
+        le = FIRM['life_expectancy']
+        n = int(retire_at - age)
+        w1 = ['%s is %d today%s. Life expectancy %d: %d + (%d - %d) = %d.'
+              % (who, age, ' (born %s)' % owner_born if owner_born else '',
+                 le, this_year, le, age, end)]
+        w2 = ['%s: retirement age %d less age today %d = %d years. %d + %d = %d.'
+              % (who, retire_at, age, n, this_year, n, year_of)]
+        if partner and partner.get('age'):
+            pa = partner['age']
+            w1.append('%s is %d today%s. %d + (%d - %d) = %d.'
+                      % (p_name, pa, ' (born %s)' % partner['born'] if partner.get('born') else '',
+                         this_year, le, pa, end_partner))
+            w1.append('The plan runs to the later of the two: %s.' % plan_end)
+            if partner.get('retire_age'):
+                pn = int(partner['retire_age'] - pa)
+                w2.append('%s: retirement age %d less age today %d = %d years. %d + %d = %d.'
+                          % (p_name, partner['retire_age'], pa, pn, this_year, pn, p_year))
+            else:
+                w2.append('%s: no retirement age given, so the same year as %s, %d. Age today '
+                          '%d + %d years = %d.' % (p_name, who, year_of, pa, n, p_retire))
+        out[0].workings = w1
+        out[-1].workings = w2
     else:
         out.append(Section(2, needed='the client’s target retirement age',
                            why='every projection in the plan runs to it'))
@@ -655,6 +820,14 @@ def build(bundle, folder):
              'detail': 'Grown to %s at retirement.' % _money(value * (1 + gq) ** max(0, years_to))
              if years_to else None}]
         out[-1].heads = ('Practice value', 'Rate')
+        out[-1].workings = ['%s revenue %s x %d%% (the firm multiple) = %s.'
+                            % (basis_year, _m(revenue), FIRM['practice_value_multiple'] * 100,
+                               _m(value))]
+        if years_to:
+            for name, g in (('Current path', gc), ('4Q path', gq)):
+                out[-1].workings.append('%s: %s x (1 + %.1f%%) ^ %d years to retirement = %s.'
+                                        % (name, _m(value), g * 100, years_to,
+                                           _m(value * (1 + g) ** years_to)))
         out[-1].text = re.sub(r'scheduled to grow at [\d.]+% annually',
                               'scheduled to grow at %s annually on the current path and '
                               '%s with 4Q,' % (('%.1f' % (gc * 100)).rstrip('0').rstrip('.') + '%',
@@ -682,8 +855,13 @@ def build(bundle, folder):
     sqft = _ic.money(form.get('building_sqft'))
     if sqft:
         bits.append('of {:,.0f} square feet'.format(sqft))
-    lead = ('We show that %s owns the practice building%s.'
-            % (bundle.forename or 'the client',
+    # Building or condo: the team's word ('premises' in the input store)
+    # first, then what the documents showed (the Office location fact).
+    place = str(_inputs.value(folder, 'premises') or '').strip().lower() or (
+        'condo' if 'owns the condo' in str(_value(bundle, 'Office location') or '')
+        else 'building')
+    lead = ('We show that %s owns the practice %s%s.'
+            % (bundle.forename or 'the client', place,
                (' ' + ' '.join(bits)) if bits else ''))
     rent = _ic.money(form.get('building_payment'))
     if rent:
@@ -692,17 +870,37 @@ def build(bundle, folder):
                  % (_money(rent), bundle.forename or 'the client'))
     out.append(Section(7,
         text=lead,
-        needed='a current value for the practice building',
+        needed='a current value for the practice %s' % place,
         # This used to be Oyler's own findings, word for word, printed on
         # every client's plan: "Brian owns it personally ... Form 8825 rental
         # totals are zero ... Zillow has no record of the parcel." Rebol's
         # plan said Brian. Only what holds for any client belongs here.
         why='Held outside the practice, so it sits in the plan alongside it '
-            'and is usually sold with it or leased on afterwards. A building '
+            'and is usually sold with it or leased on afterwards. A %s '
             'the practice rents is not on the practice’s books at its value, '
             'so a county assessment, an appraisal or a Zillow estimate is the '
-            'source.',
+            'source.' % place,
         flag=_flag(folder, 7)))
+    out[-1].title = 'Practice %s' % place
+    # A value the team recorded (a broker opinion, an appraisal, the county):
+    # stated with its source, and the section is no longer waiting on it.
+    bval = _inputs.get(folder, 'building_value')
+    if bval and bval.get('value'):
+        out[-1].text = lead + (' The %s is valued at %s and is assumed to grow '
+                               'at 2%% a year, to be sold with the practice at '
+                               'retirement.' % (place, _money(float(bval['value']))))
+        out[-1].needed = None
+        out[-1].why = None
+        out[-1].value = float(bval['value'])
+        out[-1].source = bval.get('note') or _inputs.cite(bval, 'the team')
+        try:
+            yrs7 = int(float(retire_at) - float(age)) if (age and retire_at) else None
+        except (TypeError, ValueError):
+            yrs7 = None
+        if yrs7:
+            v7 = float(bval['value'])
+            out[-1].workings = ['%s x (1 + 2%%) ^ %d years to retirement = %s at the sale.'
+                                % (_m(v7), yrs7, _m(v7 * 1.02 ** yrs7))]
 
     # 8 and 9 ---------------------------------------------------------------
     for number, block, label in ((8, 'Personal debt', 'personal and rental '
@@ -786,6 +984,29 @@ def build(bundle, folder):
                 source='debt schedule and lender statements',
                 flag=_flag(folder, number)))
             out[-1].heads = ('Obligation', 'Matures', 'Balance')
+            steps = []
+            for x in listed:
+                if '(est.)' not in str(x.get('mid') or ''):
+                    continue
+                bal = next((r.value for r in rows if r.label == x['label'] and _isnum(r.value)), None)
+                got = _payoff(bal, x.get('detail') or '')
+                if got:
+                    rate, pay, months = got
+                    steps.append('%s: %s at %.2f%%, paying %s a month, is paid off in about '
+                                 '%d months (%.1f years): %s.'
+                                 % (x['label'], _m(bal), rate, _m(pay), round(months),
+                                    months / 12, x['mid']))
+            nums = [r.value for r in rows if _isnum(r.value)]
+            if nums:
+                steps.append('Total: %d balance%s added up = %s%s.'
+                             % (len(nums), '' if len(nums) == 1 else 's', _m(total),
+                                ' (debts with no stated balance are not in it)' if extra else ''))
+            if steps:
+                steps.insert(0, 'Matures: the year from the debt schedule or the credit report '
+                                'where one is given. An "est." year is worked out from the '
+                                'balance, rate and payment, n = -ln(1 - rate x balance / '
+                                'payment) / ln(1 + rate), monthly.')
+            out[-1].workings = steps
         else:
             out.append(Section(number,
                                needed='statements or a schedule for the %s '
@@ -862,6 +1083,28 @@ def build(bundle, folder):
             % basis_year,
             rows=rows, source=src + '.', flag=_flag(folder, 10)))
         out[-1].heads = ('Source', 'Amount')
+        steps = []
+        for r in rows:
+            m = re.search(r'(\$[\d,]+\.\d\d) a pay period .*? times (\d+)', r.get('detail') or '')
+            if m:
+                steps.append('%s: %s x %s pay periods = %s.'
+                             % (r['label'].replace(', W-2 wages', ''), m.group(1), m.group(2),
+                                r['amount']))
+        if net:
+            steps.append('Net profit, %s P&L: revenue %s - overhead %s - owner W-2 %s - '
+                         'depreciation %s = %s.' % (basis_year, _m(rev), _m(exp),
+                                                    _m(wages or 0), _m(da), _m(net)))
+            if restated:
+                diff = owner_now - wages
+                steps.append('The owner\'s W-2 at today\'s pay rate is %s, %s %s than in %s, '
+                             'so net profit is %s by the same: %s %s %s = %s.'
+                             % (_m(owner_now), _m(abs(diff)), 'more' if diff > 0 else 'less',
+                                basis_year, 'lower' if diff > 0 else 'higher', _m(net),
+                                '-' if diff > 0 else '+', _m(abs(diff)), _m(net_shown)))
+        if wages and net:
+            steps.append('Total earnings: W-2s %s + net profit %s = %s.'
+                         % (_m(w2_total), _m(net_shown), _m(w2_total + net_shown)))
+        out[-1].workings = steps
     else:
         out.append(Section(10, needed='a full year P&L and the matching return',
                            why='income is what everything else is measured '
@@ -913,6 +1156,22 @@ def build(bundle, folder):
             source='Cash flow workbook, from the bank statements.',
             flag='  '.join(notes) or None))
         out[-1].heads = ('Liability, insurance or savings', 'Monthly')
+        steps = []
+        pers = [a for a in cash['accounts'] if a.get('monthly_spend') is not None]
+        for a in pers:
+            steps.append('%s: %s a month spent, averaged over %s statement%s (money out, less '
+                         'transfers to their own accounts and one-offs).'
+                         % (a['name'], _m(a['monthly_spend']), a.get('months') or a['periods'],
+                            '' if (a.get('months') or a['periods']) == 1 else 's'))
+        if pers:
+            steps.append('Personal accounts added up: %s a month including the fixed payments; '
+                         'x 12 = %s a year.' % (_m(inc), _m(inc * 12)))
+        steps.append('Less the fixed payments listed below: %s - %s = %s a month; x 12 = %s a year.'
+                     % (_m(inc), _m(fixed), _m(exc), _m(exc * 12)))
+        if cash.get('one_offs'):
+            steps.append('Left out as one-offs: %s in all (on the cash flow workbook\'s '
+                         'To review tab).' % _m(sum(cash['one_offs'])))
+        out[-1].workings = steps
     else:
         out.append(Section(12, needed='personal bank statements, so monthly '
                                       'spending can be measured rather than '
@@ -961,6 +1220,11 @@ def build(bundle, folder):
             % ((' (the IC form says "%s")' % str(saved).strip()) if saved else ''),
             rows=contrib_rows, source='W-2s, with the IC form beside them.')
         sec.heads = ('Contribution', 'A year')
+        tot14 = sum(float(a) for _w, a, _s in (
+            (None, inf.get('deferral'), None), (None, inf.get('spouse_deferral'), None)) if a)
+        if len(contrib_rows) > 1:
+            sec.workings = ['Total a year: %s = %s.' % (' + '.join(r['amount'] for r in contrib_rows),
+                                                        _m(tot14))]
         out.append(sec)
     elif numeric:
         out.append(Section(14,
@@ -1146,6 +1410,7 @@ def _amount(text):
 # a balance sheet does.
 SUMMARY = (('Real estate', (3,), False),
            ('Practice', (6,), False),
+           ('Practice real estate', (7,), False),
            ('Investable assets', (4, 5), False),
            ('Debt', (8, 9), True))
 
@@ -1199,10 +1464,12 @@ def payload(folder, client=None):
     out = []
     for sec in sections:
         out.append({
-            'number': sec.number, 'title': _pdf.TITLES.get(sec.number, ''),
+            'number': sec.number,
+            'title': getattr(sec, 'title', None) or _pdf.TITLES.get(sec.number, ''),
             'text': sec.text, 'source': sec.source, 'flag': sec.flag,
             'needed': sec.needed, 'why': sec.why, 'link': sec.link,
             'heads': list(getattr(sec, 'heads', None) or ()),
+            'workings': list(getattr(sec, 'workings', None) or ()),
             'rows': [{'label': r.get('label'), 'amount': r.get('amount'),
                       'mid': r.get('mid'),
                       'detail': r.get('detail'), 'rule': bool(r.get('rule'))}

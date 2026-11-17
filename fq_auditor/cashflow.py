@@ -638,6 +638,10 @@ def for_assumptions(folder):
                               'moved between accounts.')
             accounts.append(row)
             if personal and seen:
+                # What this account adds to the household's monthly figure,
+                # for the Assumptions' "how this was worked out".
+                row['monthly_spend'] = round((sum(adj) - sum(acct.get('one_offs') or ())) / months, 2)
+                row['months'] = months
                 monthly += sum(adj) / months
                 # One-off outflows come out of the published run rate.
                 # They are real money and they stay on the adjustments
