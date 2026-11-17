@@ -84,8 +84,8 @@ Never overwrite the lead advisor's work. Re-seed, then:
 - `update` plan/figures with ONLY the computed fields: `figures`, `findings`,
   `recommendations`, `pics`, `slide_titles`, `question_ids`, `answered_by_docs`, `assumptions`,
   `carried`, `note_done`, `verdicts`, `library`, `slide_library_saved`, `schedule`, `slide_list`,
-  `slides_auto_dropped`
-  (pinned to that version). Leave `decided`, `qdecisions`, `qtext`, `qanswers`,
+  `slides_auto_dropped`, `cashflow`, `client_ref`
+  (pinned to that version). Leave `decided`, `reference_recs`, `qdecisions`, `qtext`, `qanswers`,
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
   `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes`,
   `assume_kind`, `an_assume_kind`, `qcustom`, `carried_marks`, `save_years`, `slide_off`, `slide_add`, `slide_force` alone.

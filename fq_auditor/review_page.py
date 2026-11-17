@@ -911,7 +911,13 @@ def seed(folder, outdir, mode='review'):
             'slide_titles': {str(k): v for k, v in titles.items()},
             'question_ids': sorted(ids), 'mode': mode,
             'answered_by_docs': answered_by_docs,
-            'findings': findings(folder, D) if mode != 'consult' else None}
+            'findings': findings(folder, D) if mode != 'consult' else None,
+            'cashflow': cashflow_view(folder),
+            # How Claude is asked about this client from the page's copy
+            # buttons: a practice or test copy by its own name, so Claude
+            # never opens the real client by mistake.
+            'client_ref': D['surname'] + (' PRACTICE' if re.search(r'-\s*PRACTICE$', os.path.basename(folder.rstrip('/')), re.I)
+                                          else ' TEST' if re.search(r'-\s*TEST$', os.path.basename(folder.rstrip('/')), re.I) else '')}
     # The Assumptions, as the first tab: the lead advisor reads the plan's
     # base figures in the layout he knows before anything else.
     try:
@@ -1288,6 +1294,277 @@ def main():
     else:
         apply(a.folder, a.plan_json)
 
+
+
+def cashflow_view(folder):
+    """The cash flow workbook, as the review page's Cash flow tab shows it.
+
+    Read from the built Numbers workbook itself, not recomputed, so the tab
+    shows exactly what the workbook says, including anything the analyst
+    typed into its amber cells (those are kept at the next rebuild). The tab
+    is read-only: the workbook stays the place to change a figure.
+    """
+    import glob
+    hits = sorted(glob.glob(os.path.join(folder, 'Cash flow - *.numbers')),
+                  key=os.path.getmtime)
+    if not hits:
+        return None
+    try:
+        from numbers_parser import Document
+        doc = Document(hits[-1])
+    except Exception:                                        # noqa: BLE001
+        return None
+
+    def val(cell):
+        v = cell.value
+        if isinstance(v, float):
+            return round(v, 2)
+        if v is None:
+            return ''
+        return str(v) if not isinstance(v, (int, bool)) else v
+
+    def rows_of(t):
+        out = []
+        for r in range(t.num_rows):
+            row = [val(t.cell(r, c)) for c in range(t.num_cols)]
+            while row and row[-1] in ('', None):
+                row.pop()
+            out.append(row)
+        return out
+
+    view = {'file': os.path.basename(hits[-1]),
+            'built': datetime.datetime.fromtimestamp(
+                os.path.getmtime(hits[-1])).strftime('%b %d, %Y %I:%M %p'),
+            'summary': [], 'sides': [], 'review': []}
+    for sh in doc.sheets:
+        t = sh.tables[0]
+        rows = rows_of(t)
+        if sh.name == 'Summary':
+            head = next((i for i, r in enumerate(rows) if r and r[0] == 'Side'), None)
+            if head is not None:
+                view['summary_head'] = rows[head]
+                for r in rows[head + 1:]:
+                    if r and r[0] and len(r) > 2:
+                        view['summary'].append(r)
+                    elif r and r[0] and len(str(r[0])) > 40:
+                        view['summary_note'] = r[0]
+            continue
+        if sh.name == 'To review':
+            head = next((i for i, r in enumerate(rows) if r and r[0] == 'Side'), None)
+            if head is not None:
+                view['review_head'] = rows[head]
+                view['review'] = [r for r in rows[head + 1:] if r and r[0]]
+            continue
+        side = {'name': sh.name, 'accounts': [], 'fixed': [], 'totals': []}
+        acct, mode = None, None
+        for r in rows:
+            if not r or not r[0]:
+                continue
+            first = str(r[0])
+            if len(r) > 2 and str(r[-1]) == 'Monthly avg':
+                acct = {'name': first, 'months': r[1:-1], 'rows': []}
+                side['accounts'].append(acct)
+                mode = 'acct'
+                continue
+            if first.startswith('Fixed payments taken out'):
+                mode = 'fixed'
+                continue
+            if first.startswith('Totals for'):
+                mode = 'totals'
+                continue
+            if first.startswith('Amber rows') or first.endswith('cash flow'):
+                continue
+            if mode == 'acct' and acct is not None:
+                acct['rows'].append(r)
+            elif mode == 'fixed':
+                side['fixed'].append(r)
+            elif mode == 'totals':
+                side['totals'].append(r)
+        view['sides'].append(side)
+    # Whose account each is, and what kind, from the statements themselves:
+    # the holder printed on them and the statement's own title.
+    info = account_info(folder)
+    for sd in view['sides']:
+        for a in sd['accounts']:
+            m = re.search(r'x(\d{4})', a['name'])
+            a.update(info.get(m.group(1), {}) if m else {})
+    accts = {}
+    for sd in view['sides']:
+        for a in sd['accounts']:
+            m = re.search(r'x(\d{4})', a['name'])
+            if m:
+                accts[m.group(1)] = '%s (%s)' % (a['name'], sd['name'])
+    try:
+        view['loans'] = loans_paid_from(folder, accts)
+    except Exception:                                        # noqa: BLE001
+        view['loans'] = []
+    # Each fixed payment's account: the debits carrying its name, the one
+    # nearest its monthly amount first, else the account most of them are on.
+    try:
+        import collections
+        import transactions as _tx
+        debits = []
+        for (_sd, key), rows in _tx.gather(folder).items():
+            l4 = ''.join(c for c in str(key) if c.isdigit())[-4:]
+            for r in rows:
+                if r.get('direction') == 'debit' and r.get('amount'):
+                    debits.append((l4, r['amount'], (r.get('description') or '').upper()))
+        for sd in view['sides']:
+            for row in sd['fixed']:
+                if len(row) < 2 or not isinstance(row[1], (int, float)):
+                    continue
+                n = re.sub(r'\s+', ' ', str(row[0]).upper())[:14]
+                cands = [d for d in debits if n and n in re.sub(r'\s+', ' ', d[2])]
+                near = [d for d in cands if abs(d[1] - row[1]) <= max(2, 0.03 * row[1])]
+                pick = None
+                if near:
+                    pick = collections.Counter(d[0] for d in near).most_common(1)[0][0]
+                elif cands:
+                    pick = collections.Counter(d[0] for d in cands).most_common(1)[0][0]
+                else:
+                    same = [d for d in debits if abs(d[1] - row[1]) <= 1]
+                    if same:
+                        pick = collections.Counter(d[0] for d in same).most_common(1)[0][0]
+                while len(row) < 3:
+                    row.append('')
+                row.append(accts.get(pick, ('x' + pick) if pick else ''))
+    except Exception:                                        # noqa: BLE001
+        pass
+    return view
+
+
+def loans_paid_from(folder, accounts):
+    """Every loan on file with the account it is paid from: matched on the
+    bank statements (the creditor's name, or a debit of the payment amount
+    to within $2), else what the documents say ("paid from x1980"), else
+    marked as not seen on the statements. `accounts` maps last four digits
+    to the workbook's account name."""
+    import re as _re
+    try:
+        import facts as _facts
+        b = _facts.gather(folder, None)
+    except Exception:                                        # noqa: BLE001
+        return []
+    try:
+        import transactions as _tx
+        moves = _tx.gather(folder)
+    except Exception:                                        # noqa: BLE001
+        moves = {}
+    debits = []
+    for (_side, key), rows in moves.items():
+        l4 = ''.join(c for c in str(key) if c.isdigit())[-4:]
+        for r in rows:
+            if r.get('direction') == 'debit' and r.get('amount'):
+                debits.append((l4, r['amount'], (r.get('description') or '').lower()))
+    out = []
+    for block in b.blocks:
+        if block.title not in ('Practice debt', 'Personal debt'):
+            continue
+        side = 'Practice' if block.title == 'Practice debt' else 'Personal'
+        for f in block.facts:
+            if not isinstance(f.value, (int, float)) or f.label.endswith('total') \
+                    or 'debt service' in f.label.lower() or f.label.startswith(('Personal debt', 'Practice debt')):
+                continue
+            note = f.note or ''
+            pay = _re.search(r'([\d,]+(?:\.\d+)?)/mo', note)
+            pay = float(pay.group(1).replace(',', '')) if pay else None
+            name = f.label
+            cred = _re.sub(r'[^a-z ]', ' ', name.lower()).split()
+            words = [w for w in cred if len(w) > 3 and w not in
+                     ('loan', 'note', 'practice', 'mortgage', 'rental', 'home', 'house',
+                      'short', 'term', 'equipment', 'second', 'primary', 'residence',
+                      'capital', 'bank', 'finance', 'financial', 'national', 'credit',
+                      'auto', 'lending', 'payment', 'services', 'funding')]
+            where, how = None, None
+            for l4, amt, desc in debits:
+                if pay and abs(amt - pay) <= 2:
+                    where, how = l4, 'a %s debit on the statements' % '${:,.0f}'.format(amt)
+                    break
+            if not where and words:
+                # The debit naming the most of the loan's words: a building
+                # note "<Bank> ... <Owner> Properties" is the debit that says
+                # <BANK> ... <OWNER> PROPER, not the practice note that only
+                # names the bank.
+                best = max(((sum(1 for w in words if w[:6] in desc), l4) for l4, _a, desc in debits),
+                           default=(0, None))
+                if best[0]:
+                    where, how = best[1], 'by name on the statements'
+            if not where:
+                m = _re.search(r'(?<!not )(?:paid|pays)[^.]*?\bx(\d{4})', note, _re.I)
+                if m:
+                    where, how = m.group(1), 'per the documents'
+            out.append({'side': side, 'loan': name, 'balance': f.value, 'payment': pay,
+                        'from': accounts.get(where, ('x' + where) if where else None),
+                        'how': how or 'not seen on the statements'})
+    return out
+
+
+def _person(name):
+    """'JANE Q EXAMPLE' as 'Jane'."""
+    w = [x for x in str(name).replace('(CUST)', '').split() if x]
+    return w[0].title() if w else ''
+
+
+def account_info(folder):
+    """{last4: {who, type, title}} from the bank statement readings: the
+    holder line ("JOHN Q EXAMPLE / JANE Q EXAMPLE") and the statement's
+    own title ("Personal Checking - August Statement.pdf")."""
+    try:
+        with open(_store.json_path(folder, 'bank_statements.json')) as fh:
+            d = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for f in (d.get('files') or {}).values():
+        title = re.sub(r'\s*-\s*\w+ (?:\d{4} )?statement.*$', '', f.get('name') or '', flags=re.I)
+        title = re.sub(r'\.pdf$', '', title, flags=re.I).strip()
+        for st in f.get('statements') or ():
+            l4 = st.get('account_last4')
+            if not l4 or l4 in out:
+                continue
+            holder = st.get('holder') or ''
+            parts = [p.strip() for p in holder.split('/') if p.strip()]
+            low = (title + ' ' + holder).lower()
+            if st.get('business'):
+                ent = parts[0].title() if parts else ''
+                ent = re.sub(r'\b(Dds|Pllc|Llc|Pc|Dmd)\b', lambda m: m.group(1).upper(), ent)
+                who = ent
+            elif '(cust)' in holder.lower():
+                kid = _person(parts[0]) if parts else ''
+                who = '%s\u2019s custodial account (parents as custodians)' % kid
+            else:
+                ppl = [_person(p) for p in parts if re.search(r'[A-Z]{2,}\s+[A-Z]', p) and
+                       not re.search(r'ACCOUNT|RENTAL|CONDO|LLC', p)]
+                who = ('Joint: ' + ' & '.join(ppl)) if len(ppl) > 1 else (ppl[0] if ppl else '')
+            kind = ('Money market' if re.search(r'money market|mmkt|\bmm\b', low) else
+                    'Savings' if 'saving' in low else
+                    'Custodial' if 'custod' in low else
+                    'Checking' if re.search(r'checking|operating|chk', low) else '')
+            if not kind:
+                # The product name printed on the statement ("BUSINESS
+                # CHECKING", "PERSONAL INTEREST CHECKING").
+                kind = _statement_kind(folder, f)
+            out[l4] = {'who': who, 'type': kind, 'title': title}
+    return out
+
+
+def _statement_kind(folder, f):
+    import subprocess
+    path = f.get('path') or ''
+    if not os.path.exists(path):
+        hits = [os.path.join(dp, n) for dp, _d, ns in os.walk(os.path.join(folder, 'Documents'))
+                for n in ns if n == f.get('name')]
+        path = hits[0] if hits else ''
+    if not path:
+        return ''
+    try:
+        t = subprocess.run(['pdftotext', '-l', '1', path, '-'], capture_output=True,
+                           text=True, timeout=20).stdout.upper()
+    except Exception:                                        # noqa: BLE001
+        return ''
+    m = re.search(r'(MONEY MARKET|SAVINGS|CHECKING)', t)
+    return {'MONEY MARKET': 'Money market', 'SAVINGS': 'Savings',
+            'CHECKING': 'Checking'}.get(m.group(1), '') if m else ''
 
 if __name__ == '__main__':
     main()

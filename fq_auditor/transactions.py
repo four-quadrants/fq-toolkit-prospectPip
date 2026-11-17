@@ -980,7 +980,24 @@ def find_one_offs(rows, periods, multiple=2.0):
             continue
         row['one_off'] = round(amount / middle, 1)
         out.append(row)
+    # School tuition: paid in a few big payments a year, not monthly. The
+    # lead advisor leaves it out of the monthly figure and lists it on its
+    # own (one family's August tuition, counted in the run rate, made
+    # monthly spending about $2,000 too high). Kept on the review
+    # list, marked as tuition.
+    for row in rows:
+        if row.get('direction') != 'debit' or row.get('one_off') or row.get('kind'):
+            continue
+        if TUITION.search(row.get('description') or ''):
+            row['one_off'] = round((row.get('amount') or 0) / middle, 1) or 0.1
+            row['tuition'] = True
+            out.append(row)
     return out
+
+
+TUITION = re.compile(r'tuition|\bschool\b|academy|christian|\bchri\b|montessori|\bprep\b|'
+                     r'catholic|episcopal|day school|preschool|daycare|learning center|'
+                     r'facts mgmt|facts tuition|smart tuition', re.I)
 
 
 CARD_WORDS = re.compile(

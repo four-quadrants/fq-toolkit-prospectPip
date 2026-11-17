@@ -44,6 +44,15 @@ keep working whichever page it has).
 4. **The deck.** The Slides tab's **Build the deck** copies "Pull in and build
    <Surname>'s consult deck".
 
+When someone asks to be walked through a client's cash flow ("walk me
+through <client>'s cash flow", from the button under Assumptions 12), open
+that client's cash flow workbook and follow
+`Prospects/HOW TO READ THE CASH FLOW WORKBOOK.md`: one part at a time, with
+the client's own numbers, stopping for questions. They are not expected to
+read the guide themselves. If they say something is off, make the change
+(a figure into the workbook's amber cells, or an account's place via
+`rental_accounts` / `children_accounts`), then refresh the review.
+
 When someone asks how to use the page or wants to be walked through it,
 read `references/page_guide.md` and follow it. For a first look (setup, or
 "make me a training page"), publish their own training page first

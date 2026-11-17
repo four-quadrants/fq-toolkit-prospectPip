@@ -212,7 +212,9 @@ came with them wait in `_Practice/_answers (held back)/<Surname>/`. When the
 person says "the answers came in", copy that folder's `Documents` into the
 practice folder (same paths), put the answer email beside it, then run the
 normal refresh with answers (fq-analysis-review). Never touch the real
-client's folder.
+client's folder. A practice page carries `reference_recs` on plan/figures:
+the lead advisor's own savings rows from the deck he sent (shown on the
+Recommendations tab, reference only); a refresh leaves it alone.
 
 ## Emails to the client
 

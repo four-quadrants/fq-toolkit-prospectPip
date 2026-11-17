@@ -108,7 +108,54 @@ def _personal_group(rows, folder=None, key=None):
         return 'Children\u2019s accounts'
     if RENTAL_WORDS.search(text):
         return 'Rental properties'
+    # An account that pays a rental's mortgage is that rental's account,
+    # whatever the statement calls it (an account named after the street
+    # paid a rental's mortgage and sat in Personal, adding thousands a month
+    # to the household's spending).
+    if folder and key and _pays_rental(folder, key):
+        return 'Rental properties'
     return 'Personal'
+
+
+_RENTAL_PAY = {}
+
+
+def _pays_rental(folder, key):
+    if folder not in _RENTAL_PAY:
+        pays = []
+        try:
+            import doc_readings as _dr
+            for r in ((_dr.check(folder)[0] or {}).get('debts') or {}).get('personal') or ():
+                what = ' '.join(str(r.get(k) or '') for k in ('what', 'description'))
+                if r.get('payment') and (RENTAL_WORDS.search(what) or
+                                         re.search(r'rental|renters|condo|lease|airbnb|vrbo', what, re.I)):
+                    cred = re.sub(r'[^a-z ]', ' ', str(r.get('creditor') or '').lower()).split()
+                    pays.append((float(r['payment']), cred[0] if cred else ''))
+        except Exception:                                    # noqa: BLE001
+            pays = []
+        by_acct = {}
+        if pays:
+            try:
+                moves = _tx.gather(folder)
+                for (side, k), rows in moves.items():
+                    if side != 'Personal':
+                        continue
+                    debits = [(t['amount'], (t.get('description') or '').lower()) for t in rows
+                              if t.get('direction') == 'debit' and t.get('amount')]
+                    # The rental's lender by name (the payment can move with
+                    # escrow from one month to the next), or its amount.
+                    rent = sum(a for a, d in debits if any(
+                        abs(a - p) <= 2 or (c and len(c) > 2 and c in d and abs(a - p) <= 0.25 * p)
+                        for p, c in pays))
+                    debits = [a for a, _d in debits]
+                    # Mostly a rental's mortgage: the household's main
+                    # checking may pay a rental too and stays Personal.
+                    if debits and rent >= 0.4 * sum(debits):
+                        by_acct[k] = True
+            except Exception:                                # noqa: BLE001
+                by_acct = {}
+        _RENTAL_PAY[folder] = by_acct
+    return bool(_RENTAL_PAY[folder].get(key))
 
 
 _GROUPS = {}
@@ -246,12 +293,17 @@ def build(folder):
             if not t.get('date'):
                 continue
             t['effect'] = 'propose'
-            t['why'] = ('Single outflow of %s, about %s times this '
-                        'account\u2019s usual period. Real money, but it '
-                        'looks like a one-off rather than a run rate. '
-                        'Exclude it?'
-                        % ('{:,.0f}'.format(t['amount'] or 0),
-                           t.get('one_off')))
+            if t.get('tuition'):
+                t['why'] = ('School tuition, %s. Paid a few times a year, not '
+                            'monthly: left out of the monthly figure and '
+                            'listed on its own.' % '{:,.0f}'.format(t['amount'] or 0))
+            else:
+                t['why'] = ('Single outflow of %s, about %s times this '
+                            'account\u2019s usual period. Real money, but it '
+                            'looks like a one-off rather than a run rate. '
+                            'Exclude it?'
+                            % ('{:,.0f}'.format(t['amount'] or 0),
+                               t.get('one_off')))
 
         # Every movement that still needs a human becomes a row on the
         # adjustments block, with the reason the rule gave.

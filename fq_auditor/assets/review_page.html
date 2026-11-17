@@ -70,6 +70,33 @@ textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px 10px;border:1
 .pad .empty{padding:0}
 h3{font:700 16px/1.2 var(--display);color:var(--ink);margin:0}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.cfhelp{margin-top:10px;padding:10px 12px;border-radius:8px;background:#EEF4FB;border:1px solid #C9DCF0;border-left:5px solid #1F6FB2;font-size:14px}
+.cfhelp .cfwalk{margin-left:4px}
+.teamnote{background:#FFF4D6;border:1px solid #F0C36D;border-left:5px solid #E8A33D}
+.teamnote textarea{background:#FFFBEF}
+#an-note{background:#FFF4D6;border:1px solid #F0C36D;border-left:5px solid #E8A33D;border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:14.5px;line-height:1.5;white-space:pre-wrap}
+#an-note b{display:block;margin-bottom:4px;color:#8A5A00}
+.cfstep{display:grid;grid-template-columns:22px 1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.cfstep .op{color:var(--muted);font-weight:700;text-align:center}.cfstep .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.cfstep.key{font-weight:700;background:var(--accent-soft)}.cfstep.key .v{font-size:17px}
+.cfbar{display:flex;height:26px;border-radius:7px;overflow:hidden;margin:0 0 14px;font:600 12px var(--display);color:#fff}
+.cfbar span{display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden}
+.cfbar span:first-child{background:#E8730C}.cfbar span:last-child{background:#4A5056}
+.cfpill{font:700 10.5px var(--display);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:10px;background:rgba(0,0,0,.07)}
+.cfwho{font-weight:600;font-size:13.5px}
+.cfsidebox{border-radius:10px;margin-bottom:12px;padding:10px 12px;border:1px solid var(--line)}
+.cfsidebox>summary{cursor:pointer;font-size:15px}
+.cftag{display:inline-block;font:700 11px var(--display);letter-spacing:.08em;padding:3px 8px;border-radius:5px;color:#fff;margin-right:6px}
+.cfcard{border-radius:8px;padding:10px 12px;margin-top:10px;border-left:5px solid}
+.cfsidebox .cfcard:nth-of-type(even){filter:brightness(.97)}
+.cf-personal{background:#F3F7FC}.cf-personal .cftag{background:#1F6FB2}.cf-personal .cfcard{background:#fff;border-left-color:#1F6FB2}.cf-personal .cfcard:nth-of-type(even){background:#EAF2FB}
+.cf-practice{background:#F2F8F4}.cf-practice .cftag{background:#2E7D4F}.cf-practice .cfcard{background:#fff;border-left-color:#2E7D4F}.cf-practice .cfcard:nth-of-type(even){background:#E6F3EA}
+.cf-rental{background:#FCF7EE}.cf-rental .cftag{background:#B7791F}.cf-rental .cfcard{background:#fff;border-left-color:#B7791F}.cf-rental .cfcard:nth-of-type(even){background:#F8EEDB}
+.cf-kids{background:#F7F3FB}.cf-kids .cftag{background:#7B4FA6}.cf-kids .cfcard{background:#fff;border-left-color:#7B4FA6}.cf-kids .cfcard:nth-of-type(even){background:#EFE7F7}
+.cf-other .cftag{background:#4A5056}.cf-other .cfcard{border-left-color:#4A5056}
+.cfpays{font-size:13.5px;margin:4px 0 6px}
+.cfside td{background:var(--bg);padding-top:10px}
+.cfacct{border-top:1px solid var(--line);padding:10px 0}.cfhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.cfline{margin:4px 0 2px;font-size:14.5px}
 .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-variant-numeric:tabular-nums}
 .kv .v{text-align:right;font-weight:600;color:var(--ink)}
 .kv .t{border-top:1px solid var(--line);padding-top:6px;font-weight:700;color:var(--ink)}
@@ -249,6 +276,7 @@ tr.off td{opacity:.55}
   </header>
   <nav class="tabs" role="tablist" aria-label="Review sections">
     <button type="button" data-tabgo="assume" data-modes="analysis consult review" aria-selected="true">Assumptions</button>
+    <button type="button" id="cashtab" data-tabgo="cash" data-modes="analysis consult review" aria-selected="false" style="display:none">Cash flow</button>
     <button type="button" data-tabgo="found" data-modes="analysis review" aria-selected="false">What we found</button>
     <button type="button" data-tabgo="qs" data-modes="analysis consult review" aria-selected="false">Questions <span class="tc" id="tc-qs"></span></button>
     <button type="button" data-tabgo="email" data-modes="analysis review" aria-selected="false">Email</button>
@@ -265,7 +293,16 @@ tr.off td{opacity:.55}
     <h2>Assumptions <small id="as-count"></small></h2>
     <div class="note"><button type="button" id="printasm">Print the assumptions</button> <span id="printmsg">Click, then paste the line into Claude: it saves the Assumptions as a PDF in the client folder, ready to print.</span></div>
     <p class="note">The base plan as the Assumptions document lays it out, built from the documents on file. Comment on any section in the box under it: a change, a correction or a question. Claude reads every comment when the review is pulled in. The analyst checks the page first; the lead advisor sees the analyst's comments above his own. On the consult review, the notes and questions from the analysis review sit on their section, with the client's answer and Claude's read of whether it settles the point: mark each <b>Answered</b> / <b>Done</b>, <b>Still open</b> (asked again) or <b>Team to revisit</b>.</p>
+    <h3 style="margin:6px 0 6px">Notes for the team <small class="basis">the analyst&rsquo;s hand-off to the lead advisor, read first</small></h3>
+    <div class="anfrom" id="an-note" style="display:none"></div>
+    <div class="card pad teamnote" style="margin-bottom:14px"><textarea id="gnote2" rows="4" placeholder="What looks off, what to ask, what to keep in mind for the plan." aria-label="Notes for the team" style="width:100%"></textarea></div>
     <div id="assume"><div class="card empty">Appears once the analyst loads this client.</div></div>
+  </section>
+
+  <section data-tab="cash">
+    <details class="tabhelp"><summary>What this tab is for</summary><div>The cash flow workbook, read straight from the bank statements: what the household spends a month, with and without its fixed payments. Read only here: to change a figure, type it into the amber cells of the workbook in the client folder, save, and ask Claude to <i>refresh the review</i>; this tab then shows the new figures.<br><b>Where it ends up:</b> Personal spending excluding fixed payments is the "current personal expenses" figure in <b>Assumptions 12</b>; including them is the annual figure in the same sentence; the fixed payments are the table under it; each bank account's balance is a line in <b>Assumptions 5</b>.</div></details>
+    <h2>Cash flow <small id="cf-built"></small></h2>
+    <div id="cashflow"><div class="card empty">Appears once the cash flow workbook is built for this client.</div></div>
   </section>
 
   <section data-tab="found">
@@ -273,9 +310,6 @@ tr.off td{opacity:.55}
     <h2>What the documents show <small>Check these before the plan is built on them</small></h2>
     <p class="note">Read from the statements, returns and credit reports, each with where it came from. Anything wrong or missing: say so in a note or a question to the client.</p>
     <div id="found"><div class="card empty">Appears once the analyst loads this client.</div></div>
-    <h2 style="margin-top:26px">Notes for the team <small>Read before the plan is built</small></h2>
-    <div class="anfrom" id="an-note" style="display:none"></div>
-    <div class="card pad"><textarea id="gnote2" rows="3" placeholder="What looks off, what to ask, what to keep in mind for the plan." aria-label="Notes" style="width:100%"></textarea></div>
   </section>
 
   <section data-tab="email">
@@ -307,6 +341,7 @@ tr.off td{opacity:.55}
     <details class="tabhelp"><summary>What this tab is for</summary><div>Where the new savings come from: each recommendation, what it frees up a year, and how much is invested in years 1 and 2. Untick what does not fit, change amounts, add from the library.<br><b>Where it ends up:</b> what stays ticked is the <b>Annual savings projection</b> slide, and the savings schedule behind <b>Your savings future</b> and the opening and closing slides.</div></details>
     <h2>Recommendations <small id="reccount"></small></h2>
     <p class="note">The recommendations this client's documents point to are ticked, with the figure and the reason, alongside the firm's most common ones. Untick what does not fit, tick anything else that does and fill in its figures. <b>Add from the library</b> brings in any other recommendation the firm has used; <b>Add a recommendation</b> writes a new one, and it joins the library for every client after this one. What stays ticked becomes the savings slide and the savings schedule. <b>Cashflow created</b> is what each frees up a year; <b>Year 1</b> and <b>Year 2</b> are what gets invested from it.</p>
+    <div id="recref"></div>
     <div class="wi-results" id="recimpact" style="margin-bottom:14px"></div>
     <div class="card ledger"><table>
       <thead><tr><th style="width:34px"></th><th>Recommendation</th><th class="r">Cashflow created</th><th class="r">Year 1</th><th class="r">Year 2</th></tr></thead>
@@ -374,6 +409,9 @@ tr.off td{opacity:.55}
     <details class="tabhelp"><summary>What this tab is for</summary><div>Everything written on this page in one list, with who wrote it and where it stands. Nothing to fill in.<br><b>Where it ends up:</b> Claude reads every note when the review is pulled in.</div></details>
     <h2>Notes &amp; questions <small id="ncount"></small></h2>
     <p class="note">Everything written on this review, in one place: every note for the team and every question to the client, who wrote it, what it is about, and where it stands. A <b>note</b> is acted on by Claude when the review is pulled in; what was done shows here after the next refresh. A <b>question</b> shows whether it was sent, the client's answer, or that documents settled it. On the consult review, what the analysis review said about each assumption sits on that section of the Assumptions tab, to be marked there.</p>
+    <h3 style="margin:4px 0 6px">Feedback on the toolkit <small class="basis">anything the page, the assumptions or the deck got wrong or should do differently, for every client</small></h3>
+    <div class="card pad teamnote" style="margin-bottom:14px"><textarea id="pipenote" rows="4" placeholder="e.g. The building value should come from the appraisal, not be left blank. Or: this slide should show both spouses' W-2s." aria-label="Feedback on the toolkit" style="width:100%"></textarea>
+      <div class="basis" style="margin-top:4px">Saves as you type. The toolkit owner reads this and changes the pipeline; it does not change this client.</div></div>
     <div id="notesbox"><div class="card empty">Nothing written on this review yet.</div></div>
   </section>
 </div>
@@ -739,7 +777,21 @@ function fqModel(P){
       '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(P.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
     if(typeof wiRender==='function') wiRender();
   }
+  // What the lead advisor used on this client before (a practice copy of a
+  // past client, or a plan being redone): his own savings rows, side by
+  // side, for reference only. Nothing here feeds the plan.
+  function renderRecRef(){
+    var el=$('recref'); if(!el) return;
+    var R=plan&&plan.reference_recs; if(!R||!(R.years||[]).length){ el.innerHTML=''; return; }
+    el.innerHTML='<details class="card pad" open style="margin-bottom:14px;background:#FAF8F5"><summary><b>What you used on this client'+(R.from?' ('+esc(R.from)+')':'')+'</b> <span class="basis">reference only; nothing here feeds the plan</span></summary>'+
+      '<div class="grid2" style="margin-top:8px">'+R.years.map(function(y){
+        return '<div><h3 style="margin:4px 0">'+esc(y.label)+'</h3><table style="width:100%;font-size:13px"><thead><tr><th>Source</th><th class="r">Cashflow created</th><th class="r">Invested</th></tr></thead><tbody>'+
+          (y.rows||[]).map(function(r){return '<tr><td>'+esc(r[0])+'</td><td class="r">'+esc(r[1])+'</td><td class="r">'+esc(r[2])+'</td></tr>'}).join('')+
+          (y.total?'<tr class="ret"><td><b>Total</b></td><td class="r"><b>'+esc(y.total[0])+'</b></td><td class="r"><b>'+esc(y.total[1])+'</b></td></tr>':'')+
+          '</tbody></table></div>'; }).join('')+'</div>'+(R.note?'<div class="basis" style="margin-top:6px">'+esc(R.note)+'</div>':'')+'</details>';
+  }
   function renderRecs(){
+    renderRecRef();
     if(!plan||!plan.recommendations) return;
     var st=plan.recs||{}, cu=plan.recs_custom||[];
     // The list starts short: what this client's documents point to, what he
@@ -931,7 +983,7 @@ function fqModel(P){
       '<span class="note"> Start with Needed and To check; Sure boxes are figures from the checked documents or decisions already made.</span>';
     // Build the deck: the page cannot reach the client folder, so the button
     // hands over the one line Claude needs (pull in, then build), copied.
-    var line='Pull in and build '+(plan.surname||'this client')+'\u2019s consult deck';
+    var line='Pull in and build '+(plan.client_ref||plan.surname||'this client')+'\u2019s consult deck';
     $('scount').innerHTML=(plan.mode!=='analysis')?
       '<div class="note" style="margin:8px 0"><button type="button" id="builddeck">Build the deck</button> '+
       '<span id="buildmsg">When the slides are decided: click, then paste the line into Claude. It saves your choices and builds the deck into the client folder.</span></div>':'';
@@ -1047,7 +1099,12 @@ function fqModel(P){
     plan[f]=plan[f]||{};
     if(!ks.length){ plan[f][num]=''; ks=[num]; }
     var n=Math.max.apply(null,ks.map(function(k){ return +(k.split('.')[1]||1); }))+1, k=num+'.'+n;
-    plan[f][k]=''; renderAssume(); applyMode();
+    plan[f][k]='';
+    // Saved straight away (empty), so a save arriving from the comment above
+    // cannot redraw the section without the new box.
+    pending.an=true; var patch={}; patch[f]=plan[f];
+    write('plan/figures',patch,function(){pending.an=false;},'another comment on assumption '+num);
+    renderAssume(); applyMode();
     var t=document.querySelector('textarea[data-an="'+k+'"]'); if(t) t.focus();
   });
   function renderAssume(){
@@ -1068,6 +1125,11 @@ function fqModel(P){
       }
       if(s.source&&(s.text||(s.rows&&s.rows.length))) h+='<div class="asrc"><b>SOURCE</b>&nbsp; '+esc(s.source)+'</div>';
       if(s.flag) h+='<div class="abox"><b>CHECK THIS</b>'+esc(s.flag)+'</div>';
+      // Personal spending comes from the cash flow workbook: one click to
+      // have Claude walk through it, and how a change gets in.
+      if(s.number===12) h+='<div class="cfhelp"><b>Where this comes from:</b> the cash flow workbook in the client folder, built from the bank statements. '+
+        '<button type="button" class="cfwalk">Walk me through the cash flow</button> <span class="cfwalkmsg basis">Copies a line to paste into Claude; it explains the workbook step by step with these numbers.</span>'+
+        '<div class="basis" style="margin-top:4px">Something off (an account in the wrong place, a transfer counted as spending)? Tell Claude what it is, then press <b>Check for new answers and documents</b> or ask it to refresh the review. The figures above update.</div></div>';
       if(s.needed) h+='<div class="abox"><b>STILL NEEDED</b>'+esc(s.needed)+(s.why?'<div>'+esc(s.why)+'</div>':'')+
         (s.link?'<div><a href="'+esc(s.link)+'" target="_blank" rel="noopener">'+esc(s.link)+'</a></div>':'')+'</div>';
       carriedFor(s.number).forEach(function(it){ h+=citem(it); });
@@ -1279,6 +1341,116 @@ function fqModel(P){
   });
 
   // ---- what we found (analysis review) ----------------------------------
+  // ---- cash flow (read only; the Numbers workbook is where it changes) --
+  var CF_ROWS={
+    'Beginning balance':'Off the statement.',
+    'Deposits':'Everything that came in, off the statement.',
+    'Transfers in':'From the client\u2019s own accounts: not income, so not counted.',
+    'Ending balance':'Off the statement.',
+    'Transfers out':'To the client\u2019s own accounts (savings, another checking): moving money is not spending, so taken back out.',
+    'Spending after adjustments':'Money out, less transfers out and the adjustments: the account\u2019s real spending that month.'};
+  function cfExplain(label){
+    if(/^Money out/.test(label)) return 'Beginning + deposits \u2212 ending: everything that left the account.';
+    if(/^Adjust out/.test(label)) return 'The toolkit\u2019s correction (a card paid from two accounts, a payment in the wrong month). Editable in the workbook.';
+    if(/^Adjust in/.test(label)) return 'The toolkit\u2019s correction back in. Editable in the workbook.';
+    return CF_ROWS[label]||'';
+  }
+  function cfMoney(v){ return (typeof v==='number')?(v<0?'('+$m(-v)+')':$m(v)):esc(v==null?'':v); }
+  // How each To review movement is treated in the figures right now, and
+  // what changes if a person decides otherwise.
+  function cfTreat(r){
+    var kind=String(r[3]||''), why=String(r[5]||''), side=String(r[0]||'');
+    if(/^Single outflow/.test(why)) return ['Left out of spending as a one-off (the "less one-off outflows" line).','If it repeats, it belongs in the run rate: tell Claude ("put the $X back in") and refresh.'];
+    if(/child/i.test(why)||/Children/.test(side)) return ['Counted as money out of the child’s account (nothing taken out).','Ask what it was for; if it was the household’s own spending, say so and it moves to Personal.'];
+    if(kind==='Transfer out') return ['Counted as spending: the toolkit could not see the other account.','If it went to their own account (savings, the building LLC), mark it a transfer and it comes out of spending.'];
+    if(kind==='Transfer in') return ['Counted as money in (a deposit).','If it came from their own account, mark it a transfer and it comes out of deposits.'];
+    if(r[6]==='By rule'||kind==='Note') return ['Information only; nothing was changed.','Nothing to decide unless it looks wrong.'];
+    return ['Left as the statements show it.','Tell Claude how to treat it, then refresh.'];
+  }
+  function cfKind(r){
+    var kind=String(r[3]||''), why=String(r[5]||'');
+    if(/^Single outflow/.test(why)) return 'One-off payment';
+    if(/child/i.test(why)) return 'Withdrawal from a child\u2019s account';
+    if(kind==='Transfer out') return 'Transfer to an account we have no statement for';
+    if(kind==='Transfer in') return 'Transfer from an account we have no statement for';
+    return kind==='Note'?'Note':kind;
+  }
+  function renderCash(){
+    var el=$('cashflow'); if(!el) return;
+    var C=plan&&plan.cashflow; if(!C){ el.innerHTML='<div class="card empty">Appears once the cash flow workbook is built for this client.</div>'; $('cf-built').textContent=''; return; }
+    $('cf-built').textContent='from '+C.file+', built '+C.built;
+    var h='', pers=(C.summary||[]).filter(function(r){return r[0]==='Personal'})[0];
+    var psd=(C.sides||[]).filter(function(x){return x.name==='Personal'})[0]||{};
+    var T={}; (psd.totals||[]).forEach(function(r){ T[String(r[0])]=r; });
+    if(pers){
+      h+='<div class="card pad teamnote" style="margin-bottom:14px;font-size:15.5px;line-height:1.55"><p style="margin:0"><b>In plain terms:</b> the household spends about <b>'+$m(pers[4])+' a month</b> on day-to-day living, plus <b>'+$m(pers[3])+'</b> in loan, insurance and savings payments, so <b>'+$m(pers[2])+' a month</b> in all ('+$m(pers[6])+' a year). Those two figures are the sentence in <b>Assumptions 12</b>.</p></div>';
+      // the headline numbers, with one bar: day-to-day vs fixed payments
+      var tot=(+pers[2])||1, dd=Math.max(0,(+pers[4])/tot*100);
+      h+='<div class="wi-results" style="margin-bottom:10px">'+
+        '<div class="tile good"><span class="k">Day-to-day living</span><span class="v">'+$m(pers[4])+'<small style="font-size:13px;font-weight:500"> /mo</small></span><span class="s">'+$m(pers[5])+' a year \u00b7 Assumptions 12</span></div>'+
+        '<div class="tile"><span class="k">Loans, insurance, savings</span><span class="v">'+$m(pers[3])+'<small style="font-size:13px;font-weight:500"> /mo</small></span><span class="s">The fixed payments</span></div>'+
+        '<div class="tile"><span class="k">All personal spending</span><span class="v">'+$m(pers[2])+'<small style="font-size:13px;font-weight:500"> /mo</small></span><span class="s">'+$m(pers[6])+' a year \u00b7 Assumptions 12</span></div>'+
+        '<div class="tile '+((C.review||[]).length?'warn':'')+'"><span class="k">To review</span><span class="v">'+((C.review||[]).length)+'</span><span class="s">Movements that need a person</span></div></div>'+
+        '<div class="cfbar" title="Day-to-day '+$m(pers[4])+' + fixed '+$m(pers[3])+'"><span style="width:'+dd.toFixed(1)+'%">Day-to-day '+Math.round(dd)+'%</span><span style="width:'+(100-dd).toFixed(1)+'%">Fixed payments '+Math.round(100-dd)+'%</span></div>';
+      // the bridge, step by step
+      var st=function(lab,v,op,key){ return '<div class="cfstep'+(key?' key':'')+'"><span class="op">'+(op||'')+'</span><span class="lab">'+esc(lab)+'</span><span class="v">'+cfMoney(v)+'</span></div>'; };
+      var a1=T['Spending after adjustments, all accounts'], o1=T['Less one-off outflows (on To review)'], i1=T['Spending including fixed payments'], f1=T['Less fixed payments above'], e1=T['Spending excluding fixed payments'];
+      if(a1&&i1&&e1) h+='<div class="card pad" style="margin-bottom:14px"><h3 style="margin:0 0 8px">How the Personal figure is built, a month</h3>'+
+        st('Real spending across the '+(psd.accounts||[]).length+' personal accounts (each explained below)',a1[1],'')+
+        st('One-off payments left out (see To review)',o1?o1[1]:0,'−')+
+        st('Spending including fixed payments',i1[1],'=',true)+
+        st('Loan, insurance and savings payments (listed below)',f1?f1[1]:0,'−')+
+        st('Day-to-day living: Assumptions 12',e1[1],'=',true)+'</div>';
+    }
+    // One fold per side, coloured by side (Personal blue, Practice green,
+    // Rentals amber, Children purple); each account its own shaded card,
+    // with the loans and payments that come out of it.
+    var SIDEC={'Personal':'cf-personal','Practice':'cf-practice','Rental properties':'cf-rental','Children’s accounts':'cf-kids'};
+    var L=C.loans||[], fx=[]; (C.sides||[]).forEach(function(sd){ (sd.fixed||[]).forEach(function(r){ if(typeof r[1]==='number') fx.push({side:sd.name,r:r}); }); });
+    var paysFrom=function(name){
+      var m=String(name).match(/x(\d{4})/), l4=m?m[1]:null, out=[];
+      if(!l4) return out;
+      L.forEach(function(l){ if(l.from&&l.from.indexOf('x'+l4)===0) out.push([l.loan, l.payment, l.side+' debt']); });
+      fx.forEach(function(x){ if(String(x.r[3]||'').indexOf('x'+l4)===0 && !L.some(function(l){ return l.payment&&Math.abs(l.payment-x.r[1])<=2; }))
+        out.push([String(x.r[0]), x.r[1], 'on the statements, not on the debt sheet']); });
+      return out;
+    };
+    (C.sides||[]).forEach(function(sd){
+      var sm=(C.summary||[]).filter(function(r){return r[0]===sd.name})[0], cls=SIDEC[sd.name]||'cf-other';
+      h+='<details class="cfsidebox '+cls+'"'+(sd.name==='Personal'?' open':'')+'><summary><span class="cftag">'+esc(sd.name==='Practice'?'PRACTICE':sd.name==='Personal'?'PERSONAL':sd.name.toUpperCase())+'</span> '+
+        (sd.accounts||[]).length+' account'+((sd.accounts||[]).length===1?'':'s')+(sm?' · '+$m(sm[2])+' a month out':'')+
+        ' <span class="basis">'+(sd.name==='Personal'?'the plan’s spending':sd.name==='Practice'?'every dollar leaving the practice accounts, not overhead':'not in the plan’s spending')+'</span></summary>';
+      (sd.accounts||[]).forEach(function(a){
+        var R={}; (a.rows||[]).forEach(function(r){ R[String(r[0]).replace(/ \(.*$/,'')]=r; });
+        var avg=function(k){ var r=R[k]; return r?r[r.length-1]:null; };
+        var n=(a.months||[]).length, dep=avg('Deposits'), out=avg('Money out'), tro=avg('Transfers out'), ao=avg('Adjust out'), ai=avg('Adjust in'), sp=avg('Spending after adjustments');
+        var last=(R['Ending balance']||[])[n], adj=(+ai||0)-(+ao||0), pays=paysFrom(a.name);
+        h+='<div class="cfcard"><div class="cfhead"><b>'+esc(a.title||a.name)+'</b>'+(a.type?'<span class="cfpill">'+esc(a.type)+'</span>':'')+(a.who?'<span class="cfwho">'+esc(a.who)+'</span>':'')+'<span class="basis">'+(a.title?esc(a.name)+' \u00b7 ':'')+n+' statements, '+esc((a.months||[])[0]||'')+' to '+esc((a.months||[])[n-1]||'')+(last!==undefined&&last!==''?' · balance now '+cfMoney(last):'')+'</span></div>'+
+          '<p class="cfline">In <b>'+cfMoney(dep)+'</b> a month, out <b>'+cfMoney(out)+'</b>'+((+tro)?', of which '+cfMoney(tro)+' went to their own accounts':'')+(Math.abs(adj)>=0.5?', adjusted '+(adj>0?'+':'−')+cfMoney(Math.abs(adj)):'')+' → real spending <b>'+cfMoney(sp)+'</b> a month.</p>'+
+          (pays.length?'<div class="cfpays"><b>Paid from this account:</b> '+pays.map(function(p){ return esc(p[0])+(p[1]?' <span class="basis">'+cfMoney(p[1])+'/mo</span>':''); }).join(' · ')+'</div>':'')+
+          '<details><summary class="basis">Month by month, and what each row means</summary><div class="ledger"><table><thead><tr><th></th>'+(a.months||[]).map(function(m){return '<th class="r">'+esc(m)+'</th>'}).join('')+'<th class="r">Avg</th></tr></thead><tbody>'+
+          (a.rows||[]).filter(function(r){ return r.slice(1).some(function(v){return (+v)!==0 && v!==''; }); }).map(function(r){ var lab=String(r[0]), cells=r.slice(1); while(cells.length<n+1) cells.push('');
+            var ex=cfExplain(lab), key=/^Spending after/.test(lab);
+            return '<tr'+(key?' class="ret"':'')+'><td><b>'+esc(lab.replace(/ \(.*$/,''))+'</b>'+(ex?'<div class="basis">'+esc(ex)+'</div>':'')+'</td>'+cells.map(function(v){return '<td class="r">'+cfMoney(v)+'</td>'}).join('')+'</tr>'; }).join('')+
+          '</tbody></table><div class="basis" style="margin:6px 0">Rows that are $0 every month are hidden.</div></div></details></div>';
+      });
+      h+='</details>';
+    });
+    var unseen=L.filter(function(l){ return !l.from; });
+    if(unseen.length) h+='<div class="abox" style="margin-bottom:14px"><b>LOANS NOT SEEN ON ANY STATEMENT</b>'+unseen.map(function(l){ return esc(l.loan)+(l.payment?' ('+cfMoney(l.payment)+'/mo)':''); }).join(' · ')+'<div>Which account pays these, or will? Ask, or note it in the workbook.</div></div>';
+    // To review, grouped: the same movement every month is one line.
+    var groups=[], byk={};
+    (C.review||[]).forEach(function(r){ var k=[r[0],r[1],r[3],r[4],String(r[5]).slice(0,40)].join('|');
+      if(byk[k]){ byk[k].months.push(r[2]); return; } byk[k]={r:r,months:[r[2]]}; groups.push(byk[k]); });
+    if(groups.length){
+      h+='<div class="card ledger"><h3 style="margin:10px 12px">To review: '+(C.review||[]).length+' movements, '+groups.length+' decision'+(groups.length===1?'':'s')+'</h3><table><thead><tr><th>What</th><th class="r">Amount</th><th>How it is handled now</th><th>If it is different</th></tr></thead><tbody>'+
+        groups.map(function(g){ var r=g.r, t=cfTreat(r), when=g.months.length>1?g.months.length+' months ('+esc(g.months[0])+' to '+esc(g.months[g.months.length-1])+')':esc(g.months[0]);
+          return '<tr><td><b>'+esc(cfKind(r))+'</b> · '+esc(r[0])+'<div class="basis">'+esc(r[1])+' · '+when+'</div><div class="basis">'+esc(String(r[5]).replace(/\s+/g,' '))+'</div></td><td class="r">'+cfMoney(r[4])+(g.months.length>1?'<div class="basis">each</div>':'')+'</td><td>'+esc(t[0])+'</td><td class="basis">'+esc(t[1])+'</td></tr>'; }).join('')+'</tbody></table>'+
+        '<div class="basis" style="margin:8px 12px">To change one: type the amount into that account’s amber Transfers or Adjust cells in the workbook and save, or just tell Claude what it is (“the monthly transfer is rent to their own building account”); then ask Claude to refresh the review.</div></div>';
+    }
+    el.innerHTML=h;
+  }
+
   function renderFound(){
     if(!plan||!plan.findings) return; var F=plan.findings;
     var tbl=function(title,head,rows){ return '<div class="card ledger" style="margin-bottom:14px"><h3 style="margin:10px 12px">'+title+'</h3><table><thead><tr>'+head.map(function(h,i){return '<th'+(i&&/\$|Balance|Value|Payment|Surplus/.test(h)?' class="r"':'')+'>'+h+'</th>'}).join('')+'</tr></thead><tbody>'+(rows.join('')||'<tr><td colspan="'+head.length+'" class="empty">None found</td></tr>')+'</tbody></table></div>'; };
@@ -1291,6 +1463,11 @@ function fqModel(P){
     if(F.spend) h+='<p class="note">Household spending, a year: <b>'+$m(F.spend)+'</b></p>';
     $('found').innerHTML=h;
   }
+  document.addEventListener('input',function(e){
+    if(!e.target||e.target.id!=='pipenote'||!plan) return;
+    plan.pipeline_notes=e.target.value; pending.pipe=true;
+    debounce('pipe',function(){ write('plan/figures',{pipeline_notes:plan.pipeline_notes},function(){pending.pipe=false;},'feedback on the toolkit'); });
+  });
   document.addEventListener('input',function(e){
     if(!e.target||e.target.id!=='gnote2'||!plan) return;
     if(isAnalyst()){
@@ -1422,6 +1599,9 @@ function fqModel(P){
   function isAnalyst(){ return !!(plan && plan.stage==='analyst'); }
   function applyMode(){
     var mode=(plan&&plan.mode)||'consult';
+    // The Cash flow tab is built but held back until it is switched on
+    // for a page (plan/figures show_cashflow: true).
+    var ct=$('cashtab'); if(ct){ var on=!!(plan&&plan.show_cashflow); ct.dataset.modes=on?'analysis consult review':'off'; ct.style.display=on?'':'none'; }
     document.querySelectorAll('details.tabhelp').forEach(function(d){ if(plan&&plan.training) d.open=true; });
     document.body.classList.toggle('mode-analysis',mode==='analysis');
     // The analyst's check is the Assumptions and What we found (so the
@@ -1452,15 +1632,23 @@ function fqModel(P){
     if(on) el.innerHTML='<b>PROVISIONAL</b>Waiting on '+n+' answer'+(n===1?'':'s')+' from the client. Everything here can be worked now; figures an answer changes are updated when the answers come in.';
   }
   document.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest&&e.target.closest('button.cfwalk'); if(!b||!plan) return;
+    var line='Walk me through '+(plan.client_ref||plan.surname||'this client')+'\u2019s cash flow';
+    var msg=b.parentNode.querySelector('.cfwalkmsg');
+    var done=function(){ if(msg) msg.textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
+    try{ navigator.clipboard.writeText(line).then(done,function(){ if(msg) msg.textContent='Copy this into Claude: '+line; }); }
+    catch(err){ if(msg) msg.textContent='Copy this into Claude: '+line; }
+  });
+  document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='printasm'||!plan) return;
-    var line='Print '+(plan.surname||'this client')+'\u2019s assumptions';
+    var line='Print '+(plan.client_ref||plan.surname||'this client')+'\u2019s assumptions';
     var done=function(){ $('printmsg').textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
     try{ navigator.clipboard.writeText(line).then(done,function(){ $('printmsg').textContent='Copy this into Claude: '+line; }); }
     catch(err){ $('printmsg').textContent='Copy this into Claude: '+line; }
   });
   document.addEventListener('click',function(e){
     if(!e.target||e.target.id!=='refreshbtn'||!plan) return;
-    var line='Refresh '+(plan.surname||'this client')+'\u2019s review with the new answers and documents';
+    var line='Refresh '+(plan.client_ref||plan.surname||'this client')+'\u2019s review with the new answers and documents';
     var done=function(){ $('refreshmsg').textContent='Copied: \u201c'+line+'\u201d. Paste it into Claude.'; };
     try{ navigator.clipboard.writeText(line).then(done,function(){ $('refreshmsg').textContent='Copy this into Claude: '+line; }); }
     catch(err){ $('refreshmsg').textContent='Copy this into Claude: '+line; }
@@ -1484,7 +1672,7 @@ function fqModel(P){
     set('tc-qs', allQs().length? '· '+allQs().length : '');
   }
   setInterval(tabCounts, 1500);
-  var BUILD='v61';
+  var BUILD='v69';
   // One click handler for every decision button, on the document, so a
   // button rebuilt while a question loads still works when clicked.
   document.addEventListener('click',function(e){
@@ -1528,6 +1716,7 @@ function fqModel(P){
       if(plan && pending.note) incoming.notes=plan.notes;
       if(plan && pending.an){ incoming.assume_notes=plan.assume_notes; incoming.an_assume_notes=plan.an_assume_notes; }
       if(plan && pending.ann) incoming.an_notes=plan.an_notes;
+      if(plan && pending.pipe) incoming.pipeline_notes=plan.pipeline_notes;
       if(plan && pending.qa) incoming.qanswers=plan.qanswers;
       if(plan && pending.kind){ incoming.assume_kind=plan.assume_kind; incoming.an_assume_kind=plan.an_assume_kind; }
       if(plan && pending.qc) incoming.qcustom=plan.qcustom;
@@ -1539,8 +1728,9 @@ function fqModel(P){
       if(plan && pending.email){ incoming.email=plan.email; incoming.email_edited=true; incoming.email_qsig=plan.email_qsig; }
       var a=document.activeElement;
       if(plan && a && a.closest && (a.closest('#figs')||a.closest('#assume')||a.closest('#concerns')||a.closest('#slides')||a.closest('#soutline')||a.closest('#recs'))){ plan=incoming; return; }
-      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderFound(); renderPlan(); renderRecs(); renderQs(); renderNotes(); renderLib();
+      plan=incoming; applyMode(); renderDone(); renderAnswered(); renderAssume(); renderCash(); renderFound(); renderPlan(); renderRecs(); renderQs(); renderNotes(); renderLib();
       showEmail(false);
+      var pn=$('pipenote'); if(pn && document.activeElement!==pn) pn.value=plan.pipeline_notes||'';
       ['gnote','gnote2'].forEach(function(id){ var gn=$(id); if(gn && document.activeElement!==gn) gn.value=(id==='gnote2'&&isAnalyst())?(plan.an_notes||''):(plan.notes||''); });
       var a3=document.activeElement; if(!(a3&&a3.dataset&&a3.dataset.sid)) renderSlides();
       if(!/Saved|Not saved|Still saving/.test($('status').textContent)) say('<b>Up to date</b> · decisions save as you go.');
