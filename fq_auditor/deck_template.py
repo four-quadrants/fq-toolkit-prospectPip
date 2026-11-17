@@ -404,6 +404,38 @@ def _figures(folder, client):
         except (OSError, ValueError):
             pass
     D['current_savings'] = N(adv.get('current_savings'))
+    D['current_savings_from'] = 'typed on Plan inputs' if D['current_savings'] else None
+    if not D['current_savings']:
+        # Worked out when nobody typed it, so the projection can run: the
+        # 401(k) deferrals on the W-2s (both spouses), as the Assumptions'
+        # Contributions section lists them; else the IC form's figure.
+        # Without this, every savings and projection figure on the review
+        # page read "not worked out" until someone typed one.
+        try:
+            import json as _json
+            import store as _store
+            with open(_store.json_path(folder, 'income_facts.json')) as fh:
+                _inf = _json.load(fh)
+        except (OSError, ValueError, AttributeError):
+            _inf = {}
+        defs = [N(_inf.get(k)) for k in ('deferral', 'spouse_deferral')]
+        defs = [x for x in defs if x]
+        if defs:
+            D['current_savings'] = sum(defs)
+            D['current_savings_from'] = ('401(k) deferrals on the %s W-2s (%s)'
+                                         % (_inf.get('year') or 'latest',
+                                            ' + '.join('${:,.0f}'.format(x) for x in defs)))
+        else:
+            _said = str(f.get('Saved last year') or '')
+            _m = re.search(r'\$?\s*([\d,.]+)\s*([kK])?', _said)
+            if _m and any(c.isdigit() for c in _m.group(1)):
+                try:
+                    v = float(_m.group(1).replace(',', '')) * (1000 if _m.group(2) else 1)
+                except ValueError:
+                    v = None
+                if v and v >= 1000:
+                    D['current_savings'] = v
+                    D['current_savings_from'] = 'the IC form ("%s")' % _said.strip()
     D['income'] = N(adv.get('target_income'))
     D['schedule'] = [tuple(x) for x in (adv.get('savings_schedule') or [])]
     D['take_home'] = N(adv.get('current_income')) or N(f.get('Take-home, stated'))

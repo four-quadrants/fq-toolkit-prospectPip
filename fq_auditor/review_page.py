@@ -730,7 +730,9 @@ def seed(folder, outdir, mode='review'):
              basis='Qualified plus non-qualified investable assets on file.'),
         dict(key='current_savings', label='Saved a year today',
              proposed=money(p['current_savings']),
-             basis='Contributions found on the statements and the IC form.'),
+             basis=('From the %s.' % D['current_savings_from']) if D.get('current_savings_from')
+             and D['current_savings_from'] != 'typed on Plan inputs'
+             else 'Contributions found on the statements and the IC form.'),
     ]
     # Savings by PLAN year (year 1 is the first year of the plan), at the
     # years the lead advisor reads them: 1, 2, 5, 8 and 12 unless he changes

@@ -59,8 +59,21 @@ def _ok(v, basis):
     return {'value': v, 'basis': basis, 'needs': []}
 
 
+def _M(v):
+    return ('-' if v < 0 else '') + '${:,.0f}'.format(abs(v))
+
+
+def _P(v, dp=1):
+    return ('%.' + str(dp) + 'f%%') % (100 * v)
+
+
 def compute(x):
-    """x is a dict of inputs; any may be None. Returns the ranked levers."""
+    """x is a dict of inputs; any may be None. Returns the ranked levers.
+
+    Each lever that is worked out carries 'steps': the arithmetic, one line
+    each, with this practice's own figures, for the review page's "How this
+    was worked out".
+    """
     g = x.get
     # The goal overhead is the advisor's call on the deck (Rebol 62%,
     # Spaulding 60%, Kinsler 51%); the analyst’s model defaults it to 50%. Every
@@ -76,6 +89,11 @@ def compute(x):
                               'net collections of $%s.'
                               % (100 * g('overhead'), 100 * target,
                                  '{:,.0f}'.format(g('net_collections'))))
+        out['overhead']['steps'] = [
+            'Overhead today %s less the %s goal = %s points.'
+            % (_P(g('overhead')), _P(target, 0), _P(g('overhead') - target)),
+            '%s x net collections of %s = %s a year.'
+            % (_P(max(0.0, g('overhead') - target)), _M(g('net_collections')), _M(v))]
     else:
         out['overhead'] = _need('overhead', 'net collections')
 
@@ -97,6 +115,12 @@ def compute(x):
         v = net * gap * COLLECT_IDEAL * owner
         out['adjustment'] = _ok(v, 'Adjustments of %.1f%% against an ideal '
                                 'of %.1f%%.' % (100 * adj, 100 * ideal))
+        out['adjustment']['steps'] = [
+            'Adjustments %s less the ideal %s = %s of production kept.'
+            % (_P(adj), _P(ideal), _P(gap)),
+            'Net production %s x %s = %s more production.' % (_M(net), _P(gap), _M(net * gap)),
+            '%s x 99.5%% collected x %s to the owner (what is left after the %s '
+            'overhead goal) = %s a year.' % (_M(net * gap), _P(owner, 0), _P(target, 0), _M(v))]
         out['adjustment']['worst_case'] = v * (1 - ATTRITION)
     else:
         out['adjustment'] = _need('adjustment %', 'net production')
@@ -124,12 +148,25 @@ def compute(x):
         out['hygiene'] = _ok(v, 'Hygiene %g to %g chair-days a week%s.'
                              % (days, ideal, (', at a typical %d%% hygiene share (the practice\u2019s own '
                                               'split is not on file)' % round(100 * hyg)) if hyg_assumed else ''))
+        out['hygiene']['steps'] = [
+            'Gross production %s x hygiene share %s%s = %s of hygiene a year.'
+            % (_M(gross), _P(hyg, 0), ' (typical, not the practice\u2019s own)' if hyg_assumed else '',
+               _M(gross * hyg)),
+            'Chair-days from %g to %g a week: %s x (%g / %g - 1) = %s more gross.'
+            % (days, ideal, _M(gross * hyg), ideal, days, _M(add_gross)),
+            '%s less adjustments of %s, 99.5%% collected, %s to the owner = %s a year.'
+            % (_M(add_gross), _P(adj), _P(owner, 0), _M(v))]
         ratio = g('doctor_per_hygiene_dollar')
         if ratio:
             v2 = add_gross * ratio * (1 - adj) * COLLECT_IDEAL * owner
             out['pull_through'] = _ok(v2, 'Doctor production of $%.2f per '
                                       'hygiene dollar on the added days.'
                                       % ratio)
+            out['pull_through']['steps'] = [
+                '%s more hygiene x $%.2f of doctor work per hygiene dollar = %s.'
+                % (_M(add_gross), ratio, _M(add_gross * ratio)),
+                '%s less adjustments of %s, 99.5%% collected, %s to the owner = %s a year.'
+                % (_M(add_gross * ratio), _P(adj), _P(owner, 0), _M(v2))]
         else:
             out['pull_through'] = _need('doctor and hygiene production split')
     else:
@@ -145,6 +182,14 @@ def compute(x):
         v = max(0.0, before - now) * pats * npp * COLLECT_IDEAL * owner
         out['new_patients'] = _ok(v, 'New patients from %.1f%% back to '
                                   '%.1f%%.' % (100 * now, 100 * before))
+        more = max(0.0, before - now) * pats
+        out['new_patients']['steps'] = [
+            'New patients %s of patients last year, %s now: %s points.'
+            % (_P(before), _P(now), _P(max(0.0, before - now))),
+            '%s x %s patients seen = %s more new patients.'
+            % (_P(max(0.0, before - now)), '{:,.0f}'.format(pats), '{:,.0f}'.format(more)),
+            '%s x %s net production per patient (last year) x 99.5%% collected x '
+            '%s to the owner = %s a year.' % ('{:,.0f}'.format(more), _M(npp), _P(owner, 0), _M(v))]
     else:
         out['new_patients'] = _need('patients seen', 'new patient % by year')
 
@@ -162,6 +207,12 @@ def compute(x):
         out['fees'] = _ok(v, 'Fees %.1f%% below the benchmark on the %.0f%% '
                           'of production that is fee-for-service.'
                           % (100 * off, 100 * ffs))
+        out['fees']['steps'] = [
+            'Production %s x %s below the fee benchmark x %s fee-for-service%s = %s.'
+            % (_M(base_f), _P(off), _P(ffs, 0),
+               ' (assumed: the real share is not on file)' if g('ffs_share_assumed') else '',
+               _M(base_f * off * ffs)),
+            '%s x %s to the owner = %s a year.' % (_M(base_f * off * ffs), _P(owner, 0), _M(v))]
         # The analyst computes it but holds it out of the top five when the FFS
         # share is his assumption rather than the practice's figure
         # ("hold - needs FFS %"). Same here.
@@ -182,6 +233,10 @@ def compute(x):
         v = max(0.0, (COLLECT_IDEAL - col) * net) * owner
         out['collections'] = _ok(v, 'Collections from %.1f%% to 99.5%%.'
                                  % (100 * col))
+        out['collections']['steps'] = [
+            '99.5%% less %s collected today = %s points.' % (_P(col), _P(max(0.0, COLLECT_IDEAL - col))),
+            '%s x net production %s x %s to the owner = %s a year.'
+            % (_P(max(0.0, COLLECT_IDEAL - col)), _M(net), _P(owner, 0), _M(v))]
     else:
         out['collections'] = _need('collection %', 'net production')
 
@@ -191,6 +246,11 @@ def compute(x):
         v = max(0.0, npp - npp_now) * pats * COLLECT_IDEAL * owner
         out['per_patient'] = _ok(v, 'Net production per patient back to '
                                  'last year’s.')
+        out['per_patient']['steps'] = [
+            'Net production per patient %s last year, %s now: %s less.'
+            % (_M(npp), _M(npp_now), _M(max(0.0, npp - npp_now))),
+            '%s x %s patients x 99.5%% collected x %s to the owner = %s a year.'
+            % (_M(max(0.0, npp - npp_now)), '{:,.0f}'.format(pats), _P(owner, 0), _M(v))]
     else:
         out['per_patient'] = _need('patients seen', 'net production by year')
 
@@ -203,6 +263,11 @@ def compute(x):
         v = add * (1 - adj) * COLLECT_IDEAL * owner
         out['pats_per_day'] = _ok(v, 'Patients per doctor day from %.1f back to '
                                   '%.1f, over %g doctor days.' % (ppd, ppd0, dd))
+        out['pats_per_day']['steps'] = [
+            '(%.1f - %.1f) patients a day x %g doctor days x %s gross per patient = %s.'
+            % (ppd0, ppd, dd, _M(gpp), _M(add)),
+            '%s less adjustments of %s, 99.5%% collected, %s to the owner = %s a year.'
+            % (_M(add), _P(adj), _P(owner, 0), _M(v))]
     else:
         out['pats_per_day'] = _need('patients seen', 'doctor days by year')
 

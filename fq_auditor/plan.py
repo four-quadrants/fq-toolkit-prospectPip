@@ -90,25 +90,36 @@ def gains(collections=None, current_savings=None, cash=None,
                             gain=current_savings + added_deferral, kind='base',
                             basis='What is saved today, plus $%s a year more '
                                   'into the 401(k) under the new pay structure.'
-                                  % '{:,.0f}'.format(added_deferral)))
+                                  % '{:,.0f}'.format(added_deferral),
+                            steps=['Saved a year today: $%s.' % '{:,.0f}'.format(current_savings),
+                                   'Plus $%s a year more into the 401(k) under the new pay '
+                                   'structure = $%s.' % ('{:,.0f}'.format(added_deferral),
+                                                         '{:,.0f}'.format(current_savings + added_deferral))]))
         else:
             out.append(dict(key='current', label='Current savings',
                             gain=current_savings, kind='base',
-                            basis='What is saved today, all of it kept.'))
+                            basis='What is saved today, all of it kept.',
+                            steps=['Saved a year today: $%s, kept every year.'
+                                   % '{:,.0f}'.format(current_savings)]))
     if collections:
         out.append(dict(key='overhead', label='−3% overhead',
                         gain=collections * OVERHEAD_STEP, kind='practice',
                         basis='3%% of collections of $%s.'
-                              % '{:,.0f}'.format(collections)))
+                              % '{:,.0f}'.format(collections),
+                        steps=['Collections $%s x 3%% lower overhead = $%s a year to the owner.'
+                               % ('{:,.0f}'.format(collections),
+                                  '{:,.0f}'.format(collections * OVERHEAD_STEP))]))
     for key, label in (('adjustment', 'Lower adjustment %'),
                        ('new_patients', 'New patient %'),
                        ('per_patient', 'Net production per patient'),
                        ('fees', 'Fee increase'),
                        ('collections', 'Collection % to 99.5%')):
-        v = ((levers or {}).get(key) or {}).get('value')
+        lv = (levers or {}).get(key) or {}
+        v = lv.get('value')
         if v:
             out.append(dict(key=key, label=label, gain=v, kind='practice',
-                            basis='levers.py, to the owner.'))
+                            basis=lv.get('basis') or 'To the owner.',
+                            steps=lv.get('steps') or []))
     if cash:
         practice_bal = sum(a['balance'] or 0 for a in cash['accounts']
                            if a['entity'] != 'Personal')
@@ -120,14 +131,23 @@ def gains(collections=None, current_savings=None, cash=None,
                 gain=practice_bal - ideal_balance, kind='once',
                 basis='Practice balances of $%s above the ideal balance of '
                       '$%s.' % ('{:,.0f}'.format(practice_bal),
-                                '{:,.0f}'.format(ideal_balance))))
+                                '{:,.0f}'.format(ideal_balance)),
+                steps=['Practice bank balances (latest statements) $%s less the ideal '
+                       'balance $%s (one month of expenses) = $%s, once.'
+                       % ('{:,.0f}'.format(practice_bal), '{:,.0f}'.format(ideal_balance),
+                          '{:,.0f}'.format(practice_bal - ideal_balance))]))
         cushion = (spend_excl_monthly or 0) * PERSONAL_CUSHION_MONTHS
         if personal_bal > cushion:
             out.append(dict(
                 key='personal_surplus', label='Personal bank surplus **',
                 gain=personal_bal - cushion, kind='once',
                 basis='Personal balances of $%s less two months of spending.'
-                      % '{:,.0f}'.format(personal_bal)))
+                      % '{:,.0f}'.format(personal_bal),
+                steps=['Personal bank balances (latest statements) $%s less two months '
+                       'of spending (2 x $%s = $%s) = $%s, once.'
+                       % ('{:,.0f}'.format(personal_bal),
+                          '{:,.0f}'.format(spend_excl_monthly or 0), '{:,.0f}'.format(cushion),
+                          '{:,.0f}'.format(personal_bal - cushion))]))
         # The household's month-to-month surplus is not listed: the lead
         # advisor's decks never count it as a source (it is where the
         # distributions land, and it is spent), and counting it put Oyler's

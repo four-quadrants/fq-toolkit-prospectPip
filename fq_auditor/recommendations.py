@@ -109,6 +109,10 @@ def acceleration(folder):
     return out
 
 
+def M(v):
+    return '${:,.0f}'.format(v or 0)
+
+
 def propose(folder, D=None, use_claude=True):
     """[{key, label, year, kind, suggested, gain, invested, basis}] for the
     whole catalog, the suggested ones first."""
@@ -122,29 +126,56 @@ def propose(folder, D=None, use_claude=True):
     years = {k: y for k, _l2, y, _k in CATALOG}
     kinds = {k: kk for k, _l2, _y, kk in CATALOG}
 
-    def put(key, suggested, gain=None, basis='', invested=None, label=None):
+    def put(key, suggested, gain=None, basis='', invested=None, label=None, steps=None):
         year, kind = years[key], kinds[key]
         inv = list(invested or _invest(kind, gain))
         if year == 2 and inv:
             # A year-two recommendation saves nothing in year one.
             inv = [0] + inv[:2]
+        steps = list(steps or [])
+        # How the cashflow becomes the amount saved each year.
+        if gain and inv and any(x for x in inv if x):
+            share = {'practice': 'the firm\u2019s ramp for practice changes: 10%, 20%, then 30% of it',
+                     'once': 'half of it, in year 1 only (it is there once)',
+                     'refi': 'a quarter of what it frees, each year',
+                     'cash': 'half of it each year',
+                     'base': 'all of it, every year'}.get(kind, 'the firm\u2019s split')
+            if invested is not None and kind not in ('base',):
+                share = 'the share set for this one'
+            steps.append('Saved from it: %s. Year 1 %s, year 2 %s, year 3 %s%s.'
+                         % (share, *['${:,.0f}'.format(x or 0) for x in (inv + [0, 0, 0])[:3]],
+                            ' (it starts in year 2)' if year == 2 else ''))
         out[key] = {'key': key, 'label': label or LABEL[key], 'year': year,
                     'kind': kind, 'suggested': bool(suggested),
-                    'gain': _r(gain), 'basis': basis, 'invested': inv}
+                    'gain': _r(gain), 'basis': basis, 'invested': inv,
+                    'steps': steps}
 
     if 'current' in g:
+        st = list(g['current'].get('steps') or [])
+        if st and D.get('current_savings_from'):
+            st[0] = st[0].rstrip('.') + ', from %s.' % D['current_savings_from']
         put('current', True, g['current']['gain'], g['current']['basis'],
-            label=g['current']['label'])
+            label=g['current']['label'], steps=st)
     for k in ('practice_surplus', 'personal_surplus'):
         if k in g:
-            put(k, True, g[k]['gain'], g[k]['basis'])
+            put(k, True, g[k]['gain'], g[k]['basis'], steps=g[k].get('steps'))
     inc = _dt.income_structure(D)
     if inc and inc['gain'] > 0:
         put('pay_structure', True, inc['gain'] * 12,
             'W-2 from %s to %s a month and distributions set so take-home is '
             'unchanged: the practice keeps %s a month more.'
             % ('${:,.0f}'.format(inc['w2']), '${:,.0f}'.format(inc['p_w2']),
-               '${:,.0f}'.format(inc['gain'])), invested=[0, 0, 0])
+               '${:,.0f}'.format(inc['gain'])), invested=[0, 0, 0],
+            steps=['W-2 %s a month today, %s proposed: %s a month less W-2.'
+                   % (M(inc['w2']), M(inc['p_w2']), M(inc['w2_cut'])),
+                   'Distributions set so take-home stays the same: %s a month today, %s '
+                   'proposed (%s a month %s).'
+                   % (M(inc['dist']), M(inc['p_dist']), M(abs(inc['dist_cut'])),
+                      'less' if inc['dist_cut'] >= 0 else 'more'),
+                   'The practice keeps %s %s %s = %s a month; x 12 = %s a year.'
+                   % (M(inc['w2_cut']), '+' if inc['dist_cut'] >= 0 else '-',
+                      M(abs(inc['dist_cut'])), M(inc['gain']), M(inc['gain'] * 12)),
+                   'Nothing is counted as saved from it on its own.'])
     f = D.get('income_facts') or {}
     if not f.get('w2') and not (D.get('facts') or {}).get('Doctor wages'):
         put('s_corp', True, None,
@@ -159,7 +190,12 @@ def propose(folder, D=None, use_claude=True):
             'Paid above schedule on the bank statements: ' + '; '.join(
                 '%s %s/mo against %s' % (l, '${:,.0f}'.format(p), '${:,.0f}'.format(s))
                 for l, s, p in acc) + '.',
-            invested=_invest('cash', extra, ACCEL_SHARE))
+            invested=_invest('cash', extra, ACCEL_SHARE),
+            steps=['%s: paying %s a month against %s scheduled = %s a month extra.'
+                   % (l, '${:,.0f}'.format(p), '${:,.0f}'.format(s), '${:,.0f}'.format(p - s))
+                   for l, s, p in acc] + ['Total %s a month x 12 = %s a year; 75%% of it '
+                                          'saved each year.' % ('${:,.0f}'.format(extra / 12),
+                                                                 '${:,.0f}'.format(extra))])
     rf = _plan.refinance(D.get('practice_debts'))
     worth = [r for r in rf.get('candidates') or []
              if (r.get('rate') or 0) >= REFI_RATE_WORTH_IT or r.get('rate') is None]
@@ -171,17 +207,30 @@ def propose(folder, D=None, use_claude=True):
             '%s a month.' % (n, '' if n == 1 else 's',
                              '${:,.0f}'.format(rf['payment_now']), _plan.REFI_YEARS,
                              _plan.REFI_RATE * 100, '${:,.0f}'.format(rf['freed'])),
-            invested=_invest('refi', rf['freed'] * 12, REFI_SHARE))
+            invested=_invest('refi', rf['freed'] * 12, REFI_SHARE),
+            steps=['%d loan%s worth consolidating (costly, revolving, no stated rate, or on a '
+                   'short schedule): %s a month today on %s owed.'
+                   % (n, '' if n == 1 else 's',
+                      '${:,.0f}'.format(rf['payment_now']), '${:,.0f}'.format(rf['balance'])),
+                   '%s over %d years at %.0f%% = %s a month.'
+                   % ('${:,.0f}'.format(rf['balance']), _plan.REFI_YEARS, _plan.REFI_RATE * 100,
+                      '${:,.0f}'.format(rf['payment_new'])),
+                   '%s - %s = %s a month freed; x 12 = %s a year.'
+                   % ('${:,.0f}'.format(rf['payment_now']), '${:,.0f}'.format(rf['payment_new']),
+                      '${:,.0f}'.format(rf['freed']), '${:,.0f}'.format(rf['freed'] * 12))])
     if 'overhead' in g:
-        put('overhead', True, g['overhead']['gain'], g['overhead']['basis'])
+        put('overhead', True, g['overhead']['gain'], g['overhead']['basis'],
+            steps=g['overhead'].get('steps'))
     for key in ('fees', 'adjustment', 'collections', 'new_patients'):
         v = (lev.get(key) or {}).get('value')
         if v:
-            put(key, v > 5000, v, (lev[key] or {}).get('basis') or '')
+            put(key, v > 5000, v, (lev[key] or {}).get('basis') or '',
+                steps=(lev[key] or {}).get('steps'))
     for key in ('hygiene', 'pull_through'):
         v = (lev.get(key) or {}).get('value')
         if v:
-            put('hygiene', v > 5000, v, (lev[key] or {}).get('basis') or '')
+            put('hygiene', v > 5000, v, (lev[key] or {}).get('basis') or '',
+                steps=(lev[key] or {}).get('steps'))
             break
     # Retirement plan: a SIMPLE IRA or no 401(k) at all points to a new 401(k)
     labels = ' '.join(l for l, _a in D.get('start_parts') or [])
