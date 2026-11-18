@@ -355,8 +355,20 @@ def _figures(folder, client):
          'surname': b.surname or ''}
     # Without the advisor's own wording: "Dr. First Surname" from the
     # documents, never the folder name (which can carry "- TEST" or a due date).
-    D['names'] = adv.get('names') or (
-        'Dr. %s %s' % (b.forename, b.surname) if b.forename and b.surname else (b.client or client))
+    # The dentist first, then the spouse: "Dr. Paige & Matthew Tanksley".
+    _spouse = None
+    try:
+        import assumptions as _as0
+        _sp = _as0._partner(b, folder)
+        _spouse = (_sp or {}).get('name')
+    except Exception:                                        # noqa: BLE001
+        _spouse = None
+    if b.forename and b.surname:
+        _nm = 'Dr. %s & %s %s' % (b.forename, _spouse, b.surname) if _spouse \
+            else 'Dr. %s %s' % (b.forename, b.surname)
+    else:
+        _nm = b.client or client
+    D['names'] = adv.get('names') or _nm
     _cd = None
     try:
         _cd = datetime.date.fromisoformat(str(adv.get('consult_date'))[:10]) if adv.get('consult_date') else None
@@ -1369,7 +1381,9 @@ def slide_fills(D):
     # Only when the schedule came from these gains: beside an advisor's own
     # schedule they would describe a plan nobody chose.
     later = [g for g in D['gains'] if g.get('year') == 2]
-    gl = _slide16_rows([g for g in D['gains'] if g.get('year') != 2])
+    # Year one is what starts in year one; a recommendation starting in year
+    # three or later is on neither column (it is in the schedule).
+    gl = _slide16_rows([g for g in D['gains'] if (g.get('year') or 1) == 1])
     if gl:
         y1 = [('Text 10', 'Text 12', 'Text 14'), ('Text 16', 'Text 18', 'Text 20'),
               ('Text 22', 'Text 24', 'Text 26'), ('Text 28', 'Text 30', 'Text 32'),
@@ -1383,7 +1397,7 @@ def slide_fills(D):
                 vals = ['', '', '']
             for n, v in zip(cells, vals):
                 out[16][n] = v
-        full = len(gl) <= len(y1)
+        full = True
         out[16]['Text 54'] = M(sum(g['gain'] for g in gl)) if full else '[TBD]'
         out[16]['Text 56'] = M(sum(_plan.invested(g, 0) for g in gl)) \
             if full else '[TBD]'
@@ -1394,14 +1408,17 @@ def slide_fills(D):
         step = sum(_plan.invested(g, 1) - _plan.invested(g, 0) for g in rec)
         rows2 = [('Same as year 1 (minus one-timers **)',
                   M(sum(g['gain'] for g in rec)), M(same))]
-        if later:
-            # The lead advisor's year-two recommendations, as he chose them
-            for g in later[:3]:
-                rows2.append((g['label'], M(g['gain']) if g['gain'] else '\u2013',
-                              M(_plan.invested(g, 1))))
-            step = sum(_plan.invested(g, 1) for g in later) + step
-        else:
-            rows2.append(('Practice improvements, second year', '\u2013', M(step)))
+        # Each year-one recommendation that puts more in in year two gets its
+        # own row under its own name (never lumped together), then the
+        # recommendations that start in year two, as he chose them.
+        for g in rec:
+            more = _plan.invested(g, 1) - _plan.invested(g, 0)
+            if more > 0:
+                rows2.append(('%s, more in year 2' % g['label'], '\u2013', M(more)))
+        for g in later:
+            rows2.append((g['label'], M(g['gain']) if g['gain'] else '\u2013',
+                          M(_plan.invested(g, 1))))
+        step = step + sum(_plan.invested(g, 1) for g in later)
         for i, cells in enumerate(y2):
             vals = rows2[i] if i < len(rows2) else ('', '', '')
             for n, v in zip(cells, vals):
@@ -1409,6 +1426,10 @@ def slide_fills(D):
         out[16]['Text 89'] = M(sum(g['gain'] for g in rec) +
                                sum(g['gain'] or 0 for g in later)) if full else '[TBD]'
         out[16]['Text 91'] = M(same + step) if full else '[TBD]'
+        # Every row, for the layout to add the ones past the template's
+        # slots (render: _layout_savings).
+        D['_s16'] = {'y1': [(g['label'], M(g['gain']), M(_plan.invested(g, 0))) for g in gl],
+                     'y2': [tuple(r) for r in rows2]}
 
     # 17 and 18 the Four Quadrants future
     for slide, which, inc_key in ((17, 'proj', 'income'), (18, 'proj2',
@@ -1754,25 +1775,106 @@ def income_structure(D):
                 year=f.get('year'))
 
 
-def _slide16_rows(gains, slots=6):
-    """The year-one rows of the savings slide, at most six, in the order the
-    lead advisor lays them out: what is saved today, one-time cash, the
-    refinance, the practice levers (folded into one row, as on his slides),
-    overhead, then the household's monthly surplus."""
+def _slide16_rows(gains, slots=None):
+    """The year-one rows of the savings slide, in the order the lead advisor
+    lays them out: what is saved today, one-time cash, the refinance, the
+    practice levers, overhead, then the household's monthly surplus. Every
+    recommendation keeps its own row under its own name (the lead advisor,
+    Tanksley: more lines, never lumped together or renamed); the slide adds
+    rows when there are more than the template's six."""
     gl = [g for g in gains or [] if (g.get('gain') or 0) > 0]
-    lev = [g for g in gl if g['kind'] == 'practice' and g['key'] != 'overhead']
-    if len(lev) > 1:
-        folded = dict(key='levers', kind='practice',
-                      label=', '.join(g['label'] for g in lev),
-                      gain=sum(g['gain'] for g in lev),
-                      basis='The practice levers together.')
-        folded['invested'] = [sum(_plan.invested(g, i) for g in lev)
-                              for i in range(3)]
-        gl = [g for g in gl if g not in lev] + [folded]
     order = {'current': 0, 'practice_surplus': 1, 'personal_surplus': 2,
              'refinance': 3, 'levers': 4, 'overhead': 5, 'personal_monthly': 6}
     gl.sort(key=lambda g: order.get(g['key'], 4.5))
-    return gl[:slots]
+    return gl[:slots] if slots else gl
+
+
+def _layout_savings(slide, rows):
+    """Give the savings slide a row for every recommendation.
+
+    The template has six year-one rows (plus the $5,000 rule) and four
+    year-two rows. With more, the rows past the template's are copied from
+    its last row, every row in the panel is spaced evenly between the panel
+    header and the TOTAL bar, and the text shrinks to fit the thinner rows
+    (never below 11 pt). The filled rows keep what was written into them.
+    """
+    from pptx.util import Pt
+    A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+    by = {sh.name: sh for sh in slide.shapes}
+    rows = rows or {}
+
+    def size(sh, cap):
+        # Text no taller than the row allows (about 30% of the row height),
+        # never larger than the template's own size, never below 11 pt.
+        for tag in ('defRPr', 'rPr'):
+            for el in sh._element.iter(A + tag):
+                if el.get('sz'):
+                    el.set('sz', str(int(max(1100, min(int(el.get('sz')), cap)))))
+        bp = sh._element.find('.//' + A + 'bodyPr')
+        if bp is not None:
+            for el in list(bp):
+                if el.tag in (A + 'normAutofit', A + 'spAutoFit'):
+                    bp.remove(el)
+
+    nid = [max([int(sh.shape_id) for sh in slide.shapes] + [0]) + 1000]
+
+    def panel(slots, extra, data, top, bottom, base_h):
+        # slots: [(label, gain, invested, sep1, sep2, sep3)] by name, in order;
+        # extra: rows kept after the data rows (the $5,000 rule).
+        need = len(data) + len(extra)
+        have = len(slots) + len(extra)
+        if len(data) <= len(slots):
+            return
+        cells = [[by[n] for n in r] for r in slots]
+        last = cells[-1]
+        for i in range(len(slots), len(data)):
+            new = [_dup(slide, sh) for sh in last]
+            # Each added box its own name and id (the review page lists the
+            # slide's boxes by name; a copied name would show twice).
+            for sh in new:
+                nid[0] += 1
+                cnv = sh._element.nvSpPr.cNvPr if hasattr(sh._element, 'nvSpPr') else None
+                if cnv is not None:
+                    cnv.set('id', str(nid[0]))
+                    cnv.set('name', '%s %d' % ('Text' if sh.has_text_frame and sh.text_frame.text.strip()
+                                                or sh.name.startswith('Text') else 'Shape', nid[0]))
+            for sh, v in zip(new[:3], data[i]):
+                set_text(sh, v)
+            cells.append(new)
+            last = new
+        cells += [[by[n] for n in r] for r in extra]
+        h = (bottom - top) / float(need)
+        cap = int(h * 0.30 * 100)
+        for i, row in enumerate(cells):
+            y = top + i * h
+            for sh in row[:3]:
+                sh.top, sh.height = Pt(y), Pt(h)
+                size(sh, cap)
+            for sh in row[3:]:
+                sh.top = Pt(y + h)
+
+    # The TOTAL figures fill their cells and stay on one line ($361,000
+    # wrapped to "$361,0 / 00" in the template's narrower boxes).
+    for name, left, width in (('Text 54', 428, 150), ('Text 56', 585, 119),
+                              ('Text 89', 1111, 150), ('Text 91', 1268, 119)):
+        sh = by.get(name)
+        if sh is not None:
+            sh.left, sh.width = Pt(left), Pt(width)
+            sh.text_frame.word_wrap = False
+            size(sh, 2400)
+    panel([('Text 10', 'Text 12', 'Text 14', 'Shape 9', 'Shape 11', 'Shape 13'),
+           ('Text 16', 'Text 18', 'Text 20', 'Shape 15', 'Shape 17', 'Shape 19'),
+           ('Text 22', 'Text 24', 'Text 26', 'Shape 21', 'Shape 23', 'Shape 25'),
+           ('Text 28', 'Text 30', 'Text 32', 'Shape 27', 'Shape 29', 'Shape 31'),
+           ('Text 34', 'Text 36', 'Text 38', 'Shape 33', 'Shape 35', 'Shape 37'),
+           ('Text 40', 'Text 42', 'Text 44', 'Shape 39', 'Shape 41', 'Shape 43')],
+          [('Text 46', 'Text 48', 'Text 50', 'Shape 45', 'Shape 47', 'Shape 49')],
+          rows.get('y1') or [], 167, 690, 75)
+    panel([('Text 63', 'Text 65', 'Text 67', 'Shape 62', 'Shape 64', 'Shape 66'),
+           ('Text 69', 'Text 71', 'Text 73', 'Shape 68', 'Shape 70', 'Shape 72'),
+           ('Text 75', 'Text 77', 'Text 79', 'Shape 74', 'Shape 76', 'Shape 78'),
+           ('Text 81', 'Text 83', 'Text 85', 'Shape 80', 'Shape 82', 'Shape 84')],
+          [], rows.get('y2') or [], 167, 690, 131)
 
 
 def holes(D, prs, fills, drop):
@@ -2889,6 +2991,10 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
                          % (len(asked), '' if len(asked) == 1 else 's'))
             slide.notes_slide.notes_text_frame.text = note.strip()
 
+    try:
+        _layout_savings(prs.slides[15], D.get('_s16'))
+    except Exception as exc:                                 # noqa: BLE001
+        print('   savings slide rows left as the template: %s' % exc)
     try:
         _layout_concerns(prs.slides[2], len(adv.get('concerns') or []))
     except Exception as exc:                                 # noqa: BLE001

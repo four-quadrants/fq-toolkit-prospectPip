@@ -45,7 +45,7 @@ SAVED = 'credit_report.json'
 NAME = re.compile(r'credit\s*report|equifax|experian|transunion|annual\s*credit',
                   re.I)
 TIMEOUT = 900
-VERSION = 4      # bump when the merging or naming changes, to re-merge
+VERSION = 5      # bump when the merging or naming changes, to re-merge
 
 
 def _num(s):
@@ -227,7 +227,9 @@ For each account (tradeline) return:
   says: Open / Pays as agreed / Closed / Paid / Past due ...), balance,
   payment (the scheduled monthly payment), limit (credit limit, or high
   credit / original amount for a loan), opened (MM/YYYY), reported (MM/YYYY),
-  closed (MM/YYYY or null).
+  closed (MM/YYYY or null), term (the loan's term as printed: "30 Years",
+  "72 Months", "paid Monthly for 360 months", or null), interest ("Fixed"
+  or "Variable" as the report's interest type says, or null).
 Copy figures exactly as printed. Use null for anything not shown. Do not
 estimate. Include closed and zero-balance accounts too; they are filtered
 later.
@@ -285,6 +287,17 @@ def read_with_claude(folder, rep, who):
                    os.path.join(folder, 'Original_sourcedocs', '.fq_cache')})
     cdir = os.path.join(folder, '.fq_cache', 'credit')
     got = _answered(cdir, rep)
+    if got is not None and not any('term' in a for a in got.get('accounts') or ()) \
+            and not os.environ.get('FQ_NO_CLAUDE'):
+        # Read before the term and interest type were asked for: ask again,
+        # keeping the old answer if that fails.
+        try:
+            fresh = ask_claude.ask_json(prompt, cache_dir=cdir, timeout=TIMEOUT,
+                                        allow=('Read',), add_dirs=dirs)
+            if fresh and fresh.get('accounts') and not fresh.get('error'):
+                got = fresh
+        except Exception:                                    # noqa: BLE001
+            pass
     if got is None:
         got = ask_claude.ask_json(prompt, cache_dir=cdir, timeout=TIMEOUT,
                                   allow=('Read',), add_dirs=dirs)
@@ -296,7 +309,8 @@ def read_with_claude(folder, rep, who):
                'lender': a.get('lender'), 'account': a.get('account'),
                'type': a.get('type'), 'owner': a.get('owner'),
                'status': a.get('status'), 'opened': a.get('opened'),
-               'reported': a.get('reported'), 'closed': a.get('closed')}
+               'reported': a.get('reported'), 'closed': a.get('closed'),
+               'term': a.get('term'), 'interest': a.get('interest')}
         for k in ('balance', 'payment', 'limit'):
             rec[k] = _num(a.get(k))
         rows.append(rec)
@@ -359,7 +373,7 @@ def merge(rows):
             have['seen_on'].append(seen_on)
         newer = (_month(r.get('reported')) or '') > (_month(have.get('reported')) or '')
         for k in ('balance', 'payment', 'limit', 'status', 'reported', 'closed',
-                  'owner', 'type', 'opened'):
+                  'owner', 'type', 'opened', 'term', 'interest'):
             if r.get(k) is not None and (have.get(k) is None or newer):
                 have[k] = r[k]
     # Each bureau masks the account number differently (Equifax *7127,
@@ -380,7 +394,7 @@ def merge(rows):
         for x in r.get('seen_on') or []:
             if x not in have['seen_on']:
                 have['seen_on'].append(x)
-        for k in ('account', 'owner', 'opened', 'limit', 'type'):
+        for k in ('account', 'owner', 'opened', 'limit', 'type', 'term', 'interest'):
             if not have.get(k) and r.get(k):
                 have[k] = r[k]
     return list(final.values())
@@ -467,7 +481,12 @@ def owed(rows):
             # date opened and the term, which the lead advisor copies onto
             # every loan line ("30-year fixed, originally received in
             # <month year>, expiration <month year>, original $<amount>").
-            'original': r.get('high') or None,
+            # Equifax's High Credit, or the original balance the other
+            # bureaus print for a loan.
+            'original': r.get('high') or r.get('limit') or None,
+            'fixed': ('Fixed' if re.search(r'fix', str(r.get('interest') or ''), re.I) else
+                      'Variable' if re.search(r'var|adj', str(r.get('interest') or ''), re.I)
+                      else None),
             'start': _start(r.get('opened')),
             'term_text': (r.get('term') or '').strip() or None,
             'maturity': _maturity(r.get('opened'), r.get('term')),

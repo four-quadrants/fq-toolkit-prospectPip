@@ -719,6 +719,7 @@ def build(bundle, folder):
     # section renders them as a table with the growth assumption stated once
     # underneath rather than repeated per property.
     props = (_inputs.get(folder, 'properties') or {}).get('value') or []
+    home_link = None
     if not props:
         home = _compose.residence_full(folder)
         val = _inputs.get(folder, 'residence_value')
@@ -726,8 +727,18 @@ def build(bundle, folder):
             street, town, state = home
             props = [{'label': '%s, %s' % (town, state),
                       'amount': _money(val['value']),
-                      'basis': '%s. %s' % (street,
+                      'basis': '%s. %s' % (street, val.get('note') or
                                            _inputs.cite(val, 'Zillow.com'))}]
+        elif home:
+            # The address is in the documents (statements mailed home, the
+            # returns, the credit report): show it, with the Zillow link,
+            # and ask only for the value. Asking the client for an address
+            # we already have reads as not having looked.
+            street, town, state = home
+            home_link = _zillow_link(street, town, state)
+            props = [{'label': '%s, %s' % (town, state), 'amount': None,
+                      'basis': '%s (the home address on the documents). Current '
+                               'market value needed: the Zillow link below.' % street}]
     if props:
         rows = [{'label': p.get('label'),
                  'amount': p.get('amount') or 'not valued',
@@ -745,6 +756,8 @@ def build(bundle, folder):
             flag=('%d of these %d properties still need a current market '
                   'value.' % (len(missing), len(props))) if missing
                  else _flag(folder, 3)))
+        if home_link:
+            out[-1].link = home_link
     else:
         out.append(Section(3, needed='the address and a current value for '
                                      'each property the household owns',
@@ -1087,7 +1100,9 @@ def build(bundle, folder):
                     continue
                 if any(k.lower() in payee.lower() for k in gone):
                     continue
-                if any(abs(monthly - p) <= 2 for p in paid):
+                # Within 1%: a mortgage paid with a little escrow or rounding
+                # on top ($2,510 against a $2,496 payment) is the same loan.
+                if any(abs(monthly - p) <= max(2, 0.01 * p) for p in paid):
                     continue
                 # One bank-statement payment covering several loans from the
                 # same lender (Affirm's two loans, $223 + $475, drawn as one

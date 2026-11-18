@@ -368,8 +368,17 @@ def add_credit(folder, rows):
                 match = r
                 break
         if match:
+            # The debt sheet's own term wins, but where the credit report
+            # says otherwise (a 72-month loan the sheet calls 5 years), it
+            # is said on the loan rather than silently dropped.
+            mine = re.search(r'\d{4}', str(match.get('maturity') or ''))
+            theirs = re.search(r'\d{4}', str(c.get('maturity') or ''))
+            if mine and theirs and mine.group() != theirs.group():
+                match['description'] = ('%s; credit report: %s, to %s' % (
+                    match.get('description') or '', c.get('term_text') or 'term',
+                    c['maturity'])).lstrip('; ')
             for k in ('payment', 'account_last4', 'what', 'opened',
-                      'original', 'start', 'maturity', 'term_text'):
+                      'original', 'start', 'maturity', 'term_text', 'fixed'):
                 if not match.get(k) and c.get(k):
                     match[k] = c[k]
             match['source'] = '%s; on the credit report' % (match.get('source') or '')

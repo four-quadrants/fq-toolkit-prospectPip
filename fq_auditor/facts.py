@@ -545,6 +545,11 @@ def gather(folder, client=None):
                  or re.search(r'\d[- ]?yrs?\b', said)),
                 ('fixed/variable', r.get('fixed') or 'fixed' in said or 'variable' in said
                  or 'arm' in said.split() or 'ibr' in said)) if not have]
+            if re.search(r'credit card|revolving|\bvisa\b|mastercard|amex',
+                         '%s %s' % (name, said), re.I):
+                # A card has no original amount, term or fixed rate to find.
+                missing = [k for k in missing if k not in
+                           ('original amount', 'term', 'fixed/variable')]
             if missing:
                 bits.append('MISSING: %s' % ', '.join(missing))
             if r.get('pending'):
