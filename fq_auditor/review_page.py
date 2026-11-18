@@ -286,7 +286,10 @@ def apply(folder, plan_json):
     # library on the share (made generic first).
     lib = {e['key']: e for e in slide_library()}
     for a in out['deck_slides']['added']:
-        if a.get('lib'):
+        if a.get('lib') and lib.get(a['lib'], {}).get('computed'):
+            print('   LIBRARY SLIDE "%s" (id %s): filled by the toolkit from the projection'
+                  % (lib[a['lib']].get('label', a['lib']), a.get('id')))
+        elif a.get('lib'):
             e = lib.get(a['lib'], {})
             print('   LIBRARY SLIDE "%s" (id %s): fill every [bracket] with this client\'s figures%s. Fill: %s'
                   % (e.get('label', a['lib']), a.get('id'),

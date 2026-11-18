@@ -2305,12 +2305,17 @@ def current_path_data(D):
     spend = D['spend']
     exp = lambda y: spend * (1 + _sav.INFLATION) ** (y - y0)    # noqa: E731
     last = run if run else ey
-    sale = D.get('sale') or 0
-    share = p.get('sale_share_of_portfolio')
+    # Today's path sells at today's path's price, not the 4Q one.
+    sale = N(D['adv'].get('sale_net_current')) or D.get('proj_sale_cur') or D.get('sale') or 0
+    gross = D.get('sale_gross') or 0
+    share = (sale / cur[ry]) if sale and cur.get(ry, 0) > 0 else None
+    _mm = lambda v: '$%.3fM' % (v / 1e6)                     # noqa: E731
+    what = 'practice%s sale' % (' & bldg' if D.get('building') else '')
+    amounts = ('%s gross, %s net' % (_mm(gross), _mm(sale))) if gross else ('%s net' % _mm(sale))
     rows = [[str(age(y0)), str(y0), M(dep.get(y0, 0)), M(cur[y0]), M(exp(y0)), ''],
             [str(age(ry)), str(ry), M(dep.get(ry, 0)), M(cur[ry]), M(exp(ry)),
-             ('*practice%s sell %s net%s' % (' & bldg' if D.get('building') else '', _k(sale),
-                                             (' (%d%% of the portfolio)' % round(share * 100)) if share else ''))
+             ('*%s %s%s' % (what, amounts,
+                            (' (%d%% of the portfolio)' % round(share * 100)) if share else ''))
              if sale else ''],
             [str(age(last)), str(last), '$0', M(cur.get(last, 0)), M(exp(last)), '']]
     pace, first = p.get('on_pace_for'), D['first']
@@ -2323,8 +2328,8 @@ def current_path_data(D):
     keys = ['Current portfolio %s, investing %s/yr until retirement at %s'
             % (M(D.get('start')), M(D.get('current_savings')),
                int(D['retire_age']) if D.get('retire_age') else 'retirement'),
-            ('Practice%s sale in %d: %s net after taxes and debt payoff%s'
-             % (' and building' if D.get('building') else '', ry, _k(sale),
+            ('Practice%s sale in %d: %s after taxes and debt payoff%s'
+             % (' and building' if D.get('building') else '', ry, amounts,
                 (' (%d%% of the portfolio then)' % round(share * 100)) if share else '')) if sale else None,
             'Retirement expenses held at today’s lifestyle (%s/yr), grown with inflation' % M(spend),
             ('At %s, %d years before the funds run out at the current lifestyle' % (age(ry), run - ry))
@@ -2753,7 +2758,7 @@ def apply_deck_edits(prs, edits, auto_drop):
         try:
             s.notes_slide.notes_text_frame.text = (
                 'Today\u2019s path carried forward: what they save and spend now, when it runs out, '
-                'and how much rides on the practice sale.' if a.get('id') == 'current_path'
+                'and how much rides on the practice sale.' if a.get('layout') == 'current_path'
                 else 'Added on the consult review.')
         except Exception:                                    # noqa: BLE001
             pass
@@ -3008,8 +3013,26 @@ def render(folder, client, out, template=TEMPLATE, edits=True):
         print('   current-path slide skipped: %s' % exc)
     # edits=False is the review page reading the template's own slides box by
     # box, so no added slide (it would shift the slide numbers).
-    if edits and cp and 'current_path' not in {x.get('id') for x in (ed.get('added') or ())} \
-            and not (D['adv'].get('no_current_path')):
+    # Picked from the slide library ("Where today's path leads"): the toolkit
+    # fills it from this client's projection, where the lead advisor put it,
+    # keeping an eyebrow or title he typed. Otherwise it goes in on its own.
+    _is_cp = lambda x: x.get('id') == 'current_path' or x.get('lib') == 'current_path' \
+        or x.get('layout') == 'current_path'                 # noqa: E731
+    if edits and any(_is_cp(x) for x in (ed.get('added') or ())):
+        ed = dict(ed)
+        kept = []
+        for x in ed.get('added') or ():
+            if not _is_cp(x):
+                kept.append(x)
+            elif cp:
+                y = dict(cp, id=x.get('id') or 'current_path', after=x.get('after') or cp['after'])
+                for k in ('eyebrow', 'title'):
+                    v = str(x.get(k) or '').strip()
+                    if v and '[' not in v:
+                        y[k] = v
+                kept.append(y)
+        ed['added'] = kept
+    elif edits and cp and not (D['adv'].get('no_current_path')):
         ed = dict(ed or {})
         ed['added'] = [cp] + list(ed.get('added') or [])
     if ed.get('removed') or ed.get('added') or ed.get('forced'):

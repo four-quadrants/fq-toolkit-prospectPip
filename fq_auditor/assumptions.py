@@ -1068,6 +1068,21 @@ def build(bundle, folder):
             v7 = float(bval['value'])
             out[-1].workings = ['%s x (1 + 2%%) ^ %d years to retirement = %s at the sale.'
                                 % (_m(v7), yrs7, _m(v7 * 1.02 ** yrs7))]
+    # Rented, not owned: the IC form says "Rent" and nobody has recorded a
+    # building value. The section said every client owned the building,
+    # which put a building that is not theirs into the plan as missing.
+    rents = str(form.get('building') or '').strip().lower().startswith('rent') or \
+        re.search(r'\brent\b', str(_value(bundle, 'Office location') or ''), re.I)
+    if rents and not (bval and bval.get('value')):
+        where = (' ' + ' '.join(bits)) if bits else ''
+        sec = out[-1]
+        sec.title = 'Practice office'
+        sec.text = ('%s rents the practice office%s%s. The building is not '
+                    'owned by the household, so it is not in the plan.'
+                    % (bundle.forename or 'The client', where,
+                       (' for %s per month' % _money(rent)) if rent else ''))
+        sec.needed = sec.why = sec.link = None
+        sec.source = 'IC form ("Do you rent or own the building?": Rent).'
 
     # 8 and 9 ---------------------------------------------------------------
     for number, block, label in ((8, 'Personal debt', 'personal and rental '
