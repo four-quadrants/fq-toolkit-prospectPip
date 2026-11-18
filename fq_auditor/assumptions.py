@@ -247,6 +247,152 @@ def _w2_rows(folder, wages):
     return rows
 
 
+def paid_off_rows(folder, cash):
+    """The cash flow's fixed liability payments for loans paid off since the
+    statements (the 'paid_off' input): [(payee, monthly, kind, keyword)].
+    Their payments have stopped, so the spending figure that includes the
+    fixed payments leaves them out, here and in the projection alike."""
+    gone = (_inputs.get(folder, 'paid_off') or {}).get('value') or {}
+    out = []
+    for r in (cash or {}).get('fixed_rows') or ():
+        if r[2] != 'Liability':
+            continue
+        k = next((k for k in gone if k.lower() in r[0].lower()), None)
+        if k:
+            out.append((r[0], r[1], r[2], k))
+    return out
+
+
+def _money_num(v):
+    """A typed dollar figure as a number ('$399,818' -> 399818.0), else None."""
+    if v is None or v == '':
+        return None
+    try:
+        return float(str(v).replace('$', '').replace(',', '').strip())
+    except ValueError:
+        return None
+
+
+def _ic_saved(saved):
+    """The IC form's 'saved last year' answer as dollars a year, or None
+    when it has no figure in it ("Max allowed in plans" is intent, not an
+    amount). "40K" is 40,000."""
+    m = re.search(r'\$?\s*([\d,.]+)\s*([kK])?', str(saved or ''))
+    if not m or not any(c.isdigit() for c in m.group(1)):
+        return None
+    try:
+        v = float(m.group(1).replace(',', '')) * (1000 if m.group(2) else 1)
+    except ValueError:
+        return None
+    return v if v >= 1000 else None
+
+
+def contributions(folder, saved=None):
+    """What is going into investable assets each year, by account, for the
+    Contributions assumption and the plan's 'saved a year today'.
+
+    The lead advisor's rule: the paystubs, annualized (each retirement
+    deduction for the period times the pay periods a year), plus what the
+    investment and plan statements show going in, annualized from the
+    months they cover. Without paystubs, the IC form's figure until the
+    paystubs come in. Only when neither gives a figure, the 401(k)
+    deferrals on the last W-2s. The W-2 figures sit beside the paystub
+    lines as a check.
+
+    None, or {'rows', 'total', 'from', 'source', 'workings', 'basis'} where
+    basis is 'paystubs', 'ic' or 'w2'."""
+    try:
+        import doc_readings as _dr
+        got = _dr.check(folder)[0] or {}
+    except Exception:                                        # noqa: BLE001
+        got = {}
+    try:
+        with open(_store.json_path(folder, 'income_facts.json')) as fh:
+            inf = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        inf = {}
+    owner = os.path.basename(folder.rstrip('/')).split(' - ')[0]
+    owner_first = (owner.split(',')[1].split() or [''])[0] if ',' in owner else ''
+    spouse_first = (inf.get('spouse_name') or '').split(' ')[0]
+    w2_def = {}
+    if owner_first and inf.get('deferral'):
+        w2_def[owner_first.lower()] = inf['deferral']
+    if spouse_first and inf.get('spouse_deferral'):
+        w2_def[spouse_first.lower()] = inf['spouse_deferral']
+
+    def first_of(name):
+        bits = name.split(',', 1)[1].split() if ',' in name else name.split()
+        return bits[0] if bits else name
+
+    per_word = {12: 'month', 24: 'half-month', 26: 'two weeks', 52: 'week'}
+    rows, steps = [], []
+    pay = [p for p in (got.get('pay') or ()) if p.get('deferrals')]
+    pay.sort(key=lambda p: first_of(p['name']).lower() != owner_first.lower())
+    for p in pay:
+        who = first_of(p['name'])
+        for d in p['deferrals']:
+            bits = ['%s a pay period (every %s) times %d, from the paystub of %s.'
+                    % (_money(d['amount'], pence=True), per_word[p['periods']], p['periods'],
+                       _long_date(p.get('pay_date')) or 'the latest stub')]
+            w2 = w2_def.get(who.lower())
+            if w2:
+                bits.append('%s W-2: %s.' % (inf.get('year') or 'Last year\'s', _money(w2)))
+            rows.append({'label': '%s %s: employee deferral' % (who, d['kind']),
+                         'amount': _money(d['annual']), 'detail': ' '.join(bits),
+                         '_v': d['annual']})
+            steps.append('%s %s: %s x %d pay periods = %s.'
+                         % (who, d['kind'], _money(d['amount'], pence=True), p['periods'],
+                            _money(d['annual'])))
+    if rows:
+        for c in got.get('contributions') or ():
+            what = {'employer': 'employer contribution', 'personal': 'contribution'}.get(
+                c.get('kind'), 'contribution')
+            rows.append({'label': '%s: %s' % (c.get('account') or 'Account', what),
+                         'amount': _money(c['annual']),
+                         'detail': '%s in over %s (%s), from %s.'
+                                   % (_money(c['amount'], pence=True),
+                                      '%g months' % c['months'], c.get('period') or 'the statement',
+                                      c.get('source')),
+                         '_v': c['annual']})
+            steps.append('%s: %s over %g months x 12 / %g = %s.'
+                         % (c.get('account'), _money(c['amount'], pence=True), c['months'],
+                            c['months'], _money(c['annual'])))
+        total = sum(r['_v'] for r in rows)
+        if len(rows) > 1:
+            steps.append('Total a year: %s = %s.' % (' + '.join(r['amount'] for r in rows),
+                                                     _money(total)))
+        stmts = bool(got.get('contributions'))
+        return {'rows': rows, 'total': total, 'basis': 'paystubs', 'workings': steps,
+                'from': 'the paystubs, annualized%s (%s)'
+                        % (' and the investment statements' if stmts else '',
+                           ' + '.join(r['amount'] for r in rows)),
+                'source': 'Paystubs, annualized%s; the W-2s beside them as a check.'
+                          % (', and the investment statements' if stmts else '')}
+    ic = _ic_saved(saved)
+    if ic:
+        return {'rows': [], 'total': ic, 'basis': 'ic', 'workings': [],
+                'from': 'the IC form ("%s"), until the paystubs come in' % str(saved).strip(),
+                'source': 'IC form, until the paystubs come in.'}
+    defs = [(n, v) for n, v in ((owner_first, inf.get('deferral')),
+                                (spouse_first or 'Spouse', inf.get('spouse_deferral'))) if v]
+    if defs:
+        kind = 'Roth 401(k)' if str(inf.get('deferral_kind') or '').lower() == 'roth' else '401(k)'
+        src = inf.get('sources') or {}
+        rows = [{'label': '%s %s: employee deferral' % (n, kind), 'amount': _money(v),
+                 'detail': '%s W-2%s.' % (inf.get('year') or 'Latest',
+                                          (', ' + src.get(k)) if src.get(k) else ''),
+                 '_v': float(v)}
+                for (n, v), k in zip(defs, ('deferral', 'spouse_deferral'))]
+        total = sum(r['_v'] for r in rows)
+        return {'rows': rows, 'total': total, 'basis': 'w2',
+                'workings': (['Total a year: %s = %s.' % (' + '.join(r['amount'] for r in rows),
+                                                          _money(total))] if len(rows) > 1 else []),
+                'from': 'the 401(k) deferrals on the %s W-2s (%s), until the paystubs come in'
+                        % (inf.get('year') or 'latest', ' + '.join(r['amount'] for r in rows)),
+                'source': 'W-2s, until the paystubs come in.'}
+    return None
+
+
 def _net_distributions(folder):
     """Money the owner actually takes home from the practice, a year: every
     transfer from a practice account to a personal one, less every transfer
@@ -1072,10 +1218,21 @@ def build(bundle, folder):
         for r in rows:
             for k in ('_v', '_stub', '_owner'):
                 r.pop(k, None)
+        # A net profit the team worked out themselves (the 'net_profit' input,
+        # e.g. when the P&L on file is wrong) replaces the P&L's figure.
+        np_in = (_inputs.get(folder, 'net_profit') or {})
+        np_typed = _money_num(np_in.get('value')) if np_in else None
+        if np_typed is not None:
+            net = net if net is not None else np_typed
+            net_shown, restated = np_typed, False
         if net:
             detail = ('Revenue of %s less overhead of %s, the owner\'s W-2 and '
                       'depreciation.' % (_money(rev), _money(exp)))
-            if restated:
+            if np_typed is not None:
+                detail = ('The team\'s figure%s (the %s P&L works out to %s).'
+                          % ((': ' + np_in['note'].rstrip('.')) if np_in.get('note') else '',
+                             basis_year, _money(rev - exp - (wages or 0) - da) if (rev and exp) else 'n/a'))
+            elif restated:
                 detail = ('Revenue of %s less overhead of %s, the owner\'s W-2 at '
                           'today\'s pay rate and depreciation (the %s P&L, with a '
                           'W-2 of %s, shows %s).' % (_money(rev), _money(exp),
@@ -1124,6 +1281,9 @@ def build(bundle, folder):
                              % (_m(owner_now), _m(abs(diff)), 'more' if diff > 0 else 'less',
                                 basis_year, 'lower' if diff > 0 else 'higher', _m(net),
                                 '-' if diff > 0 else '+', _m(abs(diff)), _m(net_shown)))
+        if np_typed is not None:
+            steps.append('Net profit used: %s, the team\'s figure, in place of the P&L\'s.'
+                         % _m(np_typed))
         if wages and net:
             steps.append('Total earnings: W-2s %s + net profit %s = %s.'
                          % (_m(w2_total), _m(net_shown), _m(w2_total + net_shown)))
@@ -1145,6 +1305,16 @@ def build(bundle, folder):
     if cash and cash['monthly_including']:
         inc, exc, fixed = (cash['monthly_including'],
                            cash['monthly_excluding'], cash['fixed'])
+        # Loans paid off since the statements (the 'paid_off' input): their
+        # payments stop, so they come out of the fixed payments and of the
+        # figure including them. Spending without them is unchanged.
+        gone12 = (_inputs.get(folder, 'paid_off') or {}).get('value') or {}
+        fixed_rows = list(cash.get('fixed_rows') or ())
+        dropped = [r[:3] for r in paid_off_rows(folder, cash)]
+        if dropped:
+            fixed_rows = [r for r in fixed_rows if tuple(r[:3]) not in [tuple(d) for d in dropped]]
+            cut = sum(r[1] for r in dropped)
+            inc, fixed = inc - cut, fixed - cut
         # The firm's wording, unchanged across 72 plans: spending stated
         # twice, once without the fixed payments and once with.
         text = ('We presume that current personal expenses are %s monthly '
@@ -1156,7 +1326,7 @@ def build(bundle, folder):
         rows = [{'label': '%s  (%s)' % (name, kind),
                  'amount': _money(amount), 'detail': None}
                 for name, amount, kind in
-                sorted(cash.get('fixed_rows') or (), key=lambda r: -r[1])]
+                sorted(fixed_rows, key=lambda r: -r[1])]
         if rows:
             rows.append({'label': 'Total excluded', 'amount': _money(fixed),
                          'detail': None, 'rule': True})
@@ -1186,7 +1356,18 @@ def build(bundle, folder):
                          'transfers to their own accounts and one-offs).'
                          % (a['name'], _m(a['monthly_spend']), a.get('months') or a['periods'],
                             '' if (a.get('months') or a['periods']) == 1 else 's'))
-        if pers:
+        if pers and dropped:
+            cut = sum(r[1] for r in dropped)
+            steps.append('Personal accounts added up: %s a month including the fixed payments.'
+                         % _m(inc + cut))
+            for r in dropped:
+                k = next(k for k in gone12 if k.lower() in r[0].lower())
+                why = gone12[k] if isinstance(gone12[k], str) else (gone12[k] or {}).get('note', '')
+                steps.append('Less %s, paid off since the statements (%s): %s a month.'
+                             % (k, (why or 'paid_off').rstrip('.'), _m(r[1])))
+            steps.append('Including the fixed payments still being made: %s - %s = %s a month; '
+                         'x 12 = %s a year.' % (_m(inc + cut), _m(cut), _m(inc), _m(inc * 12)))
+        elif pers:
             steps.append('Personal accounts added up: %s a month including the fixed payments; '
                          'x 12 = %s a year.' % (_m(inc), _m(inc * 12)))
         steps.append('Less the fixed payments listed below: %s - %s = %s a month; x 12 = %s a year.'
@@ -1215,46 +1396,28 @@ def build(bundle, folder):
     # amount. So an answer with no digits in it counts as unanswered, and the
     # client's own words are carried into the ask so nobody asks twice.
     saved = _value(bundle, 'Saved last year')
-    numeric = saved is not None and any(c.isdigit() for c in str(saved))
-    # What the W-2s show going into the retirement plan, per person (the
-    # lead advisor lists each: "<Name> 401k: Employee Roth deferral of
-    # $<amount>"). Read from income_facts; the IC form's answer stays beside.
-    try:
-        with open(_store.json_path(folder, 'income_facts.json')) as fh:
-            inf = json.load(fh)
-    except (OSError, ValueError, AttributeError):
-        inf = {}
-    kind = 'Roth 401(k)' if str(inf.get('deferral_kind') or '').lower() == 'roth' else '401(k)'
-    owner_first = (bundle.forename or 'Owner')
-    contrib_rows = []
-    for who, amt, src in ((owner_first, inf.get('deferral'), (inf.get('sources') or {}).get('deferral')),
-                          ((inf.get('spouse_name') or 'Spouse').split(' ')[0], inf.get('spouse_deferral'),
-                           (inf.get('sources') or {}).get('spouse_deferral'))):
-        if amt:
-            contrib_rows.append({'label': '%s %s: employee deferral' % (who, kind),
-                                 'amount': _money(amt),
-                                 'detail': '%s W-2%s.' % (inf.get('year') or 'Latest',
-                                                         (', ' + src) if src else '')})
-    if contrib_rows:
-        sec = Section(14,
-            'Investment amounts currently being put back into investable assets '
-            'include the following%s. These contribution assumptions matter a '
-            'great deal to the plan; please tell us if any of it is wrong.'
-            % ((' (the IC form says "%s")' % str(saved).strip()) if saved else ''),
-            rows=contrib_rows, source='W-2s, with the IC form beside them.')
-        sec.heads = ('Contribution', 'A year')
-        tot14 = sum(float(a) for _w, a, _s in (
-            (None, inf.get('deferral'), None), (None, inf.get('spouse_deferral'), None)) if a)
-        if len(contrib_rows) > 1:
-            sec.workings = ['Total a year: %s = %s.' % (' + '.join(r['amount'] for r in contrib_rows),
-                                                        _m(tot14))]
+    con = contributions(folder, saved)
+    if con:
+        said = (' (the IC form says "%s")' % str(saved).strip()) if saved and con['basis'] != 'ic' else ''
+        if con['basis'] == 'ic':
+            text = ('Investment amounts currently being put back into investable assets: '
+                    '%s a year, from the IC form ("%s"). These contribution assumptions '
+                    'matter a great deal to the plan; please tell us if any of it is wrong.'
+                    % (_money(con['total']), str(saved).strip()))
+        else:
+            text = ('Investment amounts currently being put back into investable assets '
+                    'include the following%s. These contribution assumptions matter a '
+                    'great deal to the plan; please tell us if any of it is wrong.' % said)
+        sec = Section(14, text, rows=[{k: v for k, v in r.items() if not k.startswith('_')}
+                                      for r in con['rows']],
+                      source=con['source'],
+                      flag=(None if con['basis'] == 'paystubs' else
+                            'Paystubs needed: contributions come from the paystubs, '
+                            'annualized; this figure stands until they come in.'))
+        if con['rows']:
+            sec.heads = ('Contribution', 'A year')
+        sec.workings = con['workings']
         out.append(sec)
-    elif numeric:
-        out.append(Section(14,
-            'Investment amounts currently being put back into investable '
-            'assets: %s. These contribution assumptions matter a great deal '
-            'to the plan; please tell us if any of it is wrong.' % saved,
-            source='IC form'))
     elif saved:
         out.append(Section(14,
             needed='the dollar amount going into each retirement account '

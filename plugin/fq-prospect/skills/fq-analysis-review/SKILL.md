@@ -143,6 +143,14 @@ page's `stage` is `analyst`:
    with `python3 fq_auditor/inputs.py "<client folder>" --set birthdate
    --value MM/DD/YYYY` (the doctor) and `--set spouse_birthdate` (the
    spouse); Assumptions 1 and 2 then work the ages out from them.
+   Contributions (Assumption 14, and "Saved a year today") come from the
+   paystubs, annualized: when paystubs or payroll journals are on file, read
+   every retirement deduction per person into doc_readings `pay` →
+   `people[].deferrals` ({kind, amount} for one period), and any
+   contributions an investment or plan statement shows into
+   `contributions` ({account, owner, kind, amount, months, period}). Without
+   paystubs the IC form's figure stands, flagged "Paystubs needed", until
+   they come in.
 3. Act on every comment: re-read a document that was misread, correct a
    reading in `_Audit` (bank_statements.json, accounts.json,
    doc_readings.json, credit_report.json) only when the document shows it,
@@ -150,6 +158,18 @@ page's `stage` is `analyst`:
    it changes. Say plainly what was done about each comment and what could
    not be done.
 4. Re-seed and refresh the page's data (never its stage or comments).
+   Any change that touches a figure (an assumption, a reading, an input)
+   refreshes plan/figures, plan/workings AND plan/slides together, never
+   plan/figures alone: the Projections tab reads plan/workings, and the
+   lead advisor's rule is that its numbers match every number changed in
+   the assumptions. The seed prints PROJECTION CHECK lines wherever the
+   projection and the assumptions disagree: fix the cause and re-seed
+   until there are none before writing.
+   The Recommendations tab is the one source of the savings: the
+   Projections tab's "Where the savings come from", the savings years on
+   Plan inputs, the projection and the savings slides all read the ticked
+   recommendations (as typed there, from the year each starts). Before the
+   lead advisor has touched them, the toolkit's proposed ticks are used.
 5. Tell the analyst it is refreshed, and that when it is clean they press
    **Ready for the lead advisor** and share the page with him (edit access).
 

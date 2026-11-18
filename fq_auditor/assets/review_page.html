@@ -369,14 +369,13 @@ tr.off td{opacity:.55}
       <p class="note">Starts from the plan as it stands (your Plan inputs, and the toolkit's starting figure wherever you have not typed one). Change anything in the amber boxes and the worksheet below recalculates at once, on the same arithmetic as the deck. Nothing is saved until you press <b>Use these figures</b>, which puts them on Plan inputs; <b>Back to the plan inputs</b> undoes your tries.</p>
       <div class="wi-grid">
         <label>Retirement age<input type="text" id="wi-retire" class="wi"></label>
-        <label>Target retirement income, a year<input type="text" id="wi-income" class="wi"></label>
         <label>Sale at retirement, net, current path<input type="text" id="wi-sale" class="wi"></label>
         <label>Saved a year today (current path)<input type="text" id="wi-cur" class="wi"></label>
         <label>Overhead target<input type="text" id="wi-oh" class="wi"></label>
       </div>
       <div class="formula" id="wi-oh-note"></div>
       <h3 style="margin-top:6px">Where the savings come from</h3>
-      <p class="note">What each source frees up a year and what the toolkit proposes to invest from it. The schedule under it is what the plan uses: change any step to map out a bigger or smaller increase.</p>
+      <p class="note">The recommendations ticked on the Recommendations tab, with the cashflow and the amounts invested in years 1 to 3 as they stand there (change them there and this follows). The schedule under it is what the plan uses: change any step to map out a bigger or smaller increase.</p>
       <div class="ledger" id="w-gains"></div>
       <div class="ledger" id="wi-later"></div>
       <div class="wi-results" id="wi-results"></div>
@@ -384,7 +383,15 @@ tr.off td{opacity:.55}
       <div class="row-actions"><button type="button" id="wi-use" class="primary-btn">Use these figures</button><button type="button" id="wi-reset" class="ghost-btn">Back to the plan inputs</button></div>
     </div>
     <div class="card pad"><h3>Practice levers</h3><p class="note">What each lever is worth a year to the owner, from the practice's own numbers. A lever with no figure says what it still needs.</p><div class="ledger" id="w-levers"></div></div>
-    <div class="card pad"><h3>Savings worksheet</h3><p class="note" id="w-proj-note"></p><div class="ledger" id="w-proj"></div></div>
+    <div class="card pad"><h3>Savings worksheet</h3>
+      <div class="wi-grid" style="margin-bottom:10px">
+        <label>Target retirement income, a year<input type="text" id="wi-income" class="wi"><span class="basis" id="ws-inc-note"></span></label>
+        <div class="tile"><span class="k">Current retirement pace expenses</span><span class="v" id="ws-pace"></span><span class="s">What the current path pays a year, to age 90</span></div>
+        <div class="tile"><span class="k">% of current expenses</span><span class="v" id="ws-pct"></span><span class="s" id="ws-pct-s"></span></div>
+        <div class="tile"><span class="k">Practice sale % of portfolio value: current</span><span class="v" id="ws-sale-cur"></span><span class="s" id="ws-sale-cur-s"></span></div>
+        <div class="tile"><span class="k">Practice sale % of portfolio value: 4Q</span><span class="v" id="ws-sale-fq"></span><span class="s" id="ws-sale-fq-s"></span></div>
+      </div>
+      <p class="note" id="w-proj-note"></p><div class="ledger" id="w-proj"></div></div>
   </section>
 
   <section data-tab="plan">
@@ -500,8 +507,16 @@ tr.off td{opacity:.55}
   });
   function planY0(){ var s=(plan&&plan.schedule)||[]; return s.length?Math.min.apply(null,s.map(function(r){return +r[0]})):new Date().getFullYear()+1; }
   function planFigures(){
-    var all=(plan.figures||[]).filter(function(f){return !f.slide});
-    var sch=(plan.schedule||[]).slice().sort(function(a,b){return a[0]-b[0]});
+    var all=(plan.figures||[]).filter(function(f){return !f.slide}).map(function(f){
+      // Target retirement income: the figure worked out live on the Projections tab.
+      if(f.key==='target_income'&&WI&&WI.autoIncome!=null) return Object.assign({},f,{proposed:$m(WI.autoIncome),
+        basis:'Today\u2019s dollars. Worked out so the 4Q portfolio lasts to the end of the plan; type yours to change it.'});
+      return f; });
+    // The savings years follow the Recommendations tab as it stands (what is
+    // ticked, typed and when it starts), the same schedule the Projections
+    // tab runs on; the seeded schedule only until the workings have loaded.
+    var live=(typeof recsSchedule==='function')?recsSchedule():null;
+    var sch=((live&&live.length)?live:(plan.schedule||[])).slice().sort(function(a,b){return a[0]-b[0]});
     if(plan.mode==='analysis'||!sch.length) return all;
     var y0=planY0(), basis='', at=-1, out=[];
     all.forEach(function(f){ if(/^save_\d{4}$/.test(f.key)){ if(at<0) at=out.length; basis=f.basis||basis; } else out.push(f); });
@@ -544,12 +559,32 @@ function fqModel(P){
   var cur=steps([[y0,P.current_savings]],y0,retire); cur[retire]=(cur[retire]||0)+P.sale_net;
   var fqd=steps(P.schedule,y0,retire); fqd[retire]=(fqd[retire]||0)+(P.sale_net_fq!=null?P.sale_net_fq:P.sale_net);
   function exp(e,y){ return e*Math.pow(1+INF,y-y0); }
-  var c={}, q={}, v=P.start*(1+RC*f); c[y0]=v;
-  for(var y=y0+1;y<=last;y++){ var d=cur[y]||0; if(y<=retire) v=(v+d)*(1+RC); else { var x=v-exp(P.spend,y); v=(x>0?x*(1+RC):x)+d; } c[y]=v; }
+  // The current path, drawing a given first-year expense from retirement.
+  function curPath(e){ var o={}, v=P.start*(1+RC*f); o[y0]=v;
+    for(var y=y0+1;y<=last;y++){ var d=cur[y]||0; if(y<=retire) v=(v+d)*(1+RC); else { var x=v-exp(e,y); v=(x>0?x*(1+RC):x)+d; } o[y]=v; }
+    return o; }
+  var c=curPath(P.spend), q={}, v, x, d, y;
+  // The current path drawing the 4Q target income instead of today's spending.
+  var ci=curPath(P.income||0);
+  // Current retirement pace: the largest first-year expense, in $1,000s, the
+  // current path carries to the horizon (as savings.py's on_pace_for).
+  var okc=function(e){ return curPath(e)[last]>=0; }, lo=0, hi=1000;
+  while(okc(hi)&&hi<1e9){ lo=hi; hi*=2; }
+  while(hi-lo>1000){ var mid=Math.floor((lo+hi)/2/1000)*1000; if(mid===lo||mid===hi) break; if(okc(mid)) lo=mid; else hi=mid; }
   v=P.start*(1+r1*f)+(fqd[y0]||0); q[y0]=v;
   for(y=y0+1;y<=last;y++){ d=fqd[y]||0; if(y<=retire) v=v*(1+RQ)+d; else { x=v-exp(P.income,y); v=(x>0?x*(1+RQ):x)+d; } q[y]=v; }
   function runout(p){ for(var k=y0;k<=last;k++) if(p[k]<0) return k; return null; }
-  return {y0:y0,retire:retire,end:last,current:c,fq:q,cur_dep:cur,fq_dep:fqd,cur_at:c[retire],fq_at:q[retire],cur_runout:runout(c),fq_runout:runout(q),fq_end:q[last]};
+  return {y0:y0,retire:retire,end:last,current:c,fq:q,cur_inc:ci,pace:lo,cur_dep:cur,fq_dep:fqd,cur_at:c[retire],fq_at:q[retire],cur_runout:runout(c),cur_inc_runout:runout(ci),fq_runout:runout(q),fq_end:q[last]};
+}
+// The target retirement income the 4Q path carries to the end of the plan:
+// the largest first-year figure, in $1,000s, that leaves the 4Q portfolio at
+// or above zero in the last year (as savings.py's solve_income).
+function solveIncome(P){
+  var ok=function(e){ var Q={}; for(var k in P) Q[k]=P[k]; Q.income=e; return fqModel(Q).fq_end>=0; };
+  var lo=0, hi=1000;
+  while(ok(hi)&&hi<1e9){ lo=hi; hi*=2; }
+  while(hi-lo>1000){ var mid=Math.floor((lo+hi)/2/1000)*1000; if(mid===lo||mid===hi) break; if(ok(mid)) lo=mid; else hi=mid; }
+  return lo;
 }
 
 
@@ -573,7 +608,9 @@ function fqModel(P){
     var dq=num('debt_at_sale_fq'); if(dq==null) dq=(num('debt_at_sale')!=null?dc:(S.debt_fq!=null?S.debt_fq:dc));
     var tc=num('sale_net'), tq=num('sale_net_fq');
     return {years:y, gc:gc, gq:gq, gross_cur:gross(gc), gross_fq:gross(gq), debt_cur:dc, debt_fq:dq,
-            cur:tc!=null?tc:gross(gc)*nf-dc, fq:tq!=null?tq:(tc!=null?tc:gross(gq)*nf-dq),
+            // Each path its own sale: a net sale typed for the current path no
+            // longer carries over to the 4Q path, which keeps its faster growth.
+            cur:tc!=null?tc:gross(gc)*nf-dc, fq:tq!=null?tq:gross(gq)*nf-dq,
             typed_cur:tc!=null, typed_fq:tq!=null, nf:nf, building:b};
   }
   function wiReset(){
@@ -586,7 +623,9 @@ function fqModel(P){
     WI={retire:Math.round(g('retire_age',M.retire_age)), income:g('target_income',M.income), sale:SN?SN.cur:g('sale_net',M.sale_net),
         saleFq:SN?SN.fq:g('sale_net_fq',M.sale_net_fq!=null?M.sale_net_fq:M.sale_net),
         cur:g('current_savings',M.current_savings), oh:oh,
-        sched:((typeof recsSchedule==='function'&&plan&&plan.recommendations&&plan.recommendations.length&&recsSchedule())||M.schedule||[]).map(function(r){ return [r[0], g('save_'+r[0], r[1])]; }), dirty:false};
+        sched:((typeof recsSchedule==='function'&&plan&&plan.recommendations&&plan.recommendations.length&&recsSchedule())||M.schedule||[]).map(function(r){ return [r[0], g('save_'+r[0], r[1])]; }), dirty:false,
+        // Target retirement income: worked out (solveIncome) unless typed.
+        incomeTyped:(D.target_income!==undefined&&D.target_income!==''&&n(D.target_income)!=null)};
     $('wi-retire').value=WI.retire; $('wi-income').value=$m(WI.income); $('wi-sale').value=$m(WI.sale);
     $('wi-cur').value=$m(WI.cur); $('wi-oh').value=Math.round(WI.oh*100)+'%';
   }
@@ -622,12 +661,22 @@ function fqModel(P){
     if(!WK||!WK.model||!WI) return; var M=WK.model, g=WK.gains||[];
     // the sources, as the toolkit proposes them (reference); the schedule
     // below is what the plan uses, and what can be changed
-    var tot=[0,0,0];
-    var rows=g.map(function(x){ (x.invested||[]).forEach(function(v,i){tot[i]+=v||0});
+    var tot=[0,0,0], rows;
+    // The sources are the Recommendations tab's, as ticked and typed there
+    // (label, cashflow, years 1 to 3, the year it starts), so this table and
+    // the Recommendations tab always show the same thing. The toolkit's own
+    // list is the fallback only for a page with no recommendations.
+    var RL=(typeof recsLedger==='function')?recsLedger():null;
+    if(RL){
+      rows=RL.map(function(x){ x.vals.forEach(function(v,i){tot[i]+=v||0});
+        return '<tr><td><b>'+esc(x.label)+'</b>'+(x.basis?'<div class="basis">'+esc(x.basis)+'</div>':'')+(x.note?'<div class="basis">'+esc(x.note)+'</div>':'')+'</td><td class="r">'+(x.gain==null?'':$m(x.gain))+'</td>'+
+          x.vals.map(function(v){return '<td class="r">'+$m(v)+'</td>'}).join('')+'</tr>'; }).join('');
+    } else rows=g.map(function(x){ (x.invested||[]).forEach(function(v,i){tot[i]+=v||0});
       return '<tr><td><b>'+esc(x.label)+'</b><div class="basis">'+esc(x.basis||'')+'</div></td><td class="r">'+$m(x.gain)+'</td>'+
       (x.invested||[]).map(function(v){return '<td class="r">'+$m(v)+'</td>'}).join('')+'</tr>'; }).join('');
     $('w-gains').innerHTML='<table><thead><tr><th>Source</th><th class="r">Cashflow created</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr></thead><tbody>'+rows+
       '<tr class="ret"><td>Toolkit\u2019s starting split to invest</td><td></td><td class="r">'+$m(tot[0])+'</td><td class="r">'+$m(tot[1])+'</td><td class="r">'+$m(tot[2])+'</td></tr></tbody></table>';
+    if(RL){ var lastTd=$('w-gains').querySelector('tr.ret td'); if(lastTd) lastTd.textContent='Invested, as ticked on Recommendations'; }
     var a2=document.activeElement, typing=a2&&a2.classList&&a2.classList.contains('wcell');
     if(!typing) $('wi-later').innerHTML='<table><thead><tr><th>4Q savings schedule (what the plan uses)</th><th class="r">From</th><th class="r">Saved a year</th></tr></thead><tbody>'+
       WI.sched.map(function(r,k){return '<tr><td>Step '+(k+1)+'</td><td class="r">Year '+(r[0]-WI.sched[0][0]+1)+' ('+r[0]+')</td><td class="r"><input type="text" class="wcell" id="sch-'+k+'" data-l="'+k+'" value="'+$m(r[1])+'" aria-label="Savings from '+r[0]+'"></td></tr>'}).join('')+'</tbody></table>';
@@ -636,8 +685,10 @@ function fqModel(P){
     $('wi-oh-note').textContent='Overhead is '+pct(M.overhead)+' today. At '+pct(WI.oh)+' that is '+$m(ohGain)+' a year to the owner; each point lower is '+$m(0.01*M.net_collections)+'.';
     // projection
     var P={rates:M.rates, consult_date:cdIso()||M.consult_date, age:M.age, retire_age:WI.retire, start:M.start, current_savings:WI.cur,
-           spend:M.spend, schedule:wiSchedule(), income:WI.income, sale_net:WI.sale, sale_net_fq:WI.saleFq, horizon:M.horizon||90};
+           spend:M.spend, schedule:wiSchedule(), income:WI.income, sale_net:WI.sale, sale_net_fq:WI.saleFq, horizon:(M.horizon||90)+(M.horizon_extra||0)};
+    WI.autoIncome=solveIncome(P); if(!WI.incomeTyped){ WI.income=WI.autoIncome; P.income=WI.autoIncome; }
     var r=fqModel(P), base=WK.base||{};
+    var inN=$('ws-inc-note'); if(inN) inN.textContent=WI.incomeTyped?('Typed. Clear the box to go back to the worked-out '+$m(WI.autoIncome)+'.'):('Worked out so the 4Q portfolio lasts to '+r.end+'. Type over it to change it.');
     var lasts=r.fq_end>=-1000;
     $('wi-results').innerHTML=
       '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">'+(r.cur_runout?'Runs out in '+r.cur_runout:'Lasts to age '+(M.horizon||90))+'</span></div>'+
@@ -645,9 +696,25 @@ function fqModel(P){
       '<div class="tile"><span class="k">Difference</span><span class="v">'+$m(r.fq_at-r.cur_at)+'</span><span class="s">4Q path minus the current path</span></div>'+
       '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(WI.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
     $('w-proj-note').textContent='Current path at '+pct(0.085)+'; 4Q path at '+pct(0.09)+' ('+pct(0.085)+' in the first year). Spending today '+$m(M.spend)+' a year, grown at 3.2%.';
-    var yrs=[]; for(var y=r.y0;y<=Math.min(r.end,r.retire+3);y++) yrs.push(y);
-    $('w-proj').innerHTML='<table><thead><tr><th>Year</th><th class="r">Current: saved</th><th class="r">Current: portfolio</th><th class="r">4Q: saved</th><th class="r">4Q: portfolio</th></tr></thead><tbody>'+
-      yrs.map(function(y){return '<tr class="'+(y===r.retire?'ret':'')+'"><td>'+y+'</td><td class="r">'+$m(r.cur_dep[y]||0)+'</td><td class="r">'+$m(r.current[y])+'</td><td class="r">'+$m(r.fq_dep[y]||0)+'</td><td class="r">'+$m(r.fq[y])+'</td></tr>'}).join('')+'</tbody></table>';
+    // Every year to the end of the plan: the year the younger of the two turns 90.
+    var yrs=[]; for(var y=r.y0;y<=r.end;y++) yrs.push(y);
+    // Fixed, equal columns (the year narrower), headings wrapping, so the long
+    // heading does not widen its column.
+    var thw=' style="white-space:normal;vertical-align:bottom"';
+    $('w-proj').innerHTML='<table style="table-layout:fixed;width:100%"><colgroup><col style="width:10%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th'+thw+'>Year</th><th class="r"'+thw+'>Current: saved</th><th class="r"'+thw+'>Current: portfolio</th><th class="r"'+thw+'>Current: Portfolio w/4Q Retirement expenses</th><th class="r"'+thw+'>4Q: saved</th><th class="r"'+thw+'>4Q: portfolio</th></tr></thead><tbody>'+
+      yrs.map(function(y){return '<tr class="'+(y===r.retire?'ret':'')+'"><td>'+y+'</td><td class="r">'+$m(r.cur_dep[y]||0)+'</td><td class="r">'+$m(r.current[y])+'</td><td class="r"'+(r.cur_inc[y]<0?' style="color:#b3261e"':'')+'>'+$m(r.cur_inc[y])+'</td><td class="r">'+$m(r.fq_dep[y]||0)+'</td><td class="r">'+$m(r.fq[y])+'</td></tr>'}).join('')+'</tbody></table>'+
+      '<div class="basis">Current: Portfolio w/4Q Retirement expenses is the current path drawing the 4Q target income ('+$m(WI.income)+' a year in today\u2019s dollars, grown 3.2% a year) from '+(r.retire+1)+': '+(r.cur_inc_runout?'it runs out in '+r.cur_inc_runout+'.':'it lasts to age '+(M.horizon||90)+'.')+'</div>';
+    var pe=$('ws-pace'); if(pe) pe.textContent=$m(r.pace)+'/yr';
+    var pc=$('ws-pct'); if(pc) pc.textContent=M.spend?Math.round(r.pace/M.spend*100)+'%':'needed';
+    var ps=$('ws-pct-s'); if(ps) ps.textContent=M.spend?'of today\u2019s '+$m(M.spend)+' a year (Assumption 12, with the fixed payments)':'today\u2019s spending is not on file';
+    var wi=$('wi-income'); if(wi&&document.activeElement!==wi) wi.value=$m(WI.income);
+    // The net practice and building sale as a share of the portfolio at
+    // retirement (the sale is in that year's value), on each path.
+    var shr=function(sale,port,idv,ids){ var v=$(idv), t=$(ids); if(!v||!t) return;
+      if(sale==null||!port||port<=0){ v.textContent='needed'; t.textContent=''; return; }
+      v.textContent=Math.round(sale/port*100)+'%'; t.textContent='Net sale '+$m(sale)+' of '+$m(port)+' in '+r.retire; };
+    shr(P.sale_net, r.cur_at, 'ws-sale-cur', 'ws-sale-cur-s');
+    shr(P.sale_net_fq!=null?P.sale_net_fq:P.sale_net, r.fq_at, 'ws-sale-fq', 'ws-sale-fq-s');
     WI.last=r;
     projExplain(P, r);
     saleItems();
@@ -669,7 +736,8 @@ function fqModel(P){
                  :'<div class="needs">Building value</div><div class="v">needed</div><div class="v">needed</div>')+
       row('Gross at retirement',$m(SN.gross_cur),$m(SN.gross_fq),'t')+
       row('Kept after tax ('+Math.round(SN.nf*100)+'%)',$m(SN.gross_cur*SN.nf),$m(SN.gross_fq*SN.nf))+
-      row('Less practice and building debt still owed then','−'+$m(SN.debt_cur),
+      row('Less practice and building debt still owed then',
+          '−<input type="text" id="rc-debt-cur" class="rn" value="'+$m(SN.debt_cur)+'" aria-label="Debt still owed at the sale, current path">',
           '−<input type="text" id="rc-debt-fq" class="rn" value="'+$m(SN.debt_fq)+'" aria-label="Debt still owed at the sale, 4Q path">')+
       row('Net sale at retirement',$m(SN.cur),$m(SN.fq),'t')+
       ((SN.typed_cur||SN.typed_fq)?'<div class="basis" style="grid-column:1/-1">A net sale typed on Plan inputs is used as typed.</div>':'')+
@@ -678,7 +746,7 @@ function fqModel(P){
     if(items.length) h+='<details style="grid-column:1/-1;margin-top:4px"><summary class="basis">The loans, today and at the sale</summary><table style="font-size:12px;width:100%">'+
       items.map(function(d){return '<tr><td>'+esc(d.label)+(d.basis?'<div class="basis">'+esc(d.basis)+'</div>':'')+'</td><td class="r">'+$m(d.today)+'</td><td class="r">'+$m(d.at_sale)+'</td></tr>'}).join('')+
       '</table><div class="basis">At the planned retirement age. Type over the debt if the client has a payoff plan.</div></details>';
-    if(document.activeElement&&document.activeElement.id==='rc-debt-fq') return;
+    if(document.activeElement&&/^rc-debt-(fq|cur)$/.test(document.activeElement.id)) return;
     el.className='kv3'; el.innerHTML=h;
   }
   document.addEventListener('input',function(e){
@@ -690,7 +758,7 @@ function fqModel(P){
         // unless a sale figure has been typed.
         if(!WI.saleTyped && WK.model && WK.sale){ var SN=saleNets(WI.retire);
           WI.sale=SN.cur; WI.saleFq=SN.fq; var se=$('wi-sale'); if(se) se.value=$m(WI.sale); } } }
-    else if(t.id==='wi-income'){ v=n(t.value); if(v!=null) WI.income=v; }
+    else if(t.id==='wi-income'){ v=n(t.value); if(v!=null){ WI.income=v; WI.incomeTyped=true; } else WI.incomeTyped=false; }
     else if(t.id==='wi-sale'){ WI.saleTyped=true; v=n(t.value); if(v!=null) WI.sale=v; }
     else if(t.id==='wi-cur'){ v=n(t.value); if(v!=null) WI.cur=v; }
     else if(t.id==='wi-oh'){ v=n(t.value); if(v!=null){ if(v>1) v=v/100; WI.oh=v; } }
@@ -704,8 +772,8 @@ function fqModel(P){
     if(t.id==='wi-reset'){ wiReset(); if(WI) WI.saleTyped=false; var a=document.activeElement; if(a&&a.blur) a.blur(); wiRender(); say('Back to the plan inputs.'); }
     if(t.id==='wi-use' && WI && plan){
       plan.decided=plan.decided||{};
-      plan.decided.retire_age=String(WI.retire); plan.decided.target_income=$m(WI.income);
-      plan.decided.sale_net=$m(WI.sale); plan.decided.current_savings=$m(WI.cur);
+      plan.decided.retire_age=String(WI.retire); plan.decided.target_income=WI.incomeTyped?$m(WI.income):'';
+      plan.decided.sale_net=WI.saleTyped?$m(WI.sale):''; plan.decided.current_savings=$m(WI.cur);
       plan.decided.target_overhead=Math.round(WI.oh*100)+'%';
       wiSchedule().forEach(function(r){ plan.decided['save_'+r[0]]=$m(r[1]); });
       pending.figs=true;
@@ -783,31 +851,81 @@ function fqModel(P){
     if(/^(practice_growth|practice_growth_fq|debt_at_sale|debt_at_sale_fq|sale_net|sale_net_fq|retire_age)$/.test(el.dataset.key))
       debounce('salecards',function(){ if(WI) WI.dirty=false; recImpact(); });
   });
-  // The 4Q sale card's debt: what is still owed at the sale on the 4Q path.
+  // Target retirement income, typed in the Savings worksheet: saved to Plan
+  // inputs at once (the same figure as Target retirement income there).
   document.addEventListener('change',function(e){
-    var el=e.target; if(!el||el.id!=='rc-debt-fq'||!plan) return;
+    var el=e.target; if(!el||el.id!=='wi-income'||!plan) return;
     var v=n(el.value); plan.decided=plan.decided||{};
-    plan.decided.debt_at_sale_fq=(v==null?'':$m(v)); pending.figs=true;
-    write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'debt still owed at the sale on the 4Q path');
+    plan.decided.target_income=(v==null?'':$m(v)); pending.figs=true;
+    var f=$('fig-target_income'); if(f){ f.value=plan.decided.target_income; f.classList.toggle('set',!!plan.decided.target_income); }
+    write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'target retirement income');
+    if(WI){ WI.incomeTyped=(v!=null); if(v!=null) WI.income=v; } recImpact(); wiRender(); if(typeof renderPlan==='function') renderPlan();
+  });
+  // The sale card's debt, either path: what is still owed at the sale.
+  // The current path is the same figure as "Practice and building debt
+  // still owed at the sale" on Plan inputs (debt_at_sale); the 4Q path
+  // follows it until its own figure is typed (debt_at_sale_fq).
+  document.addEventListener('change',function(e){
+    var el=e.target; if(!el||!/^rc-debt-(fq|cur)$/.test(el.id)||!plan) return;
+    var cur=el.id==='rc-debt-cur', key=cur?'debt_at_sale':'debt_at_sale_fq';
+    var v=n(el.value); plan.decided=plan.decided||{};
+    plan.decided[key]=(v==null?'':$m(v)); pending.figs=true;
+    var f=$('fig-'+key); if(f){ f.value=plan.decided[key]; f.classList.toggle('set',!!plan.decided[key]); }
+    write('plan/figures',{decided:plan.decided},function(){pending.figs=false;},'debt still owed at the sale on the '+(cur?'current':'4Q')+' path');
     if(WI){ WI.dirty=false; wiReset(); } recImpact(); wiRender(); if(typeof renderPlan==='function') renderPlan();
   });
   // ---- recommendations ----------------------------------------------
   function m0(v){ return (v==null||v==='')?'':$m(v); }
   // What the ticked recommendations save each year: year-two items start in
   // year two, "Later" ones are left out. This is the schedule the plan uses.
+  // The ticked recommendations, as the Recommendations tab has them: each
+  // one's label, cashflow and what goes in years 1 to 3 (zero before the
+  // year it starts). "Later" and unticked ones are left out. The Projections
+  // tab's "Where the savings come from" lists exactly these.
+  // One recommendation's years 1 to 3 as the Recommendations tab shows
+  // them: each year as typed there, else the toolkit's figure; a blank year
+  // takes the fullest year's figure, a zero stays zero. It starts in the
+  // year chosen with the Year buttons; with no year chosen, in the first
+  // year that has an amount (a year-1 amount typed on a row that defaulted
+  // to year 2 counts in year 1, as the row shows it). Years before the start
+  // are zero. {on, start ('later' or 1-3), vals:[y1,y2,y3]}.
+  function recYears(r, s, custom){
+    var on=('on' in s)?s.on:(custom||r.suggested);
+    var inv=(r.invested||[]).slice();
+    var t=function(f){ return s[f]!=null&&s[f]!==''; };
+    var v1=t('inv1')?n(s.inv1):(inv[0]!=null?inv[0]:null), v2=t('inv2')?n(s.inv2):(inv[1]!=null?inv[1]:null);
+    var v3=t('inv3')?n(s.inv3):(t('inv2')?n(s.inv2):(inv[2]!=null?inv[2]:v2));
+    var raw=[v1,v2,v3], got=raw.filter(function(v){return v!=null});
+    var full=got.length?Math.max.apply(null,got):0;
+    var start;
+    if(s.year) start=String(s.year)==='later'?'later':(+s.year);
+    else { start=0; for(var i=0;i<3;i++){ if((raw[i]!=null?raw[i]:0)>0){ start=i+1; break; } } if(!start) start=+(r.year||1); }
+    var vals=[0,1,2].map(function(i){ return (start==='later'||i<start-1)?0:(raw[i]!=null?raw[i]:full); });
+    return {on:on, start:start, vals:vals};
+  }
+  function recsLedger(){
+    if(!plan||!plan.recommendations||!plan.recommendations.length) return null;
+    var st=plan.recs||{}, cu=plan.recs_custom||[], out=[];
+    plan.recommendations.map(function(r){return {r:r,k:r.key,custom:false}})
+      .concat(cu.map(function(c,i){return {r:c,k:'custom_'+i,custom:true}}))
+      .forEach(function(x){
+        var r=x.r, s=st[x.k]||{}, Y=recYears(r, s, x.custom); if(!Y.on||Y.start==='later') return;
+        var g=(s.gain!=null&&s.gain!=='')?n(s.gain):r.gain;
+        out.push({label:(x.custom?(s.label||r.label||'Your recommendation'):(s.label||r.label)), basis:x.custom?'':(r.basis||''),
+                  note:s.note||'', gain:g, start:Y.start, vals:Y.vals});
+      });
+    return out;
+  }
   function recsSchedule(){
     if(!plan||!plan.recommendations||!WK||!WK.model) return null;
     var st=plan.recs||{}, cu=plan.recs_custom||[], tot=[0,0,0];
     var rows=plan.recommendations.map(function(r){return {r:r,k:r.key,custom:false}})
       .concat(cu.map(function(c,i){return {r:c,k:'custom_'+i,custom:true}}));
     rows.forEach(function(x){
-      var r=x.r, s=st[x.k]||{}, on=('on' in s)?s.on:(x.custom||r.suggested); if(!on) return;
-      var yr=String(s.year||r.year||1); if(yr==='later') return; var start=(+yr)-1;
-      var inv=(r.invested||[]).slice(); var v1=s.inv1!=null&&s.inv1!==''?n(s.inv1):inv[0], v2=s.inv2!=null&&s.inv2!==''?n(s.inv2):inv[1];
-      var v3=(s.inv3!=null&&s.inv3!=='')?n(s.inv3):((s.inv2!=null&&s.inv2!=='')?n(s.inv2):(inv[2]!=null?inv[2]:v2));
-      var vals=[v1||0, v2||0, v3||0];
-      var full=Math.max(vals[0],vals[1],vals[2]);
-      for(var i=0;i<3;i++) tot[i]+= i<start?0:(vals[i]||full);
+      // A blank year takes the fullest year's figure; a zero stays zero (a
+      // one-time surplus is $90,000 in year 1 and $0 after); see recYears.
+      var r=x.r, s=st[x.k]||{}, Y=recYears(r, s, x.custom); if(!Y.on||Y.start==='later') return;
+      for(var i=0;i<3;i++) tot[i]+=Y.vals[i];
     });
     var y0=WK.model.first_year||((WK.base&&WK.base.first_year)||new Date().getFullYear()+1);
     return [[y0,tot[0]],[y0+1,tot[1]],[y0+2,tot[2]]];
@@ -819,7 +937,8 @@ function fqModel(P){
     var M=WK.model;
     var P={rates:M.rates, consult_date:cdIso()||M.consult_date, age:M.age, retire_age:WI?WI.retire:M.retire_age, start:M.start,
            current_savings:WI?WI.cur:M.current_savings, spend:M.spend, schedule:sch, income:WI?WI.income:M.income,
-           sale_net:WI?WI.sale:M.sale_net, sale_net_fq:WI?WI.saleFq:M.sale_net_fq, horizon:M.horizon||90};
+           sale_net:WI?WI.sale:M.sale_net, sale_net_fq:WI?WI.saleFq:M.sale_net_fq, horizon:(M.horizon||90)+(M.horizon_extra||0)};
+    if(WI&&!WI.incomeTyped) P.income=solveIncome(P);
     var r=fqModel(P), base=WK.base||{}, lasts=r.fq_end>=-1000;
     el.innerHTML=
       '<div class="tile"><span class="k">Invested, years 1 · 2 · 3</span><span class="v">'+$m(sch[0][1])+'</span><span class="s">'+$m(sch[1][1])+' · '+$m(sch[2][1])+'</span></div>'+
@@ -827,6 +946,10 @@ function fqModel(P){
       '<div class="tile"><span class="k">Current path at retirement</span><span class="v">'+$m(r.cur_at)+'</span><span class="s">Difference '+$m(r.fq_at-r.cur_at)+'</span></div>'+
       '<div class="tile '+(lasts?'good':'warn')+'"><span class="k">'+$m(P.income)+' a year</span><span class="v">'+(lasts?'Lasts to '+(M.horizon||90):'Runs out '+r.fq_runout)+'</span><span class="s">on the 4Q path</span></div>';
     if(typeof wiRender==='function') wiRender();
+    // Plan inputs' savings years follow the recommendations too; not while
+    // someone is typing on Plan inputs.
+    var ae=document.activeElement;
+    if(typeof renderPlan==='function'&&!(ae&&ae.closest&&ae.closest('#figs,#concerns'))) renderPlan();
   }
   // What the lead advisor used on this client before (a practice copy of a
   // past client, or a plan being redone): his own savings rows, side by
@@ -867,7 +990,7 @@ function fqModel(P){
           ((s.gain!=null&&s.gain!==''||s.inv1!=null||s.inv2!=null||s.inv3!=null)?'<div class="basis">You have typed your own figures on this one; the steps show the toolkit\u2019s.</div>':'')+'</details>':'');
       // Buttons, not a dropdown: in the Claude app's viewer a dropdown's
       // choice never reached the page (found 29 Oct).
-      var cur=String(s.year||r.year||1);
+      var cur=String(recYears(r, s, x.custom).start);
       var ysel=[['1','Year 1'],['2','Year 2'],['3','Year 3'],['later','Later']].map(function(o){
         return '<button type="button" class="ybtn" data-ry="'+x.k+'" data-v="'+o[0]+'" aria-pressed="'+(cur===o[0])+'">'+o[1]+'</button>'; }).join('');
       var note='<input type="text" class="rnote" data-rk="'+x.k+'" data-f="note" value="'+v('note','')+'" placeholder="Note (why, when, conditions)" aria-label="Note">';

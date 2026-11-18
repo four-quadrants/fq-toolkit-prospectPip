@@ -323,3 +323,33 @@ No client names: say what was true, not who it was true for.
 - Size: not sized; options compared (combine locations, drop evenings or
   Saturdays, drop plans, expand).
 - Seen: several decks.
+
+## Loan dropoff--fotona laser [loan_dropoff_fotona_laser]
+- When: added by the lead advisor on a consult review (2026-11-18).
+- Signs: see his note
+- Size: 18900 a year as he sized it; check against the client.
+- Seen: one consult.
+
+## New net rental take-home 2k/month [new_net_rental_take_home_2k_month]
+- When: added by the lead advisor on a consult review (2026-11-18).
+- Signs: see his note
+- Size: 24000 a year as he sized it; check against the client.
+- Seen: one consult.
+
+## +4.4% gross prod/pat [4_4_gross_prod_pat]
+- When: added by the lead advisor on a consult review (2026-11-18).
+- Signs: see his note
+- Size: 42700 a year as he sized it; check against the client.
+- Seen: one consult.
+
+## +0.25% pat/day increase [0_25_pat_day_increase]
+- When: added by the lead advisor on a consult review (2026-11-18).
+- Signs: see his note
+- Size: 25400 a year as he sized it; check against the client.
+- Seen: one consult.
+
+## Loan dropoff--workstation/summus laser [loan_dropoff_workstation_summus_laser]
+- When: added by the lead advisor on a consult review (2026-11-18).
+- Signs: see his note
+- Size: 140700 a year as he sized it; check against the client.
+- Seen: one consult.

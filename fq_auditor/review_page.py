@@ -182,16 +182,33 @@ def apply(folder, plan_json):
                 inv[2] = _num(st['inv3'])
             elif st.get('inv2') not in (None, ''):
                 inv[2] = _num(st['inv2'])
-            year = str(st.get('year') or r.get('year') or 1)
+            # Each year as typed, else the toolkit's figure (None when blank).
+            raw = [None if v is None else _num(v) for v in
+                   (list(r.get('invested') or [None, None, None]) + [None, None, None])[:3]]
+            for i, k in ((0, 'inv1'), (1, 'inv2'), (2, 'inv3')):
+                if st.get(k) not in (None, ''):
+                    raw[i] = _num(st[k])
+            if st.get('inv3') in (None, '') and st.get('inv2') not in (None, ''):
+                raw[2] = _num(st['inv2'])
+            # It starts in the year chosen with the Year buttons; with none
+            # chosen, in the first year with an amount (as the page does).
+            if st.get('year'):
+                year = str(st['year'])
+            else:
+                year = next((str(i + 1) for i in range(3) if (raw[i] or 0) > 0),
+                            str(r.get('year') or 1))
             if year == 'later':
                 # Kept in view (the note says when), out of the schedule
                 notes.append('%s: held for later. %s' % (
                     st.get('label') or r.get('label'), st.get('note') or ''))
                 continue
             # Moved to a later year: nothing invested before it starts
+            # A blank year takes the fullest year's figure; a zero stays zero.
             start = int(year) - 1
-            full = max(inv[:3]) if any(inv[:3]) else 0
-            inv = [0 if i < start else (inv[i] or full) for i in range(3)]
+            got = [v for v in raw if v is not None]
+            full = max(got) if got else 0
+            inv = [0 if i < start else (raw[i] if raw[i] is not None else full)
+                   for i in range(3)]
             if st.get('note'):
                 notes.append('%s: %s' % (st.get('label') or r.get('label'), st['note']))
             chosen.append(dict(r, label=st.get('label') or r.get('label'),
@@ -731,7 +748,7 @@ def seed(folder, outdir, mode='review'):
              basis='Qualified plus non-qualified investable assets on file.'),
         dict(key='current_savings', label='Saved a year today',
              proposed=money(p['current_savings']),
-             basis=('From the %s.' % D['current_savings_from']) if D.get('current_savings_from')
+             basis=('From %s.' % D['current_savings_from']) if D.get('current_savings_from')
              and D['current_savings_from'] != 'typed on Plan inputs'
              else 'Contributions found on the statements and the IC form.'),
     ]
@@ -1086,6 +1103,8 @@ def seed(folder, outdir, mode='review'):
         'schedule': [list(x) for x in (D['schedule'] or [])], 'income': D['income'],
         'sale_net': (D['proj_sale_cur'] if D.get('proj_sale_cur') is not None else D.get('sale')) or 0,
         'sale_net_fq': D.get('sale') or 0, 'horizon': adv.get('horizon_age') or 90,
+        # years past the owner's 90 until the younger spouse turns 90
+        'horizon_extra': D.get('horizon_extra') or 0,
         'first_year': pr.get('first_year'), 'overhead': lv.get('overhead'),
         'target_overhead': lv.get('target_overhead') or 0.6,
         'net_collections': lv.get('net_collections'),
@@ -1104,7 +1123,61 @@ def seed(folder, outdir, mode='review'):
         json.dump(work, fh)
     print('   %d figures, %d concerns, %d questions written to %s'
           % (len(figs), len(plan['concerns']), len(ids), outdir))
+    for line in projection_check(plan.get('assumptions') or {}, work):
+        print('   PROJECTION CHECK: ' + line)
     return outdir
+
+
+def projection_check(assumptions, work):
+    """Where the projection (plan/workings) does not use the figure the
+    Assumptions print: the lead advisor's rule is that every number changed
+    in the assumptions carries into the Projections tab. Empty when they
+    agree. Compared at the dollar (within $2) or the year."""
+    m = (work or {}).get('model') or {}
+    secs = {x.get('number'): x for x in (assumptions.get('sections') or ())}
+    out = []
+
+    def dollars(t):
+        return [float(x.replace(',', '')) for x in re.findall(r'\$([\d,]+(?:\.\d+)?)', t or '')]
+
+    def off(label, printed, used):
+        if printed is not None and used is not None and abs(printed - used) > 2:
+            out.append('%s: the assumptions print %s, the projection uses %s'
+                       % (label, '{:,.0f}'.format(printed), '{:,.0f}'.format(used)))
+    s14 = secs.get(14) or {}
+    tot = None
+    for w in s14.get('workings') or ():
+        if w.startswith('Total a year'):
+            tot = (dollars(w) or [None])[-1]
+    if tot is None and s14.get('rows'):
+        tot = sum((dollars(r.get('amount')) or [0])[0] for r in s14['rows'])
+    if tot is None and s14.get('text'):
+        d = dollars(s14['text'])
+        tot = d[0] if d else None
+    off('Saved a year today (Assumption 14)', tot, m.get('current_savings'))
+    t12 = (secs.get(12) or {}).get('text') or ''
+    mm = re.search(r'approximately \$([\d,]+) annually', t12)
+    off('Spending a year including fixed payments (Assumption 12)',
+        float(mm.group(1).replace(',', '')) if mm else None, m.get('spend'))
+    for r in (secs.get(6) or {}).get('rows') or ():
+        if 'current path' in (r.get('label') or ''):
+            off('Practice value at retirement (Assumption 6)',
+                (dollars(r.get('detail')) or [None])[0], m.get('sale_practice'))
+    w7 = (secs.get(7) or {}).get('workings') or []
+    if w7:
+        off('Building value at the sale (Assumption 7)', (dollars(w7[0]) or [None])[-1],
+            m.get('sale_building'))
+    q = sum((dollars(r.get('amount')) or [0])[0] for r in (secs.get(4) or {}).get('rows') or ())
+    parts = {p[0]: p[1] for p in (work or {}).get('start_parts') or ()}
+    for r in (secs.get(4) or {}).get('rows') or ():
+        if r.get('label') not in parts:
+            out.append('%s is in Assumption 4 but not in the starting portfolio' % r.get('label'))
+    t2 = (secs.get(2) or {}).get('text') or ''
+    ra = re.search(r'at an age of (\d+)', t2)
+    if ra and m.get('retire_age') and int(ra.group(1)) != int(m['retire_age']):
+        out.append('Retirement age: the assumptions print %s, the projection uses %s'
+                   % (ra.group(1), int(m['retire_age'])))
+    return out
 
 
 def deck_boxes(folder, D):

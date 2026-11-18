@@ -318,7 +318,7 @@ def to_gains_table(chosen):
                     ('base' if r['key'] == 'current' else
                      'practice' if r.get('kind') == 'practice' else 'cash'),
                     'invested': [x or 0 for x in (r.get('invested') or [0, 0, 0])],
-                    'year': r.get('year') or 1})
+                    'year': r.get('year') or 1, 'basis': r.get('basis') or ''})
     return out
 
 

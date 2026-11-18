@@ -77,11 +77,28 @@ THE FILE (written by Claude, read here; years are strings)
  "pay": [{"source": "<paystub or payroll journal>", "pay_date": "2026-10-08",
           "periods_per_year": 26, "basis": "<why 26: e.g. two journals two
           weeks apart, or the stub's own pay frequency line>",
-          "people": [{"name": "<as printed>", "gross": 0}]}]
+          "people": [{"name": "<as printed>", "gross": 0,
+                      "deferrals": [{"kind": "<as printed: 401(k), Roth 401(k),
+                                     SIMPLE IRA, 403(b), catch-up ...>",
+                                     "amount": 0}]}]}]
      (one entry per stub or journal; every household member on the
       practice's payroll, the owner first. The Income assumption lists each
       person's gross for the period times periods_per_year. The newest
-      pay_date for a person wins. periods_per_year must be 12, 24, 26 or 52),
+      pay_date for a person wins. periods_per_year must be 12, 24, 26 or 52.
+      deferrals: every retirement-plan deduction on the stub for this
+      period (not health, HSA or other deductions; an employer match only
+      when the stub prints one). The Contributions assumption annualizes
+      them: amount times periods_per_year),
+ "contributions": [{"source": "<investment or plan statement>",
+                    "account": "<as the plan lists it, e.g. Paige Roth IRA x5227>",
+                    "owner": "<first name>",
+                    "kind": "employee | employer | personal",
+                    "amount": 0, "months": 0,
+                    "period": "<statement period, e.g. Jan 1 to Sep 30, 2026>"}]
+     (contributions an investment or plan statement shows going in over a
+      stated number of months: the year-to-date or period contributions
+      line. Annualized as amount x 12 / months. Leave out employee
+      deferrals already on the paystubs, so nothing is counted twice),
  "insurance": [{"source": "<policy statement or illustration>",
                 "kind": "life | disability | overhead | long-term care | umbrella | other",
                 "carrier": "", "insured": "<who is covered>",
@@ -527,11 +544,32 @@ def check(folder):
             key = ' '.join(name.lower().replace(',', ' ').split())
             if key in pay and (pay[key]['pay_date'] or '') > (r.get('pay_date') or ''):
                 continue
+            defs = []
+            for d in person.get('deferrals') or ():
+                amt = d.get('amount')
+                if amt and need(src, '%s deferral for %s' % (d.get('kind') or 'retirement', name), amt):
+                    defs.append({'kind': d.get('kind') or 'retirement plan',
+                                 'amount': float(amt), 'annual': round(float(amt) * n, 2)})
             pay[key] = {'name': name, 'gross': float(gross), 'periods': n,
                         'annual': round(float(gross) * n, 2),
                         'pay_date': r.get('pay_date'), 'source': src,
-                        'basis': r.get('basis')}
+                        'basis': r.get('basis'), 'deferrals': defs}
     good['pay'] = list(pay.values())
+
+    # ------------------------------------------------- contributions seen on
+    # investment and plan statements, annualized from the months they cover.
+    contrib = []
+    for r in raw.get('contributions') or ():
+        src, amt, months = r.get('source') or '', r.get('amount'), r.get('months')
+        if not amt or not months or not (0 < float(months) <= 12):
+            problems.append('%s: a contribution needs an amount and the months (1 to 12) '
+                            'it covers' % src)
+            continue
+        if not need(src, 'contribution to %s' % r.get('account'), amt):
+            continue
+        contrib.append(dict(r, amount=float(amt), months=float(months),
+                            annual=round(float(amt) * 12.0 / float(months), 2)))
+    good['contributions'] = contrib
 
     # ------------------------------------------------- insurance in force
     # The Assumptions' Insurance section lists each policy. Figures must be

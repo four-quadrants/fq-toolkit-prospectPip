@@ -374,6 +374,15 @@ def _figures(folder, client):
     read = cash and any(a['entity'] == 'Personal' and a['readable']
                         for a in cash['accounts'])
     spend = (cash['monthly_including'] * 12) if read else None
+    if spend:
+        # Loans paid off since the statements come out, as the Assumptions'
+        # Personal spending section shows it, so the projection spends the
+        # same figure the assumptions print.
+        try:
+            import assumptions as _as
+            spend -= sum(r[1] for r in _as.paid_off_rows(folder, cash)) * 12
+        except Exception:                                    # noqa: BLE001
+            pass
     if adv.get('current_expenses'):
         spend = N(adv['current_expenses'])
         # Teams write household spending as a month ($27,645) as often as a
@@ -392,6 +401,17 @@ def _figures(folder, client):
     top = sorted(range(len(parts)), key=lambda i: -parts[i][1])[:3]
     D['slide_parts'] = [parts[i] for i in sorted(top)]
     D['age'] = N(f.get('Age')) or N(adv.get('age'))
+    # The plan runs until the youngest of the two turns the plan age (90):
+    # a spouse younger than the owner adds the difference in years to the
+    # projection, as Assumption 1 runs to the later life expectancy.
+    D['horizon_extra'] = 0
+    try:
+        import assumptions as _as
+        _pt = _as._partner(b, folder)
+        if _pt and _pt.get('age') and D['age'] and float(_pt['age']) < float(D['age']):
+            D['horizon_extra'] = int(round(float(D['age']) - float(_pt['age'])))
+    except Exception:                                        # noqa: BLE001
+        pass
     D['retire_age'] = N(adv.get('retire_age')) or _deck.retire_age_of(f.get('Retirement age goal'))
     if not D['retire_age']:
         # "ASAP" on the form: the age agreed on the call, as the analyst wrote
@@ -406,36 +426,18 @@ def _figures(folder, client):
     D['current_savings'] = N(adv.get('current_savings'))
     D['current_savings_from'] = 'typed on Plan inputs' if D['current_savings'] else None
     if not D['current_savings']:
-        # Worked out when nobody typed it, so the projection can run: the
-        # 401(k) deferrals on the W-2s (both spouses), as the Assumptions'
-        # Contributions section lists them; else the IC form's figure.
-        # Without this, every savings and projection figure on the review
-        # page read "not worked out" until someone typed one.
+        # Worked out when nobody typed it, so the projection can run, the
+        # same way as the Assumptions' Contributions section: the paystubs
+        # annualized plus the investment statements; else the IC form until
+        # the paystubs come in; else the W-2 deferrals.
         try:
-            import json as _json
-            import store as _store
-            with open(_store.json_path(folder, 'income_facts.json')) as fh:
-                _inf = _json.load(fh)
-        except (OSError, ValueError, AttributeError):
-            _inf = {}
-        defs = [N(_inf.get(k)) for k in ('deferral', 'spouse_deferral')]
-        defs = [x for x in defs if x]
-        if defs:
-            D['current_savings'] = sum(defs)
-            D['current_savings_from'] = ('401(k) deferrals on the %s W-2s (%s)'
-                                         % (_inf.get('year') or 'latest',
-                                            ' + '.join('${:,.0f}'.format(x) for x in defs)))
-        else:
-            _said = str(f.get('Saved last year') or '')
-            _m = re.search(r'\$?\s*([\d,.]+)\s*([kK])?', _said)
-            if _m and any(c.isdigit() for c in _m.group(1)):
-                try:
-                    v = float(_m.group(1).replace(',', '')) * (1000 if _m.group(2) else 1)
-                except ValueError:
-                    v = None
-                if v and v >= 1000:
-                    D['current_savings'] = v
-                    D['current_savings_from'] = 'the IC form ("%s")' % _said.strip()
+            import assumptions as _as
+            _con = _as.contributions(folder, f.get('Saved last year'))
+        except Exception:                                    # noqa: BLE001
+            _con = None
+        if _con and _con.get('total'):
+            D['current_savings'] = round(_con['total'])
+            D['current_savings_from'] = _con['from']
     D['income'] = N(adv.get('target_income'))
     D['schedule'] = [tuple(x) for x in (adv.get('savings_schedule') or [])]
     D['take_home'] = N(adv.get('current_income')) or N(f.get('Take-home, stated'))
@@ -579,6 +581,22 @@ def _figures(folder, client):
                       for g in adv['gains_table'] if g.get('label')]
     else:
         D['gains'] = D['gains_proposed']
+        # No table from the lead advisor yet: the recommendations the review
+        # page proposes (the ticked ones, each with its own years) are the
+        # table, so Plan inputs, the projection and the slides save what the
+        # Recommendations tab shows, not the toolkit's separate source list.
+        if not adv.get('savings_schedule'):
+            try:
+                import recommendations as _rec
+                _tbl = _rec.to_gains_table([r for r in _rec.propose(folder, D)
+                                            if r.get('suggested')])
+                if _tbl:
+                    D['gains'] = [dict(g, gain=N(g.get('gain')) or 0,
+                                       invested=[N(x) or 0 for x in g['invested']])
+                                  for g in _tbl]
+                    D['gains_from_recs'] = True
+            except Exception as exc:                         # noqa: BLE001
+                print('   recommendations not used for the schedule: %s' % exc)
     consult = adv.get('consult_date') or datetime.date.today().isoformat()
     f0 = _sav.first_year_fraction(datetime.date.fromisoformat(consult))
     first_plan_year = int(consult[:4]) + (1 if f0 == 0 else 0)
@@ -617,7 +635,7 @@ def _figures(folder, client):
                   current_savings=D['current_savings'],
                   current_expenses=spend, fq_schedule=D['schedule'],
                   horizon_age=int(N(adv.get('horizon_age')) or
-                                  _sav.HORIZON_AGE),
+                                  _sav.HORIZON_AGE) + int(D.get('horizon_extra') or 0),
                   r1=N(adv.get('fq_first_year_rate')))
         sale = N(adv.get('sale_net'))
         if sale is None:
@@ -626,7 +644,9 @@ def _figures(folder, client):
         if sale_fq is None:
             # A typed current-path sale with no 4Q one keeps the two equal,
             # as before; otherwise the 4Q path's own derived sale.
-            sale_fq = sale if adv.get('sale_net') is not None else (net_fq or sale)
+            # The 4Q path's own sale (its faster growth), even when the
+            # current path's net sale is typed: the two paths differ.
+            sale_fq = net_fq or sale
 
         def run(income, sale_net):
             return _sav.project(fq_income=income, sale_net=sale_net, **kw)
@@ -1155,9 +1175,12 @@ def slide_fills(D):
                          'lower' if inc['dist_cut'] >= 0 else 'higher',
                          '\u2212' if inc['dist_cut'] >= 0 else '+',
                          _k(abs(inc['dist_cut']) * 12)),
-            'Text 10': 'Increase the 401(k) to max with the same match, saving '
-                       '%s/yr more. All changes lower taxes over %s/yr.'
-                       % (k1(inc['more_saved']), k1(inc['tax_saved'])),
+            'Text 10': ('Increase the 401(k) to max with the same match, saving '
+                        '%s/yr more. All changes lower taxes over %s/yr.'
+                        % (k1(inc['more_saved']), k1(inc['tax_saved'])))
+                       if inc['more_saved'] >= 500 else
+                       'The 401(k) is already at the maximum on the paystubs; keep it '
+                       'there with the same match.',
             'Text 12': 'Begin paying distributions to cover custom quarterly '
                        'tax estimates (example on the next slide).',
             'Text 15': 'Personal cashflow stays identical while business '
@@ -1705,13 +1728,28 @@ def income_structure(D):
     if p_dist < 0:
         return None
     sch = D.get('schedule') or []
+    # What the owner defers today: the paystubs annualized where they were
+    # read (the Contributions assumption's figure), else last year's W-2.
+    # Against a 2025 W-2 of $23,500, an owner already deferring the 2026
+    # $24,500 on every stub showed $1,000 'more saved' that was not new.
+    now_def = dfr
+    try:
+        import doc_readings as _dr
+        _own = os.path.basename(D['folder'].rstrip('/')).split(' - ')[0]
+        _of = (_own.split(',')[1].split() or [''])[0].lower() if ',' in _own else ''
+        for _p in (_dr.check(D['folder'])[0] or {}).get('pay') or ():
+            _nm = _p['name'].split(',', 1)[1].split() if ',' in _p['name'] else _p['name'].split()
+            if _nm and _nm[0].lower() == _of and _p.get('deferrals'):
+                now_def = sum(d['annual'] for d in _p['deferrals']) / 12.0
+    except Exception:                                        # noqa: BLE001
+        pass
     return dict(w2=w2, **{'def': dfr}, tax=tax, pct=tax / (w2 - dfr),
                 net=net, dist=dist, p_w2=p_w2, p_def=p_def, p_rate=rate,
                 p_tax=p_tax, p_net=p_net, p_dist=p_dist,
                 w2_cut=w2 - p_w2, dist_cut=dist - p_dist,
                 gain=(w2 - p_w2) + (dist - p_dist),
-                more_saved=(p_def - dfr) * 12,
-                tax_saved=(p_def - dfr) * 12 * EXTRA_DEFERRAL_TAX,
+                more_saved=max(0.0, p_def - now_def) * 12,
+                tax_saved=max(0.0, p_def - now_def) * 12 * EXTRA_DEFERRAL_TAX,
                 plan_year=sch[0][0] if sch else datetime.date.today().year + 1,
                 year=f.get('year'))
 

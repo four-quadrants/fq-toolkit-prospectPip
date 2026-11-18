@@ -89,7 +89,12 @@ Never overwrite the lead advisor's work. Re-seed, then:
   `notes`, `recs`, `recs_custom`, `sdecisions`, `stext`, `email`,
   `email_edited`, `assume_notes`, `stage`, `handoff`, `an_notes`, `an_assume_notes`,
   `assume_kind`, `an_assume_kind`, `qcustom`, `carried_marks`, `save_years`, `slide_off`, `slide_add`, `slide_force` alone.
-- `set` plan/workings, plan/slides and every question doc.
+- `set` plan/workings, plan/slides and every question doc. Always, on every
+  refresh, even a one-figure change: plan/workings is what the Projections
+  tab draws, so leaving it out leaves the projection on old numbers.
+- Before writing, the seed's output must show no `PROJECTION CHECK` lines
+  (savings, spending, practice and building value, retirement age and the
+  accounts in the starting portfolio, each against the assumptions).
 - Question ids are made from the question itself, so decisions stay attached.
 - Do not republish the page itself unless the page design changed (republishing
   pops it open for the user).
