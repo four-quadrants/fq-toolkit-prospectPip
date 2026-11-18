@@ -454,7 +454,7 @@ tr.off td{opacity:.55}
         '<td class="num">'+esc(f.proposed)+'</td>'+
         '<td class="yours"><input type="text" id="fig-'+esc(f.key)+'" data-key="'+esc(f.key)+'" class="'+(mine?'set':'')+'" value="'+esc(mine||'')+'" placeholder="accept" aria-label="Your figure for '+esc(f.label)+'"></td></tr>';
     }).join('');
-    var yrs=(plan.save_years||[1,2,5,8,12]).join(', ');
+    var yrs=(plan.save_years||[1,2,3,5,8,14]).join(', ');
     var yrsRow=(plan.mode!=='analysis'&&(plan.schedule||[]).length)?'<tr class="grp"><td colspan="3">Savings by plan year <span class="basis" style="display:inline">(year 1 is '+planY0()+')</span>'+
       '<div class="basis">Years shown: <input type="text" id="saveyears" value="'+esc(yrs)+'" style="width:160px;display:inline-block" aria-label="Plan years shown"> type the plan years you want, separated by commas.</div></td></tr>':'';
     rows=rows.replace('<!--SAVEYEARS-->',yrsRow);
@@ -475,7 +475,7 @@ tr.off td{opacity:.55}
     });
   }
 
-  // Savings rows by PLAN year (1, 2, 5, 8, 12 unless he changes them). The
+  // Savings rows by PLAN year (1, 2, 3, 5, 8, 14 unless he changes them). The
   // value is the step of the savings schedule in force that year; his figure
   // is stored by calendar year, which is what the plan runs on.
   // The consult date: the analyst enters it while building the assumptions;
@@ -506,7 +506,7 @@ tr.off td{opacity:.55}
     var y0=planY0(), basis='', at=-1, out=[];
     all.forEach(function(f){ if(/^save_\d{4}$/.test(f.key)){ if(at<0) at=out.length; basis=f.basis||basis; } else out.push(f); });
     if(at<0) at=out.length;
-    var yrs=(plan.save_years||[1,2,5,8,12]);
+    var yrs=(plan.save_years||[1,2,3,5,8,14]);
     var rows=yrs.map(function(n){ var y=y0+n-1, v=null; sch.forEach(function(r){ if(+r[0]<=y) v=r[1]; });
       return {key:'save_'+y, label:'Savings in year '+n+' ('+y+')', proposed:$m(v), basis:basis}; });
     return out.slice(0,at).concat([{key:'__years', marker:true}]).concat(rows).concat(out.slice(at));
@@ -515,7 +515,7 @@ tr.off td{opacity:.55}
     if(!e.target||e.target.id!=='saveyears'||!plan) return;
     var ys=String(e.target.value).split(/[^0-9]+/).map(Number).filter(function(x){return x>=1&&x<=60});
     ys=ys.filter(function(x,i){return ys.indexOf(x)===i}).sort(function(a,b){return a-b});
-    if(!ys.length) ys=[1,2,5,8,12];
+    if(!ys.length) ys=[1,2,3,5,8,14];
     plan.save_years=ys; pending.sy=true;
     write('plan/figures',{save_years:ys},function(){pending.sy=false;},'savings years shown: '+ys.join(', '));
     renderPlan();

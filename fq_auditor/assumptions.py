@@ -704,10 +704,18 @@ def build(bundle, folder):
                                'amount': _money(a['balance']),
                                'basis': 'Balance only. %s' % a['why']})
                 continue
+            # A known move since the last statement (the team's
+            # 'balance_adjust' input, by last four digits): the balance is
+            # moved by it and the row says why.
+            adj = ((_inputs.get(folder, 'balance_adjust') or {}).get('value') or {}).get(
+                m.group(1) if m else '') or {}
+            if adj.get('amount'):
+                a = dict(a, balance=a['balance'] + float(adj['amount']))
             listed.append({
                 'label': _who(a),
                 'amount': _money(a['balance']),
-                'basis': 'Average deposit %s, average expense %s, average '
+                'basis': ((adj.get('note') + ' ') if adj.get('note') else '') +
+                         'Average deposit %s, average expense %s, average '
                          '%s %s, across %d statement period%s.'
                          % (_money(a['deposit']), _money(abs(a['expense'])
                                                          if abs(a['expense']) < 0.5
@@ -925,11 +933,26 @@ def build(bundle, folder):
             for r in rows:
                 paid += [float(x.replace(',', '')) for x in
                          re.findall(r'([\d,]+(?:\.\d+)?)/mo', r.note or '')]
+            # Loans paid off since the statements (the team's 'paid_off'
+            # input: payee words and why): not listed as debt still owed.
+            gone = (_inputs.get(folder, 'paid_off') or {}).get('value') or {}
             for payee, monthly, kind in cash.get('fixed_rows') or ():
                 if kind != 'Liability':
                     continue
+                if any(k.lower() in payee.lower() for k in gone):
+                    continue
                 if any(abs(monthly - p) <= 2 for p in paid):
                     continue
+                # One bank-statement payment covering several loans from the
+                # same lender (Affirm's two loans, $223 + $475, drawn as one
+                # $700): matched by the lender's name and the payments added.
+                first = (re.findall(r'[a-z]{4,}', payee.lower()) or [''])[0]
+                same_lender = [r for r in rows if first and first in (r.label or '').lower()]
+                if same_lender:
+                    tot = sum(float(x.replace(',', '')) for r in same_lender for x in
+                              re.findall(r'([\d,]+(?:\.\d+)?)/mo', r.note or ''))
+                    if tot and abs(monthly - tot) <= 5:
+                        continue
                 # The same loan by its account digits ("Us Bank Home Mtg Mtg
                 # Pymt ***7127" is the mortgage x7127), paid above schedule:
                 # the lead advisor's Rebol plan, "currently being accelerated
@@ -1256,6 +1279,43 @@ def build(bundle, folder):
     return out
 
 
+INSURERS = re.compile(r'\b(guardian|northwestern mutual|mass ?mutual|principal life|'
+                      r'ameritas|lincoln (?:national|financial)|prudential|metlife|'
+                      r'new york life|ohio national|the standard|standard ins|unum|'
+                      r'mutual of omaha|assurity|penn mutual|pacific life|'
+                      r'john hancock|transamerica|banner life|protective life|'
+                      r'state farm life|aflac|lloyds)\b', re.I)
+
+
+def _insurer_payments(folder):
+    """[(insurer, monthly, last4)]: insurers paid in two or more months on
+    any account's statements, read from bank_statements.json."""
+    try:
+        with open(_store.json_path(folder, 'bank_statements.json')) as fh:
+            got = json.load(fh)
+    except (OSError, ValueError, AttributeError):
+        return []
+    seen = {}
+    for f in (got.get('files') or {}).values():
+        for st in f.get('statements') or ():
+            acct = st.get('account_last4') or '????'
+            for t in st.get('transactions') or ():
+                if t.get('direction') == 'in':
+                    continue
+                m = INSURERS.search(str(t.get('description') or ''))
+                if not m:
+                    continue
+                key = (m.group(1).title(), acct)
+                month = str(t.get('date') or '')[:7]
+                seen.setdefault(key, {})[month] = abs(float(t.get('amount') or 0))
+    out = []
+    for (name, acct), by_month in sorted(seen.items()):
+        if len(by_month) >= 2:
+            vals = sorted(by_month.values())
+            out.append((name, vals[len(vals) // 2], acct))
+    return out
+
+
 def _insurance(folder, cash):
     try:
         import doc_readings as _dr
@@ -1286,6 +1346,20 @@ def _insurance(folder, cash):
     seen = [(n, a) for n, a, k in ((cash or {}).get('fixed_rows') or ())
             if k == 'Insurance' and not any(w in carriers for w in
                                              str(n).lower().split()[:1])]
+    # Premiums the practice pays (a disability or overhead policy through
+    # the practice account) never reach the personal fixed payments above:
+    # Tanksley's Guardian $92.68 a month from the practice account was
+    # missed that way. Insurers named on any account's statements, paid in
+    # two months or more, are listed with the account that pays them.
+    named = {str(n).lower() for n, _a in seen}
+    for name, monthly, acct in _insurer_payments(folder):
+        if name.lower() in carriers or any(name.lower().split()[0] in n for n in named):
+            continue
+        rows.append({'label': '%s (premium paid from x%s)' % (name, acct),
+                     'amount': None,
+                     'detail': '%s a month (%s a year) on the bank statements; '
+                               'the policy itself is not on file.'
+                               % (_money(monthly), _money(monthly * 12))})
     if seen:
         for name, monthly in seen:
             rows.append({'label': '%s (premium on the bank statements)' % name,
@@ -1301,7 +1375,8 @@ def _insurance(folder, cash):
                            'the debts if something happens to the owner')
     sec = Section(15, '%s the following insurance in force.'
                   % ('We show' if pols else 'The bank statements show premiums for')
-                  + ('' if pols and not seen else ' The policies behind the premiums are still needed.'),
+                  + ('' if pols and all(r.get('amount') for r in rows)
+                     else ' The policies behind the premiums are still needed.'),
                   rows=rows,
                   source='Policy documents.' if pols else 'Bank statements.',
                   flag=_flag(folder, 15))
@@ -1344,6 +1419,17 @@ def _maturity(folder, balance, note=None):
             got = {}
         _MATURITY[folder] = got
     year = _MATURITY[folder].get(round(balance, 2)) if balance else None
+    # A term written into the note ("2-yr term to Nov 2027"): the loan ends
+    # then at the latest. The estimate from the payments still wins when it
+    # is sooner (a mortgage paid ahead of its 30-year schedule); when the
+    # stated end is sooner (a 0% loan whose balance is a few months old),
+    # the stated end is printed.
+    stated = None
+    if not year:
+        said = re.search(r'term to (?:[A-Za-z]{3,9}\s+)?(\d{4})|matures\s+(?:[A-Za-z]{3,9}\s+)?(\d{4})',
+                         str(note or ''))
+        if said:
+            stated = int(said.group(1) or said.group(2))
     if not year and re.search(r'credit card|line of credit|\bloc\b|heloc',
                               str(note or ''), re.I):
         return 'revolving'
@@ -1368,7 +1454,11 @@ def _maturity(folder, balance, note=None):
                 n = -math.log(1 - r * B / P) / math.log(1 + r)
             if n is not None and n < 12 * 40:
                 end = datetime.date.today() + datetime.timedelta(days=30.44 * n)
+                if stated and stated < end.year:
+                    return str(stated)
                 return 'about %d (est.)' % end.year
+    if not year and stated:
+        year = stated
     if not year:
         return 'not stated'
     if year > datetime.date.today().year + 40:

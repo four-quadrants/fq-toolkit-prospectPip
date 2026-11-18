@@ -458,7 +458,8 @@ def _library():
         return []
 
 
-SAVE_YEARS = (1, 2, 5, 8, 12)
+# The lead advisor reads savings at plan years 1, 2, 3, 5, 8 and 14 (Nov 2026).
+SAVE_YEARS = (1, 2, 3, 5, 8, 14)
 
 
 def log_items(rec):
@@ -735,7 +736,7 @@ def seed(folder, outdir, mode='review'):
              else 'Contributions found on the statements and the IC form.'),
     ]
     # Savings by PLAN year (year 1 is the first year of the plan), at the
-    # years the lead advisor reads them: 1, 2, 5, 8 and 12 unless he changes
+    # years the lead advisor reads them: 1, 2, 3, 5, 8 and 14 unless he changes
     # them on the page. The value is the step in force that year. The key
     # stays the calendar year, which is what the plan inputs run on.
     sch = sorted((int(y), v) for y, v in (p.get('schedule') or []))
