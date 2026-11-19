@@ -2519,6 +2519,86 @@ def _deep_dive(prs, a):
     return s
 
 
+def _entity_compare(prs, a):
+    """Choosing the right entity: a category table of up to eight rows
+    (category, today's entity, the proposed one; the proposed column tinted
+    and bold), then two cards of up to three figures each (taxes owed,
+    W-2 withholding, quarterly estimates), today's entity in a white card and
+    the proposed one in a dark card. Fields: eyebrow, title, title_accent,
+    note, heads [3], rows [[category, today, proposed]], cards
+    [{head, stats: [[label, value]]}] (0 to 2)."""
+    from pptx.util import Pt
+    from pptx.dml.color import RGBColor
+    s = _clone(prs, prs.slides[LAYOUTS['points'] - 1])
+    header = {'Shape 0', 'Text 1', 'Text 2'}
+    _remove(s, *[sh.name for sh in list(s.shapes) if sh.name not in header])
+    set_text(_shape(s, 'Text 1'), (a.get('eyebrow') or 'Entity comparison').upper())
+    title, accent = (a.get('title') or 'Choosing the right entity').upper(), (a.get('title_accent') or '').upper()
+    t = _shape(s, 'Text 2')
+    set_text(t, title)
+    if accent and title.endswith(accent) and accent != title:
+        para = t.text_frame.paragraphs[0]
+        r0 = para.runs[0]
+        r0.text = title[:-len(accent)]
+        r1 = copy.deepcopy(r0._r)
+        r0._r.addnext(r1)
+        para.runs[1].text = accent
+        para.runs[1].font.color.rgb = RGBColor.from_string(DD_ORANGE)
+    t.width = _shape(s, 'Text 1').width = Pt(900)
+    if a.get('note'):
+        _dd_text(s, 960, 46, 432, 36, [(a['note'], DD_TEXT, False)], size=20, align='r', anchor='bottom')
+
+    cards = [c for c in (a.get('cards') or []) if c and (c.get('head') or any(x and x[1] for x in c.get('stats') or []))][:2]
+    rows = [list(r) + ['', '', ''] for r in (a.get('rows') or []) if r and any((x or '').strip() for x in r)][:8]
+    heads = list(a.get('heads') or []) + ['', '', '']
+    heads = [heads[0] or 'Category', heads[1] or 'Today', heads[2] or 'Proposed']
+    L, W = LEFT, WIDTH
+    cw = W / 3.0
+    top = TOP + 2
+    table_bottom = (BOTTOM - 138) if cards else BOTTOM
+    hh = 48
+    n = max(1, len(rows))
+    rh = min(72, (table_bottom - top - hh) / float(n))
+    size = 22 if rh >= 56 else 19
+    # header row
+    for i, (col, txt) in enumerate(zip(('3A6EAF', 'B4B5B8', 'D97A30'), heads)):
+        _dd_rect(s, L + i * cw, top, cw, hh, col)
+        _dd_text(s, L + i * cw + 22, top, cw - 40, hh, [(txt.upper(), 'FFFFFF', True)], size=23,
+                 anchor='middle', spacing=1)
+    y = top + hh
+    for r in rows:
+        _dd_rect(s, L, y, 2 * cw, rh, 'FFFFFF')
+        _dd_rect(s, L + 2 * cw, y, cw, rh, 'F9F1EA')
+        _dd_rect(s, L, y + rh - 1, W, 1, DD_LINE)
+        _dd_rect(s, L + cw, y, 1, rh, DD_LINE)
+        _dd_rect(s, L + 2 * cw, y, 1, rh, DD_LINE)
+        _dd_text(s, L + 22, y + 4, cw - 40, rh - 8, [(r[0] or ' ', DD_DARK, True)], size=size, anchor='middle')
+        _dd_text(s, L + cw + 18, y + 4, cw - 36, rh - 8, [(r[1] or ' ', '6B7076', False)], size=size, anchor='middle')
+        _dd_text(s, L + 2 * cw + 18, y + 4, cw - 36, rh - 8, [(r[2] or ' ', DD_DARK, True)], size=size, anchor='middle')
+        y += rh
+    # the two cards
+    if cards:
+        cy, ch = BOTTOM - 120, 120
+        gap = 18
+        widths = [W * 0.495, W - W * 0.495 - gap] if len(cards) == 2 else [W]
+        x = L
+        for i, c in enumerate(cards):
+            dark = (i == 1) or (len(cards) == 1 and c.get('dark'))
+            w = widths[i]
+            _dd_rect(s, x, cy, w, ch, DD_DARK if dark else 'FFFFFF')
+            _dd_rect(s, x, cy, w, 4, 'D97A30' if dark else 'B4B5B8')
+            _dd_text(s, x + 22, cy + 16, w - 44, 30, [((c.get('head') or '').upper(), 'F5A25D' if dark else DD_DARK, True)],
+                     size=24, spacing=1)
+            st = [list(z) + ['', ''] for z in (c.get('stats') or []) if z and (z[0] or z[1])][:3]
+            sw = (w - 44) / float(max(len(st), 1))
+            for j, z in enumerate(st):
+                _dd_text(s, x + 22 + j * sw, cy + 52, sw - 10, 22, [(z[0] or ' ', 'B4B5B8' if dark else DD_MUTED, False)], size=17)
+                _dd_text(s, x + 22 + j * sw, cy + 74, sw - 10, 36, [(z[1] or ' ', 'FFFFFF' if dark else DD_DARK, True)], size=30,
+                         font='Barlow Condensed')
+            x += w + gap
+    return s
+
+
 def _added_slide(prs, a):
     """Build one added slide from its layout. Returns the new slide. Every
     layout fills the content area; nothing is left as empty page."""
@@ -2527,6 +2607,8 @@ def _added_slide(prs, a):
         return _deep_dive(prs, a)
     if a.get('layout') == 'current_path':
         return _current_path(prs, a)
+    if a.get('layout') == 'entity_compare':
+        return _entity_compare(prs, a)
     layout = a.get('layout') if a.get('layout') in LAYOUTS else 'points'
     s = _clone(prs, prs.slides[LAYOUTS[layout] - 1])
     eyebrow = (a.get('eyebrow') or '').strip().upper()

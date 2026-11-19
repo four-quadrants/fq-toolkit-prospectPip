@@ -146,7 +146,7 @@ def apply(folder, plan_json):
             if v is not None:
                 entry[key] = int(v) if key == 'retire_age' else v
                 changed.append(key)
-    if schedule:
+    if schedule and not rec.get('recommendations'):
         entry['savings_schedule'] = [[y, schedule[y]] for y in sorted(schedule)]
     # The years he typed himself ("Savings in 2030", a 401(k) starting, a
     # profit share later) are kept apart too, so the schedule the
@@ -237,12 +237,10 @@ def apply(folder, plan_json):
             pass
         # The ticked recommendations set the savings schedule, unless he
         # typed a year's savings on the Plan tab: those years are his.
-        typed = {int(k[5:]): _num(v) for k, v in decided.items()
-                 if k.startswith('save_') and v not in (None, '')}
-        if typed:
-            entry['savings_schedule'] = [[y, typed[y]] for y in sorted(typed)]
-        else:
-            entry.pop('savings_schedule', None)
+        # The years he typed are kept as savings_steps (above) and laid on
+        # top of the schedule the recommendations build, the same way the
+        # page's Projections tab does; they never replace years 1 to 3.
+        entry.pop('savings_schedule', None)
         changed.append('recommendations (%d)' % len(chosen))
     _inputs.put(folder, 'deck', entry, by='the lead advisor, on the consult review page',
                 note='decided on the review page')

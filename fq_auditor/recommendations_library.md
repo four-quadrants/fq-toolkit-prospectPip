@@ -353,3 +353,15 @@ No client names: say what was true, not who it was true for.
 - Signs: see his note
 - Size: 140700 a year as he sized it; check against the client.
 - Seen: one consult.
+
+## New 401k plan [new_401k_plan]
+- When: added by the lead advisor on a consult review (2026-11-19).
+- Signs: 2030
+- Size: 60700 a year as he sized it; check against the client.
+- Seen: one consult.
+
+## Profit share contribution [profit_share_contribution]
+- When: added by the lead advisor on a consult review (2026-11-19).
+- Signs: 2039
+- Size: 39495 a year as he sized it; check against the client.
+- Seen: one consult.
