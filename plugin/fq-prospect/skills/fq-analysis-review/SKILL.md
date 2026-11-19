@@ -80,6 +80,73 @@ for him to fill. If the deck template or a layout changes, run
 `python3 fq_auditor/slide_layouts.py` to redraw the layout pictures on the page. The pull in reports "deck: N slide(s)
 removed, N added"; the next deck build applies them.
 
+## The savings check with the client (every prospect)
+
+A firm rule from the analyst (Nov 2026), for every prospect.
+
+- **Always ask.** After the initial analysis, the client email always
+  carries one question asking the client to verify the yearly savings
+  figure the plan uses (Assumption 14's total in the projection). Name the
+  total and each account in it with its amount (and any listed-only
+  amounts, such as a 529), and ask them to confirm or give the real
+  figures. Add it as a Question to the client on section 14 if it is not
+  already there; never mark it answered from the documents.
+- **A confirmed number wins.** When the client confirms the number asked
+  about, that number trumps every other source (statements, paystubs, IC
+  form, annualized figures, analyst estimates) for the projection. Record
+  it with `inputs.py --set current_savings` with a note "confirmed by the
+  client on <date>", judge the answer ok, and carry it into Assumption 14
+  (source: "confirmed by the client"), Plan inputs' "Saved a year today",
+  the Current savings recommendation, the savings years and the
+  projection. Later documents do not overwrite it; flag any that disagree
+  for the analyst instead.
+- **A different number is not a confirmation.** If the client answers with
+  a different figure, judge the answer short, show both on the page and
+  leave it to the analyst and lead advisor to decide; do not swap it in.
+- Children's accounts and 529s stay out of the projection even when the
+  client confirms them (see the rule above); list them only.
+
+## Children's accounts and 529s: listed, never counted (every prospect)
+
+A firm rule from the analyst (Nov 2026), for every prospect, no exceptions.
+Accounts held for or by children (529s, custodial/UTMA/UGMA accounts, a
+child's Roth IRA or savings account, any account in a child's name) are
+never part of the household's projection:
+
+- **Balances:** list them in Assumptions 4 or 5 so the full picture shows,
+  but leave them out of the starting portfolio and every projected total
+  (Plan inputs' starting portfolio, the Projections tab, the slides).
+- **Contributions:** list each one in Assumption 14 with its amount and
+  basis, marked "listed, not in the projection", below the total. The
+  Assumption 14 total, "Saved a year today", the Current savings
+  recommendation and the savings years count only the household's own
+  accounts.
+- Say in the row's detail and the section's workings that it is excluded
+  and why, so the lead advisor never has to ask.
+
+## Recurring insurance premiums on the bank statements (every plan)
+
+A firm rule from the analyst (Nov 2026). On every load, pull in and refresh,
+read the personal bank statements for recurring insurance drafts (life,
+disability, long-term care, umbrella and the like: Ameritas, Protective,
+Northwestern Mutual, Guardian, MassMutual, ...). A payment counts as
+recurring when the same payee appears in most statement months at a steady
+amount. For each one:
+
+- **Personal spending (Assumption 12):** add it to the fixed payments as
+  Insurance, with the monthly amount and the months it was seen, then
+  recompute the fixed total and the spending excluding fixed payments
+  (monthly and yearly) in the text, rows and workings, and the Cash flow
+  tab's fixed list, totals and summary. The spending including fixed
+  payments does not change.
+- **Insurance (Assumption 15):** list the policy with its premium (monthly
+  and yearly) and where it is drafted from, even when the policy itself is
+  not on file. Leave the coverage blank and say the policy is still needed.
+- If no client question already asks for the policy, add a Question to the
+  client on section 15 asking what the policy is and for a recent statement.
+- The cash flow workbook in the client folder is not changed by this: tell
+  the analyst to add the payment there as a fixed insurance payment too.
+
 ## Debts: credit report against the client's figures (every plan)
 
 A firm rule from the analyst (Nov 2026). On every load, pull in and refresh,
@@ -158,8 +225,9 @@ unless asked.
    where the code expects it (as with bank_statements.json and
    doc_readings.json), checked against the document.
 3. Seed with `--mode review`. A new page starts in the analyst stage.
-4. Run **Accounts found without a value** and **Debts: credit report against
-   the client's figures** (above) first. Then, before
+4. Run **Accounts found without a value**, **Debts: credit report against
+   the client's figures**, **Recurring insurance premiums**, **Children's accounts and
+   529s** and **The savings check with the client** (above) first. Then, before
    publishing, read `plan.json`'s `assumptions`, `findings` and the
    questions, and tell the analyst briefly what stands out: accounts or debts
    that look wrong or missing, statements that did not tie, questions that
@@ -211,7 +279,7 @@ page's `stage` is `analyst`:
    `contributions` ({account, owner, kind, amount, months, period}). Without
    paystubs the IC form's figure stands, flagged "Paystubs needed", until
    they come in.
-3. Run **Accounts found without a value** and **Debts: credit report against the client's figures** (above) again. Act on every comment: re-read a document that was misread, correct a
+3. Run **Accounts found without a value**, **Debts: credit report against the client's figures**, **Recurring insurance premiums**, **Children's accounts and 529s** and **The savings check with the client** (above) again. Act on every comment: re-read a document that was misread, correct a
    reading in `_Audit` (bank_statements.json, accounts.json,
    doc_readings.json, credit_report.json) only when the document shows it,
    record a typed figure with `inputs.py`, file a document, rebuild the step
@@ -264,7 +332,9 @@ When the page's `stage` is `lead` and he has pressed Done:
    no balance, "both of us" with no split, "I believe" with no statement);
    say what is missing. The seed prints ANSWERS TO JUDGE for any answer not
    yet judged.
-4. A statement that came in for an account without a value: read the
+4. A client answer confirming the savings figure: apply **The savings check with
+   the client** (it trumps every other figure for the projection).
+   A statement that came in for an account without a value: read the
    total and add it (Accounts found without a value, step 2). Put what the answers settle into the plan (`inputs.py`, readings), then
    re-seed and refresh the page's data (mechanics: Refreshing). His marks,
    comments and decisions stay.
