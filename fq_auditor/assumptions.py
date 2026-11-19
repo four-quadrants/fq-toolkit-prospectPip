@@ -494,6 +494,14 @@ def _born(text):
     return '%02d/%02d/%d' % (mo, dd, yy), age
 
 
+def premises_word(bundle, folder):
+    """'condo' or 'building': the team's word ('premises' in the input
+    store) first, then what the documents showed (the Office location fact)."""
+    return str(_inputs.value(folder, 'premises') or '').strip().lower() or (
+        'condo' if 'owns the condo' in str(_value(bundle, 'Office location') or '')
+        else 'building')
+
+
 def _partner(bundle, folder):
     """The second person the plan covers, or None when the client is single.
 
@@ -1024,9 +1032,7 @@ def build(bundle, folder):
         bits.append('of {:,.0f} square feet'.format(sqft))
     # Building or condo: the team's word ('premises' in the input store)
     # first, then what the documents showed (the Office location fact).
-    place = str(_inputs.value(folder, 'premises') or '').strip().lower() or (
-        'condo' if 'owns the condo' in str(_value(bundle, 'Office location') or '')
-        else 'building')
+    place = premises_word(bundle, folder)
     lead = ('We show that %s owns the practice %s%s.'
             % (bundle.forename or 'the client', place,
                (' ' + ' '.join(bits)) if bits else ''))

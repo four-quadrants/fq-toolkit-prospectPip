@@ -817,7 +817,12 @@ def seed(folder, outdir, mode='review'):
              'Today’s W-2 down to the next $5,000 a month.'),
             ('income_tax_rate_proposed', 'Tax rate on the proposed W-2',
              None if not inc else '%d%%' % round(inc['p_rate'] * 100),
-             'Firm default. Distributions are set so take-home stays the same.')):
+             (('What this household paid: the owner\u2019s share of the return\u2019s total tax, '
+               '%s a year, over the W-2 less the Roth deferral, %s = %d%%. Lower than the '
+               'firm\u2019s 40%%, so it is used. Distributions are set so take-home stays the same.')
+              % (money(inc['tax'] * 12), money((inc['w2'] - inc['def']) * 12), round(inc['pct'] * 100))
+              if inc and inc.get('pct') and abs(inc['p_rate'] - inc['pct']) < 0.005 else
+              'Firm default. Distributions are set so take-home stays the same.'))):
         figs.append(dict(key=key, label=label, slide=11,
                          proposed=val if isinstance(val, str) else money(val),
                          basis=basis))

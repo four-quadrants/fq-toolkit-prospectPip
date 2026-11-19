@@ -80,6 +80,64 @@ for him to fill. If the deck template or a layout changes, run
 `python3 fq_auditor/slide_layouts.py` to redraw the layout pictures on the page. The pull in reports "deck: N slide(s)
 removed, N added"; the next deck build applies them.
 
+## Debts: credit report against the client's figures (every plan)
+
+A firm rule from the analyst (Nov 2026). On every load, pull in and refresh,
+after the debts are built, compare each personal debt in Assumption 8 (and
+any practice debt that also appears on a credit report) with the client's
+own figures (debt sheet, IC form, portal answers, lender statements the
+client typed up):
+
+- **Terms: the credit report wins.** Rate, payment, term, start, maturity,
+  fixed or variable, original amount: wherever the two differ, use the
+  credit report's. Where the credit report leaves a term blank, keep the
+  client's.
+- **Balance: the lower of the two.** A credit balance (negative) counts as
+  lower.
+- Match cards by issuer and payment (Costco Visa is Citi; Amazon is
+  JPMCB/Chase); say so in the row's detail when the match is inferred.
+- In each changed row's detail, name what came from where and the other
+  figure ("balance per the credit report; debt sheet $5,918"). Set the
+  section source to say the rule was applied, add it as the first line of
+  the section's workings, recompute the section total and the summary's
+  Debt line and net, and update `findings.debts` to match.
+- A maturity that moves changes the payoff order and any "loan paid off"
+  recommendation: recheck them.
+
+## Accounts found without a value (never drop one)
+
+Every account the statements show must reach the plan with a value, or be
+flagged. An account in `accounts.json` with `value: null` (or `checked:
+false`) is NOT left out of the plan inputs quietly; the toolkit's build skips
+it, so this check is Claude's job on every load, pull in and refresh.
+
+1. After the accounts are read, list every account in the client's
+   `accounts.json` with no value. For each, re-open its source document and
+   look for the total before asking anyone: transaction-history reports,
+   crypto exchanges (Coinbase and the like), HSA investment sides and
+   insurance statements often put it in a summary block ("Portfolio
+   Summary", "Total Market Value", "Accumulated value") laid out unlike a
+   custodian statement.
+2. **Found:** write the value, `as_of` and `checked: true` to `accounts.json`,
+   add the account to `plan_inputs` (`qualified_accounts` or
+   `nonqualified_accounts`; crypto, brokerage, cash value life are
+   non-qualified) with a `basis` naming the document and the line read, and
+   tell the analyst it was recovered and from where.
+3. **Not found (or the statement is unreadable or out of date):** do both:
+   - **Flag it for the analyst**: name it in the "what stands out" report,
+     and leave a Note on the accounts assumption section of the page
+     ("<Owner> <type> [<custodian>] found on <document>, no value read").
+   - **Ask the client**: put a Question to the client on the same section,
+     e.g. "We see a <custodian> <type> account in <owner>'s name but could not
+     read its current value. Please send the most recent statement showing
+     the total balance." Write it to the page the way existing analyst
+     question comments are stored (read `an_assume_notes` / `an_assume_kind`
+     from plan/figures and merge, never drop one); if there are none to copy,
+     give the analyst the wording to add with **+ Add a question**.
+4. Never report an accounts total, a "total retirement savings" or a
+   starting portfolio as complete while any account is still without a
+   value; say "excluding <account>, value not yet known".
+
 ## Load (also: "build the assumptions")
 
 "Assumptions" and "analysis review" are one step to the analyst: the
@@ -100,7 +158,9 @@ unless asked.
    where the code expects it (as with bank_statements.json and
    doc_readings.json), checked against the document.
 3. Seed with `--mode review`. A new page starts in the analyst stage.
-4. Before publishing, read `plan.json`'s `assumptions`, `findings` and the
+4. Run **Accounts found without a value** and **Debts: credit report against
+   the client's figures** (above) first. Then, before
+   publishing, read `plan.json`'s `assumptions`, `findings` and the
    questions, and tell the analyst briefly what stands out: accounts or debts
    that look wrong or missing, statements that did not tie, questions that
    look mistaken. Always ask the analyst for the exact birthdates
@@ -151,7 +211,7 @@ page's `stage` is `analyst`:
    `contributions` ({account, owner, kind, amount, months, period}). Without
    paystubs the IC form's figure stands, flagged "Paystubs needed", until
    they come in.
-3. Act on every comment: re-read a document that was misread, correct a
+3. Run **Accounts found without a value** and **Debts: credit report against the client's figures** (above) again. Act on every comment: re-read a document that was misread, correct a
    reading in `_Audit` (bank_statements.json, accounts.json,
    doc_readings.json, credit_report.json) only when the document shows it,
    record a typed figure with `inputs.py`, file a document, rebuild the step
@@ -204,7 +264,8 @@ When the page's `stage` is `lead` and he has pressed Done:
    no balance, "both of us" with no split, "I believe" with no statement);
    say what is missing. The seed prints ANSWERS TO JUDGE for any answer not
    yet judged.
-4. Put what the answers settle into the plan (`inputs.py`, readings), then
+4. A statement that came in for an account without a value: read the
+   total and add it (Accounts found without a value, step 2). Put what the answers settle into the plan (`inputs.py`, readings), then
    re-seed and refresh the page's data (mechanics: Refreshing). His marks,
    comments and decisions stay.
 5. Tell him in a few lines what came in, which answers settle their question

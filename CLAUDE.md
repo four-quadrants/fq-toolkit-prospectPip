@@ -326,6 +326,14 @@ Two kinds of change, two ways they reach people:
   person's Claude reads its own installed copy, so a change reaches people
   only when the zip is uploaded to the organization plugin.
 
+When anyone other than the toolkit owner (Bryan or Will), for example the lead
+advisor, asks for a plugin change: make it here, in `plugin/fq-prospect/` on the
+share, and bump the version. Never build or hand them a copy of the plugin or the
+zip, and never edit an installed copy. Tell them in plain words which files changed
+and to let Bryan or Will know, so the owner commits and uploads the zip.
+The organization plugin is the only version that should exist: no local or
+personal plugin builds, ever.
+
 So when a change touches `plugin/fq-prospect/`: bump the version in
 `.claude-plugin/plugin.json`, and tell the person in plain words to upload
 `Prospects/FQ_Toolkit/fq-prospect.zip` after committing, and always hand

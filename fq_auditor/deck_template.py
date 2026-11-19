@@ -369,6 +369,13 @@ def _figures(folder, client):
     else:
         _nm = b.client or client
     D['names'] = adv.get('names') or _nm
+    # The practice's premises in the team's word: a condo or a building.
+    try:
+        import assumptions as _as1
+        D['place'] = _as1.premises_word(b, folder)
+    except Exception:                                        # noqa: BLE001
+        D['place'] = 'building'
+    D['place_short'] = 'condo' if D['place'] == 'condo' else 'bldg'
     _cd = None
     try:
         _cd = datetime.date.fromisoformat(str(adv.get('consult_date'))[:10]) if adv.get('consult_date') else None
@@ -1482,8 +1489,8 @@ def slide_fills(D):
             'Text 65': M(p['fq_deposits'].get(ry, 0)), 'Text 68': M(q[ry]),
             'Text 71': M(exp_at(ry)),
             'Text 74': ('*practice%s sell, %s net' % (
-                ' & bldg' if D.get('building') else '', _k(sale))) +
-            (' (building not valued)' if D.get('sale_needs_building')
+                (' & ' + D.get('place_short', 'bldg')) if D.get('building') else '', _k(sale))) +
+            ((' (%s not valued)' % D.get('place', 'building')) if D.get('sale_needs_building')
              else ''),
             'Text 75': str(age_at(ey)), 'Text 76': str(ey), 'Text 77': '$0',
             'Text 78': M(q[ey]), 'Text 79': M(exp_at(ey)),
@@ -1495,7 +1502,7 @@ def slide_fills(D):
             ('Runs short in %s at %s/yr.' % (_sav.runout_year(
                 {k: v for k, v in q.items() if k > ry}) or ey, M(inc))),
             'Text 82': ('Retire at %d, practice%s sell%s in %d.'
-                        % (ra, ' and building' if D.get('building') else '',
+                        % (ra, (' and ' + D.get('place', 'building')) if D.get('building') else '',
                            '' if D.get('building') else 's', ry))
             if slide == 17 else
                        'Same savings path, a higher sale price.',
@@ -2310,7 +2317,7 @@ def current_path_data(D):
     gross = D.get('sale_gross') or 0
     share = (sale / cur[ry]) if sale and cur.get(ry, 0) > 0 else None
     _mm = lambda v: '$%.3fM' % (v / 1e6)                     # noqa: E731
-    what = 'practice%s sale' % (' & bldg' if D.get('building') else '')
+    what = 'practice%s sale' % ((' & ' + D.get('place_short', 'bldg')) if D.get('building') else '')
     amounts = ('%s gross, %s net' % (_mm(gross), _mm(sale))) if gross else ('%s net' % _mm(sale))
     rows = [[str(age(y0)), str(y0), M(dep.get(y0, 0)), M(cur[y0]), M(exp(y0)), ''],
             [str(age(ry)), str(ry), M(dep.get(ry, 0)), M(cur[ry]), M(exp(ry)),
@@ -2329,7 +2336,7 @@ def current_path_data(D):
             % (M(D.get('start')), M(D.get('current_savings')),
                int(D['retire_age']) if D.get('retire_age') else 'retirement'),
             ('Practice%s sale in %d: %s after taxes and debt payoff%s'
-             % (' and building' if D.get('building') else '', ry, amounts,
+             % ((' and ' + D.get('place', 'building')) if D.get('building') else '', ry, amounts,
                 (' (%d%% of the portfolio then)' % round(share * 100)) if share else '')) if sale else None,
             'Retirement expenses held at today’s lifestyle (%s/yr), grown with inflation' % M(spend),
             ('At %s, %d years before the funds run out at the current lifestyle' % (age(ry), run - ry))
